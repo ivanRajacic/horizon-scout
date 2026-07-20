@@ -1,0 +1,17 @@
+# virtual environments
+.venv/
+.venv-rocm/
+
+# python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# data: raw inputs, generated DB/index, model weights, runtime logs
+data/raw/
+data/processed/
+data/models/
+data/logs/
+
+# server / process logs
+*.log

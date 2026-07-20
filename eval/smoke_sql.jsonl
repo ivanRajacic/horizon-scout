@@ -1,0 +1,10 @@
+{"question": "How many projects are in the database?", "sql": "SELECT COUNT(*) FROM project", "kind": "simple_aggregate"}
+{"question": "How many projects were terminated?", "sql": "SELECT COUNT(*) FROM project WHERE status = 'TERMINATED'", "kind": "simple_aggregate"}
+{"question": "What is the average total cost of a project?", "sql": "SELECT AVG(totalCost) FROM project", "kind": "simple_aggregate"}
+{"question": "List the acronyms and EU funding of the 5 projects with the highest EU funding that were coordinated by a French organisation.", "sql": "SELECT p.acronym, p.ecMaxContribution FROM project p JOIN organization o ON o.projectID = p.id WHERE o.role = 'coordinator' AND o.country = 'FR' ORDER BY p.ecMaxContribution DESC LIMIT 5", "kind": "join"}
+{"question": "How many closed projects had a German coordinator?", "sql": "SELECT COUNT(*) FROM project p JOIN organization o ON o.projectID = p.id WHERE p.status = 'CLOSED' AND o.role = 'coordinator' AND o.country = 'DE'", "kind": "join"}
+{"question": "How many organisation participations were as a third party?", "sql": "SELECT COUNT(*) FROM organization WHERE role = 'thirdParty'", "kind": "categorical_enum"}
+{"question": "How many projects used the MSCA-IF funding scheme?", "sql": "SELECT COUNT(*) FROM project WHERE fundingScheme = 'MSCA-IF'", "kind": "categorical_enum"}
+{"question": "What is the total EU funding committed across all projects?", "sql": "SELECT SUM(ecMaxContribution) FROM project", "kind": "money"}
+{"question": "Which project received the largest EU contribution, and how much was it?", "sql": "SELECT acronym, ecMaxContribution FROM project ORDER BY ecMaxContribution DESC LIMIT 1", "kind": "money"}
+{"question": "How many projects started in 2016?", "sql": "SELECT COUNT(*) FROM project WHERE startDate BETWEEN DATE '2016-01-01' AND DATE '2016-12-31'", "kind": "date_range"}
