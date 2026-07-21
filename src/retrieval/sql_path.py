@@ -16,7 +16,12 @@ import duckdb
 
 from src.config import (DB_PATH, SCHEMA_DOCS_PATH, SQL_LOG_PATH, SQL_ROW_LIMIT,
                         SQL_TIMEOUT_S)
-from src.llm import LlmClient
+from src.llm import LlmClient, fingerprint
+
+# Frozen after Study 0.5's single value-description intervention (d7); bump on
+# ANY edit. The fingerprint hashes the FULL system prompt including
+# schema_docs.md, so doc edits are visible in traces too.
+SQL_PROMPT_VERSION = "q1-pilot"
 
 
 class SqlGuardrailError(ValueError):
@@ -100,6 +105,7 @@ class SqlPath:
         # Injectable so M4 hybrid reuses all guardrails/retry with a different
         # instruction (id-narrowing) instead of copying this class.
         self.system_prompt = system_prompt or build_system_prompt()
+        self.prompt_version = f"{SQL_PROMPT_VERSION}:{fingerprint(self.system_prompt)}"
 
     def build_messages(self, question: str) -> list[dict]:
         return [{"role": "system", "content": self.system_prompt},
@@ -165,7 +171,8 @@ class SqlPath:
     def _log(self, question, attempt, sql, error, n_rows):
         entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                  "question": question, "attempt": attempt, "sql": sql,
-                 "ok": error is None, "error": error, "n_rows": n_rows}
+                 "ok": error is None, "error": error, "n_rows": n_rows,
+                 "model": self.llm.model, "prompt": self.prompt_version}
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

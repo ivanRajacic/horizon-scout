@@ -13,6 +13,10 @@ from src.llm import LlmClient
 
 MODES = ("sql", "vector", "scoped")
 
+# Frozen at end of pilot (M5 freeze table); bump on ANY edit. Traces log
+# "label:content-hash" so a silent edit without a bump is still visible.
+ROUTER_PROMPT_VERSION = "r1-pilot"
+
 SYSTEM_PROMPT = """You route natural-language questions about a Horizon 2020 \
 research-project database to one of three answering strategies. The database has \
 structured fields (project counts, funding amounts in EUR, start/end dates, \

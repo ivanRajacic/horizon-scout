@@ -10,6 +10,9 @@
                                    [--explain] [--quiet]
   python -m src.cli explore [--mode sql|vector|scoped] [-k 10]
   python -m src.cli smoke-router [--eval-file eval/smoke_router.jsonl]
+  python -m src.cli validate-bank [--bank eval/bank_pilot.jsonl]
+  python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
+                               [--model haiku|sonnet]
 """
 
 import argparse
@@ -18,7 +21,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from src.config import CHUNK_TARGET, ROOT, SPLIT_OVERLAP
+from src.config import CHUNK_TARGET, JUDGE_CONCURRENCY, ROOT, SPLIT_OVERLAP
 
 
 def cmd_build_index(args):
@@ -426,6 +429,68 @@ def cmd_smoke_router(args):
     sys.exit(0 if correct >= 11 else 1)
 
 
+def cmd_validate_bank(args):
+    from src.eval.bank import BankValidationError, bank_summary, load_bank
+
+    try:
+        questions = load_bank(args.bank)
+    except BankValidationError as e:
+        print(f"INVALID: {Path(args.bank).name}")
+        for err in e.errors:
+            print(f"  {err}")
+        sys.exit(1)
+    print(f"OK: {Path(args.bank).name} - {len(questions)} questions\n")
+    print(bank_summary(questions))
+
+
+def cmd_judge_file(args):
+    """Judge a jsonl of {question_id, question, reference_answer, answer,
+    contexts?, adversarial?, expect_pass?}. Ordinary cases go through the
+    RAGAS metrics; adversarial ones through the rubric overlay. Cases run
+    concurrently (up to --concurrency claude -p processes)."""
+    # ragas_judge first: it installs the vertexai import shim ragas needs.
+    from src.judge.ragas_judge import JudgePool
+
+    import ragas
+
+    pool = JudgePool(model_key=args.model, concurrency=args.concurrency)
+    cases = [json.loads(line) for line in
+             Path(args.eval_file).read_text(encoding="utf-8").splitlines()
+             if line.strip()]
+    print(f"judge={pool.model}  ragas={ragas.__version__}  "
+          f"concurrency={pool.concurrency}  {len(cases)} case(s)\n")
+    results = pool.judge_all(cases)
+
+    def fmt(x):
+        return "-" if x is None else f"{x:.2f}"
+
+    mismatches, errors = 0, 0
+    for case, r in zip(cases, results):
+        if isinstance(r, Exception):
+            errors += 1
+            print(f"[ERROR] {case.get('question_id')}: {r}")
+            continue
+        expect = case.get("expect_pass")
+        if expect is None:
+            flag = "PASS" if r.passed else "FAIL"
+        elif r.passed == expect:
+            flag = "OK  "
+        else:
+            flag = "MISM"
+            mismatches += 1
+        scores = ("(overlay)" if r.path == "overlay" else
+                  f"faith={fmt(r.faithfulness)} "
+                  f"factual={fmt(r.factual_correctness)}")
+        print(f"[{flag}] {r.question_id} [{r.path}] {scores} "
+              f"passed={r.passed}"
+              + (f" (expected {expect})" if expect is not None else ""))
+        if r.detail:
+            print(f"       {r.detail}")
+    print(f"\n{len(cases) - mismatches - errors}/{len(cases)} as expected"
+          f" ({errors} error(s))")
+    sys.exit(0 if mismatches == 0 and errors == 0 else 1)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="python -m src.cli")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -491,6 +556,19 @@ def main():
     r = sub.add_parser("smoke-router", help="router accuracy over smoke_router.jsonl")
     r.add_argument("--eval-file", default=str(ROOT / "eval" / "smoke_router.jsonl"))
     r.set_defaults(fn=cmd_smoke_router)
+
+    vb = sub.add_parser("validate-bank",
+                        help="validate a question-bank jsonl (M5 schema)")
+    vb.add_argument("--bank", default=str(ROOT / "eval" / "bank_pilot.jsonl"))
+    vb.set_defaults(fn=cmd_validate_bank)
+
+    jf = sub.add_parser("judge-file",
+                        help="LLM judge over {question, reference, answer} jsonl")
+    jf.add_argument("--eval-file", default=str(ROOT / "eval" / "judge_smoke.jsonl"))
+    jf.add_argument("--model", choices=["haiku", "sonnet"], default="haiku")
+    jf.add_argument("--concurrency", type=int, default=JUDGE_CONCURRENCY,
+                    help="parallel judge processes (default 8, max 16)")
+    jf.set_defaults(fn=cmd_judge_file)
 
     args = ap.parse_args()
     args.fn(args)

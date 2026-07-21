@@ -6,6 +6,7 @@ base_url/model swap here is the local-vs-API comparison mechanism - nothing
 downstream knows what is behind the endpoint.
 """
 
+import hashlib
 import re
 
 import requests
@@ -14,6 +15,12 @@ from src.config import LLM_BASE_URL, LLM_MODEL, LLM_SERVER_LAUNCH_CMD
 
 # Qwen-style thinking blocks: never part of the answer, strip defensively.
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def fingerprint(text: str) -> str:
+    """Short content hash for prompt versioning in traces. A version label can
+    lie about edits; the hash cannot - traces log 'label:hash'."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
 class LlmServerError(RuntimeError):

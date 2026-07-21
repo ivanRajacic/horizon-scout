@@ -12,6 +12,8 @@ from src.retrieval.sql_path import (SqlGuardrailError, SqlPath, ensure_limit,
 class FakeLlm:
     """Returns queued responses; counts calls."""
 
+    model = "fake-llm"  # SqlPath logs llm.model per attempt (M5 traces)
+
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = 0

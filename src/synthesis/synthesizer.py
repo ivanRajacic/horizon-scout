@@ -21,6 +21,9 @@ ANSWER_TOKENS = 512
 PROMPT_OVERHEAD_TOKENS = 400
 CHUNK_BUDGET_TOKENS = LLM_CTX - ANSWER_TOKENS - PROMPT_OVERHEAD_TOKENS
 
+# Bump on ANY edit; traces log "label:content-hash".
+SYNTH_PROMPT_VERSION = "s1-pilot"
+
 SYSTEM_PROMPT = """You answer questions about Horizon 2020 research projects \
 using ONLY the excerpts provided below. Rules:
 - Use ONLY the provided excerpts. Do not use any outside knowledge about these \

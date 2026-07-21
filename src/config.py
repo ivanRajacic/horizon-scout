@@ -81,6 +81,33 @@ RERANK_SERVER_LAUNCH_CMD = (
     + " --reranking --pooling rank -ngl 99 --port 8082 -c 2048 -b 2048 -ub 2048"
 )
 
+# --- Judge (M5, RQ5): Claude via `claude -p` on the Max subscription ---
+# Transport = ONE function (src/judge/judge.py: call_claude); a billing change
+# means swapping that function for an API call, nothing else. Model strings
+# are pinned in full and logged per verdict; judge selection (Haiku vs Sonnet)
+# is empirical over the hand-graded set - both are wired.
+JUDGE_MODELS = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-5",
+}
+JUDGE_DEFAULT = "haiku"
+JUDGE_LOG_PATH = ROOT / "data" / "logs" / "judge.jsonl"
+JUDGE_TIMEOUT_S = 240.0
+
+# Parallel `claude -p` judge processes. One shared semaphore gates every
+# judging path, so this cap is global. Max's constraint is the usage window
+# (total tokens), not request rate, so concurrency is effectively free;
+# JUDGE_MAX_CONCURRENCY bounds local process sprawl.
+JUDGE_CONCURRENCY = 8
+JUDGE_MAX_CONCURRENCY = 16
+
+# RAGAS pass thresholds - PILOT DRAFT values, calibrated against hand grades
+# and frozen with the judged-metric rubric before Study 2 (d10 freeze table).
+# Pass = factual_correctness >= threshold AND (faithfulness >= threshold when
+# measurable). Adversarial questions bypass RAGAS (rubric-judge overlay).
+JUDGE_PASS_FACTUAL = 0.75
+JUDGE_PASS_FAITHFULNESS = 0.80
+
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"
 FTS_STOPWORDS = "english"
