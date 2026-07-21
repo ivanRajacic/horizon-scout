@@ -12,7 +12,6 @@ routing evaluate on top of this without touching the index.
 """
 
 import warnings
-from dataclasses import dataclass
 
 import duckdb
 from langchain_community.vectorstores import FAISS
@@ -20,6 +19,10 @@ from langchain_community.vectorstores import FAISS
 from src.config import (DB_PATH, EMBED_DIM, EMBED_MODEL, INDEX_DIR,
                         INDEX_META_PATH)
 from src.embed_client import LlamaServerEmbeddings, check_server
+# SearchResult now lives in base.py (shared across retrievers); re-exported here
+# so existing `from src.retrieval.vector_search import SearchResult` imports and
+# the dense-retriever call sites keep working unchanged.
+from src.retrieval.base import SearchResult
 
 
 class IndexMetaError(RuntimeError):
@@ -39,18 +42,6 @@ def validate_meta(meta: dict, gguf_hash: str) -> None:
                 f"index_meta mismatch on {name}: index has {got!r}, "
                 f"configured stack is {want!r}. Rebuild the index or fix "
                 "the config - refusing to serve.")
-
-
-@dataclass
-class SearchResult:
-    chunk_id: str
-    project_id: int
-    acronym: str | None
-    title: str | None
-    source: str
-    section: str
-    score: float
-    text: str
 
 
 class VectorSearcher:

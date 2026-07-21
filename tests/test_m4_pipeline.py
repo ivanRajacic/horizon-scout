@@ -1,9 +1,9 @@
 """M4 unit tests: router fallback, synthesis citation post-check + context
-assertion, hybrid edge policies. No servers needed - LLM and searcher faked."""
+assertion, scoped edge policies. No servers needed - LLM and searcher faked."""
 
 import pytest
 
-from src.retrieval.hybrid import (WEAK_FILTER, HybridRetriever,
+from src.retrieval.scoped import (WEAK_FILTER, ScopedRetriever,
                                   uses_subject_filter)
 from src.retrieval.vector_search import SearchResult
 from src.router.router import Router
@@ -41,15 +41,15 @@ def test_router_extracts_json_from_noise():
 
 
 def test_router_retries_then_succeeds():
-    llm = FakeLlm(["not json at all", '{"mode": "hybrid", "reason": "x"}'])
+    llm = FakeLlm(["not json at all", '{"mode": "scoped", "reason": "x"}'])
     d = Router(llm=llm).route("q")
-    assert d.mode == "hybrid" and not d.router_fallback and llm.calls == 2
+    assert d.mode == "scoped" and not d.router_fallback and llm.calls == 2
 
 
 def test_router_fallback_is_visible():
     llm = FakeLlm(["garbage", "still garbage"])
     d = Router(llm=llm).route("q")
-    assert d.mode == "hybrid" and d.router_fallback and llm.calls == 2
+    assert d.mode == "scoped" and d.router_fallback and llm.calls == 2
 
 
 def test_router_rejects_invalid_mode():
@@ -111,7 +111,7 @@ def test_fit_to_budget_drops_worst_first():
     assert dropped == 1 and kept[0].project_id == 1  # kept the closer (0.1)
 
 
-# --- hybrid edge policies ---
+# --- scoped edge policies ---
 
 class FakeSql:
     def __init__(self, result):
@@ -141,34 +141,34 @@ class R:  # minimal SqlResult stand-in
         self.retried = retried
 
 
-def test_hybrid_ok_narrows_to_ids():
+def test_scoped_ok_narrows_to_ids():
     searcher = FakeSearcher([mk_chunk(2, "B")])
-    h = HybridRetriever(searcher, narrow_sql=FakeSql(R(True, rows=[(2,), (3,)])))
+    h = ScopedRetriever(searcher, narrow_sql=FakeSql(R(True, rows=[(2,), (3,)])))
     res = h.retrieve("german battery projects", k=10)
     assert res.status == "ok" and res.project_ids == {2, 3}
     assert searcher.last_project_ids == {2, 3} and not res.weak_filter
 
 
-def test_hybrid_zero_match_is_the_answer():
+def test_scoped_zero_match_is_the_answer():
     searcher = FakeSearcher([mk_chunk(1, "A")])
-    h = HybridRetriever(searcher, narrow_sql=FakeSql(R(True, rows=[])))
+    h = ScopedRetriever(searcher, narrow_sql=FakeSql(R(True, rows=[])))
     res = h.retrieve("projects coordinated on the moon", k=10)
     assert res.status == "zero_match" and res.chunks == []
     assert searcher.last_project_ids == "unset"  # never widened to a search
 
 
-def test_hybrid_sql_failure_degrades_to_vector():
+def test_scoped_sql_failure_degrades_to_vector():
     searcher = FakeSearcher([mk_chunk(1, "A")])
-    h = HybridRetriever(searcher,
+    h = ScopedRetriever(searcher,
                         narrow_sql=FakeSql(R(False, error="Binder Error", retried=True)))
     res = h.retrieve("q", k=10)
     assert res.status == "sql_failed" and res.degraded == "sql_failed"
     assert searcher.last_project_ids is None  # searched everything
 
-def test_hybrid_weak_filter_flagged():
+def test_scoped_weak_filter_flagged():
     ids = [(i,) for i in range(WEAK_FILTER + 1)]
     searcher = FakeSearcher([mk_chunk(1, "A")])
-    h = HybridRetriever(searcher, narrow_sql=FakeSql(R(True, rows=ids)))
+    h = ScopedRetriever(searcher, narrow_sql=FakeSql(R(True, rows=ids)))
     res = h.retrieve("all closed projects about energy", k=10)
     assert res.status == "ok" and res.weak_filter
 
@@ -191,14 +191,14 @@ class QueueSql:
         return self.results.pop(0)
 
 
-def test_hybrid_subject_filter_triggers_corrective_reask():
+def test_scoped_subject_filter_triggers_corrective_reask():
     # First narrowing pollutes with a topic filter; the reminder re-ask returns
     # a clean metadata-only query, which must be the one used.
     bad = R(True, rows=[(9,)], sql="SELECT p.id FROM project p WHERE status='CLOSED' AND topics LIKE '%energy%'")
     good = R(True, rows=[(1,), (2,)], sql="SELECT p.id FROM project p WHERE status='CLOSED'")
     narrow = QueueSql([bad, good])
     searcher = FakeSearcher([mk_chunk(1, "A")])
-    res = HybridRetriever(searcher, narrow_sql=narrow).retrieve(
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve(
         "closed projects about energy storage", k=10)
     assert res.status == "ok" and res.project_ids == {1, 2}
     assert res.trace["subject_corrected"] is True

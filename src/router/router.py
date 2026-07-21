@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from src.llm import LlmClient
 
-MODES = ("sql", "vector", "hybrid")
+MODES = ("sql", "vector", "scoped")
 
 SYSTEM_PROMPT = """You route natural-language questions about a Horizon 2020 \
 research-project database to one of three answering strategies. The database has \
@@ -30,13 +30,13 @@ role, or status. No understanding of what a project is *about* is required.
 achieved, with NO structured constraint. Finding projects by subject matter, \
 summarising approaches or results.
 
-- "hybrid": needs BOTH - semantic/topical content AND a structured constraint \
+- "scoped": needs BOTH - semantic/topical content AND a structured constraint \
 (e.g. a topic combined with a country, funding range, date window, scheme, or \
 role). If the question mixes "what it's about" with "and it must also satisfy X \
-structured filter", it is hybrid.
+structured filter", it is scoped.
 
 Reply with STRICT JSON only, no markdown, no commentary:
-{"mode": "sql|vector|hybrid", "reason": "<one short clause>"}
+{"mode": "sql|vector|scoped", "reason": "<one short clause>"}
 
 Examples:
 Q: How many projects were terminated?
@@ -48,9 +48,9 @@ Q: Which projects work on hydrogen fuel cells for heavy transport?
 Q: Summarise how projects approached ocean plastic monitoring.
 {"mode": "vector", "reason": "semantic summary of project content"}
 Q: Which German-coordinated projects focus on battery recycling?
-{"mode": "hybrid", "reason": "topic plus a country/role constraint"}
+{"mode": "scoped", "reason": "topic plus a country/role constraint"}
 Q: Find AI-for-healthcare projects that received over 5 million euros.
-{"mode": "hybrid", "reason": "topic plus a funding-amount constraint"}"""
+{"mode": "scoped", "reason": "topic plus a funding-amount constraint"}"""
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -92,11 +92,11 @@ class Router:
                         {"role": "assistant", "content": raw},
                         {"role": "user", "content":
                             f"That was not valid: {e}. Reply with ONLY the JSON "
-                            'object {"mode": "sql|vector|hybrid", "reason": '
+                            'object {"mode": "sql|vector|scoped", "reason": '
                             '"..."} and nothing else.'},
                     ]
         # Both attempts failed: fall back to the widest strategy, visibly.
         return RouteDecision(
-            mode="hybrid",
-            reason="router failed to produce valid JSON; defaulted to hybrid",
+            mode="scoped",
+            reason="router failed to produce valid JSON; defaulted to scoped",
             router_fallback=True)

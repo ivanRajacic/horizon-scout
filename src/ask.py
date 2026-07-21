@@ -13,7 +13,7 @@ from pathlib import Path
 
 from src.config import ROOT
 from src.llm import LlmClient
-from src.retrieval.hybrid import HybridRetriever
+from src.retrieval.scoped import ScopedRetriever
 from src.retrieval.sql_path import SqlPath
 from src.retrieval.vector_search import VectorSearcher
 from src.router.router import Router
@@ -55,7 +55,7 @@ class Ask:
         self.router = Router(llm=self.llm)
         self.sql_path = SqlPath(llm=self.llm)
         self.searcher = searcher or VectorSearcher()
-        self.hybrid = HybridRetriever(self.searcher)
+        self.scoped = ScopedRetriever(self.searcher)
         self.synth = Synthesizer(llm=self.llm)
         self.log_path = log_path
 
@@ -77,7 +77,7 @@ class Ask:
         elif mode == "vector":
             res = self._ask_vector(question, k)
         else:
-            res = self._ask_hybrid(question, k)
+            res = self._ask_scoped(question, k)
 
         res.mode = mode
         res.router_reason = reason
@@ -118,14 +118,14 @@ class Ask:
             citation_violations=s.citation_violations,
             trace={"timings": stage, **s.trace})
 
-    def _ask_hybrid(self, question: str, k: int) -> AskResult:
+    def _ask_scoped(self, question: str, k: int) -> AskResult:
         t = time.perf_counter()
-        h = self.hybrid.retrieve(question, k=k)
+        h = self.scoped.retrieve(question, k=k)
         t_retrieve = time.perf_counter() - t
 
         if h.status == "zero_match":
             return AskResult(
-                question=question, mode="hybrid", router_reason="",
+                question=question, mode="scoped", router_reason="",
                 answer="No projects match the structured criteria in this "
                        "question, so there is nothing to summarise.",
                 sql=h.sql, degraded=None, weak_filter=False,
@@ -141,7 +141,7 @@ class Ask:
                       "SQL step failed - so this answer is from an unfiltered "
                       "search over all projects.]\n\n" + answer)
         return AskResult(
-            question=question, mode="hybrid", router_reason="", answer=answer,
+            question=question, mode="scoped", router_reason="", answer=answer,
             sql=h.sql, chunks=s.used_chunks, degraded=h.degraded,
             weak_filter=h.weak_filter,
             citation_violations=s.citation_violations,

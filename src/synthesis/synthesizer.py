@@ -1,4 +1,4 @@
-"""Answer synthesis from retrieved chunks (vector and hybrid modes only).
+"""Answer synthesis from retrieved chunks (vector and scoped modes only).
 
 Grounding is enforced in code, not just asked for in the prompt:
 - context budget is asserted before the call; lowest-scoring chunks are dropped
@@ -65,11 +65,15 @@ def format_chunks(chunks: list[SearchResult]) -> str:
 
 def fit_to_budget(chunks: list[SearchResult],
                   budget: int = CHUNK_BUDGET_TOKENS) -> tuple[list[SearchResult], int]:
-    """Drop lowest-scoring chunks until the formatted context fits the budget.
-    Lower score = closer (L2 distance from FAISS), so drop the HIGHEST scores."""
-    kept = sorted(chunks, key=lambda c: c.score)  # best first
+    """Drop the worst chunks until the formatted context fits the budget.
+
+    Retrievers return results BEST-FIRST and `score` is not comparable across
+    retrievers (base.Retriever contract: dense = L2 distance, lexical/RRF/rerank
+    = higher-is-better), so we trust the incoming ORDER and drop from the tail
+    rather than re-sorting by a score whose sign is retriever-specific."""
+    kept = list(chunks)  # already best-first by contract
     while kept and estimate_tokens(format_chunks(kept)) > budget:
-        kept.pop()  # remove worst (highest score / farthest)
+        kept.pop()  # remove worst (tail)
     return kept, len(chunks) - len(kept)
 
 

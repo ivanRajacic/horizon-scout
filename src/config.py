@@ -62,6 +62,34 @@ SPLIT_OVERLAP = 50   # sentence-split overlap (tokens) inside oversized paragrap
 
 REPORT_SECTIONS = ("summary", "workPerformed", "finalResults")
 
+# --- Reranker server (M6 hybrid retrieval; cross-encoder rerank) ---
+# Third llama-server process; bge embedder stays on 8080, Qwen on 8081. The
+# reranker is a cross-encoder (bge-reranker-v2-m3) scoring (query, passage)
+# pairs via llama.cpp's /rerank endpoint. Launch flags are load-bearing:
+# --reranking enables the endpoint, --pooling rank selects the rank head, and
+# -b/-ub 2048 raise the physical batch above the default 512 - a (query+chunk)
+# pair can exceed 512 tokens and llama.cpp returns HTTP 500 when a single
+# sequence overflows n_ubatch (the same 512-cap failure the embedding server
+# hit; see analysis/gpu_validation/REPORT.md). Q8_0 (~606 MB) fits alongside
+# the other two models on the 12 GB card.
+RERANKER_GGUF_PATH = ROOT / "data" / "models" / "bge-reranker-v2-m3-Q8_0.gguf"
+RERANKER_MODEL = "bge-reranker-v2-m3-Q8_0"
+RERANK_BASE_URL = "http://127.0.0.1:8082"
+
+RERANK_SERVER_LAUNCH_CMD = (
+    r"C:\llama\llama-server.exe -m " + str(RERANKER_GGUF_PATH)
+    + " --reranking --pooling rank -ngl 99 --port 8082 -c 2048 -b 2048 -ub 2048"
+)
+
+# --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
+FTS_STEMMER = "porter"
+FTS_STOPWORDS = "english"
+
+# --- Hybrid fusion (lexical + dense) ---
+RRF_K = 60              # reciprocal-rank-fusion constant (Cormack et al. 2009)
+FUSE_CANDIDATES = 100   # candidates pulled from EACH retriever before fusion
+RERANK_DEPTH = 50       # top fused candidates re-scored by the cross-encoder
+
 
 def chunk_policy(chunk_target: int, split_overlap: int) -> str:
     """One-line policy string recorded in index_meta.json."""

@@ -1,5 +1,5 @@
-"""Live demonstration of the three hybrid edge policies against both servers.
-Exercises HybridRetriever.retrieve (SQL narrowing + filtered vector search);
+"""Live demonstration of the three scoped edge policies against both servers.
+Exercises ScopedRetriever.retrieve (SQL narrowing + filtered vector search);
 synthesis is validated separately (unit tests) and is the only throttle-heavy
 step. Run with bge on 8080 and Qwen on 8081."""
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.retrieval.hybrid import HybridRetriever          # noqa: E402
+from src.retrieval.scoped import ScopedRetriever          # noqa: E402
 from src.retrieval.sql_path import SqlPath                # noqa: E402
 from src.retrieval.vector_search import VectorSearcher    # noqa: E402
 
@@ -32,7 +32,7 @@ def show(tag, r):
 
 def main():
     searcher = VectorSearcher()
-    hybrid = HybridRetriever(searcher)
+    hybrid = ScopedRetriever(searcher)
 
     # 1. zero-match: KP-coordinated projects (0 in the DB) -> status zero_match
     show("ZERO-MATCH (North-Korea-coordinated fusion projects)",
@@ -43,7 +43,7 @@ def main():
          hybrid.retrieve("closed projects about energy storage"))
 
     # 3. sql-failed (induced): narrowing SQL always invalid -> degrade to vector
-    bad_hybrid = HybridRetriever(
+    bad_hybrid = ScopedRetriever(
         searcher, narrow_sql=SqlPath(llm=BadLlm(), row_limit=50000))
     show("SQL-FAILED (induced bad narrowing SQL)",
          bad_hybrid.retrieve("projects developing solar hydrogen production"))

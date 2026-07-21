@@ -8,8 +8,8 @@
 {"question": "What projects capture CO2 and convert it into fuels?", "expect_mode": "vector"}
 {"question": "What results did projects report on perovskite solar cell efficiency?", "expect_mode": "vector"}
 {"question": "Find projects developing brain-computer interfaces.", "expect_mode": "vector"}
-{"question": "Which German-coordinated projects focus on battery recycling?", "expect_mode": "hybrid"}
-{"question": "Find AI-for-healthcare projects that received over five million euros.", "expect_mode": "hybrid"}
-{"question": "What are the largest quantum-computing projects by EU funding?", "expect_mode": "hybrid", "accept_also": ["vector"], "note": "ranking(money)+topic; vector acceptable if the model ignores the funding-ranking constraint"}
-{"question": "How many projects focus on renewable energy?", "expect_mode": "hybrid", "accept_also": ["sql", "vector"], "note": "count over a topic; sql if the model assumes a keyword field, vector also defensible - genuinely ambiguous"}
-{"question": "Summarise the objectives of projects coordinated in Italy.", "expect_mode": "hybrid", "accept_also": ["vector"], "note": "country filter + semantic summary; vector acceptable if the country filter is treated as incidental"}
+{"question": "Which German-coordinated projects focus on battery recycling?", "expect_mode": "scoped"}
+{"question": "Find AI-for-healthcare projects that received over five million euros.", "expect_mode": "scoped"}
+{"question": "What are the largest quantum-computing projects by EU funding?", "expect_mode": "scoped", "accept_also": ["vector"], "note": "ranking(money)+topic; vector acceptable if the model ignores the funding-ranking constraint"}
+{"question": "How many projects focus on renewable energy?", "expect_mode": "scoped", "accept_also": ["sql", "vector"], "note": "count over a topic; sql if the model assumes a keyword field, vector also defensible - genuinely ambiguous"}
+{"question": "Summarise the objectives of projects coordinated in Italy.", "expect_mode": "scoped", "accept_also": ["vector"], "note": "country filter + semantic summary; vector acceptable if the country filter is treated as incidental"}
