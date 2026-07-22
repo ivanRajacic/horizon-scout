@@ -28,10 +28,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.config import (JUDGE_CONCURRENCY, JUDGE_DEFAULT, JUDGE_LOG_PATH,
-                        JUDGE_MAX_CONCURRENCY, JUDGE_MODELS,
+from src.claude_cli import call_claude, shared_semaphore
+from src.config import (CLAUDE_CONCURRENCY, CLAUDE_MAX_CONCURRENCY,
+                        JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS,
                         JUDGE_PASS_FACTUAL, JUDGE_PASS_FAITHFULNESS)
-from src.judge.judge import Judge, call_claude
+from src.judge.judge import Judge
 from src.judge.ragas_backend import ClaudeCliLLM  # installs the ragas shim
 from src.llm import fingerprint
 
@@ -90,14 +91,21 @@ class JudgePool:
     semaphore caps concurrent `claude -p` processes across BOTH paths."""
 
     def __init__(self, model_key: str = JUDGE_DEFAULT,
-                 concurrency: int = JUDGE_CONCURRENCY,
+                 concurrency: int | None = None,
                  log_path: Path = JUDGE_LOG_PATH,
                  transport=call_claude):
-        self.concurrency = max(1, min(int(concurrency), JUDGE_MAX_CONCURRENCY))
         self.model_key = model_key
         self.model = JUDGE_MODELS[model_key]
         self.log_path = log_path
-        self._sem = threading.Semaphore(self.concurrency)
+        if concurrency is None:
+            # Default: the process-wide `claude -p` gate, shared with the
+            # generation clients - the global cap holds across all paths.
+            self.concurrency = min(CLAUDE_CONCURRENCY, CLAUDE_MAX_CONCURRENCY)
+            self._sem = shared_semaphore()
+        else:
+            self.concurrency = max(1, min(int(concurrency),
+                                          CLAUDE_MAX_CONCURRENCY))
+            self._sem = threading.Semaphore(self.concurrency)
 
         def gated(prompt, model, **kw):
             with self._sem:

@@ -21,7 +21,8 @@ import sys
 import textwrap
 from pathlib import Path
 
-from src.config import CHUNK_TARGET, JUDGE_CONCURRENCY, ROOT, SPLIT_OVERLAP
+from src.config import (CHUNK_TARGET, CLAUDE_CONCURRENCY, JUDGE_DEFAULT,
+                        ROOT, SPLIT_OVERLAP)
 
 
 def cmd_build_index(args):
@@ -89,10 +90,10 @@ def _print_table(columns, rows, max_rows=20, max_width=40):
 
 
 def cmd_ask_sql(args):
-    from src.llm import check_server
+    from src.llm import check_generator
     from src.retrieval.sql_path import SqlPath
 
-    check_server()
+    check_generator()
     path = SqlPath()
     if args.show_prompt:
         print("=== system prompt ===")
@@ -114,10 +115,10 @@ def cmd_ask_sql(args):
 
 
 def cmd_smoke_sql(args):
-    from src.llm import check_server
+    from src.llm import check_generator
     from src.retrieval.sql_path import SqlPath, results_match
 
-    check_server()
+    check_generator()
     path = SqlPath()
     cases = [json.loads(line) for line in
              Path(args.eval_file).read_text(encoding="utf-8").splitlines()
@@ -146,10 +147,10 @@ def cmd_smoke_sql(args):
 def cmd_ask(args):
     from src.ask import Ask
     from src.embed_client import check_server as check_embed
-    from src.llm import check_server as check_llm
+    from src.llm import check_generator
 
     check_embed()
-    check_llm()
+    check_generator()
     res = Ask().ask(args.question, k=args.k, mode=args.mode,
                     explain=args.explain)
     if not args.quiet:
@@ -255,23 +256,27 @@ def cmd_explore(args):
     """Interactive verbose REPL over the full pipeline. Servers load once."""
     from src.ask import Ask
     from src.embed_client import check_server as check_embed
-    from src.llm import check_server as check_llm
-    from src.config import LLM_SERVER_LAUNCH_CMD, SERVER_LAUNCH_CMD
+    from src.llm import check_generator
+    from src.config import (GEN_BACKEND, LLM_SERVER_LAUNCH_CMD,
+                            SERVER_LAUNCH_CMD)
 
     try:
         check_embed()
-        check_llm()
+        check_generator()
     except Exception as e:  # noqa: BLE001 - surface the launch commands
-        print(f"A required llama-server is unreachable: {e}\n")
-        print("Start both servers in separate terminals, then rerun:\n")
+        print(f"A required backend is unreachable: {e}\n")
         print(f"  embeddings (bge, port 8080):\n    {SERVER_LAUNCH_CMD}\n")
-        print(f"  LLM (Qwen3-8B, port 8081):\n    {LLM_SERVER_LAUNCH_CMD}")
+        if GEN_BACKEND == "local":
+            print(f"  LLM (Qwen3-8B, port 8081):\n    {LLM_SERVER_LAUNCH_CMD}")
+        else:
+            print("  generation: `claude` CLI must be on PATH "
+                  "(Claude Code subscription)")
         sys.exit(1)
 
     mode = args.mode          # None = let the router decide
     k = args.k
     asker = Ask()
-    print("Horizon Scout - interactive explore. Both servers up.")
+    print("Horizon Scout - interactive explore. Backends up.")
     print(f"mode={mode or 'auto (router decides)'}  k={k}")
     print("Commands:  :mode auto|sql|vector|scoped   :k <N>   :help   :q\n")
 
@@ -401,10 +406,10 @@ def cmd_bench_retrievers(args):
 def cmd_smoke_router(args):
     from collections import Counter
 
-    from src.llm import check_server
+    from src.llm import check_generator
     from src.router.router import Router
 
-    check_server()
+    check_generator()
     router = Router()
     cases = [json.loads(line) for line in
              Path(args.eval_file).read_text(encoding="utf-8").splitlines()
@@ -565,9 +570,11 @@ def main():
     jf = sub.add_parser("judge-file",
                         help="LLM judge over {question, reference, answer} jsonl")
     jf.add_argument("--eval-file", default=str(ROOT / "eval" / "judge_smoke.jsonl"))
-    jf.add_argument("--model", choices=["haiku", "sonnet"], default="haiku")
-    jf.add_argument("--concurrency", type=int, default=JUDGE_CONCURRENCY,
-                    help="parallel judge processes (default 8, max 16)")
+    jf.add_argument("--model", choices=["haiku", "sonnet"],
+                    default=JUDGE_DEFAULT)
+    jf.add_argument("--concurrency", type=int, default=CLAUDE_CONCURRENCY,
+                    help=f"parallel judge processes "
+                         f"(default {CLAUDE_CONCURRENCY}, max 16)")
     jf.set_defaults(fn=cmd_judge_file)
 
     args = ap.parse_args()

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.config import EMBED_MODEL, ROOT
-from src.llm import LlmClient, fingerprint
+from src.llm import fingerprint, make_llm
 from src.retrieval.scoped import ScopedRetriever
 from src.retrieval.sql_path import SqlPath
 from src.retrieval.vector_search import VectorSearcher
@@ -51,10 +51,10 @@ def _templated_sql_answer(columns, rows) -> str:
 
 
 class Ask:
-    def __init__(self, llm: LlmClient | None = None,
+    def __init__(self, llm=None,
                  searcher: VectorSearcher | None = None,
                  log_path: Path = ASK_LOG_PATH):
-        self.llm = llm or LlmClient()
+        self.llm = llm or make_llm()
         self.router = Router(llm=self.llm)
         self.sql_path = SqlPath(llm=self.llm)
         self.searcher = searcher or VectorSearcher()

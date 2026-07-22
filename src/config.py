@@ -27,7 +27,26 @@ SERVER_LAUNCH_CMD = (
     + " --embedding --pooling cls -ngl 99 --port 8080 --cache-ram 0"
 )
 
-# --- LLM server (SQL generation, M3b; router/synthesis M4; judge M5) ---
+# --- Generation (v4): Claude Haiku over the shared `claude -p` transport ---
+# GEN_BACKEND selects the generation client behind src.llm.make_llm():
+#   "claude" (default) - Haiku via `claude -p`, gated by the shared semaphore
+#                        below; up to CLAUDE_CONCURRENCY parallel generators.
+#   "local"            - the legacy llama-server Qwen3-8B path (kept for a
+#                        possible RQ3 revival with a weak generator).
+# Nothing downstream knows which client is behind .chat().
+GEN_BACKEND = "claude"
+GEN_MODEL = "claude-haiku-4-5-20251001"
+
+# --- Shared `claude -p` transport (generation + rubric judge + RAGAS) ---
+# ONE process-wide semaphore (src/claude_cli.py) gates every `claude -p`
+# subprocess across ALL paths, so the cap is global. Max's constraint is the
+# usage window (total tokens), not request rate, so concurrency is
+# effectively free; the cap bounds local process sprawl. Hard ceiling 16.
+CLAUDE_TIMEOUT_S = 240.0
+CLAUDE_CONCURRENCY = 16
+CLAUDE_MAX_CONCURRENCY = 16
+
+# --- LLM server (legacy local generation; GEN_BACKEND = "local") ---
 # Second llama-server process; bge stays on 8080. Unlike the embedding server,
 # the LLM server KEEPS the default prompt cache: every SQL call starts with the
 # same system prompt (schema_docs.md), so prefix reuse skips most of prefill.
@@ -81,28 +100,23 @@ RERANK_SERVER_LAUNCH_CMD = (
     + " --reranking --pooling rank -ngl 99 --port 8082 -c 2048 -b 2048 -ub 2048"
 )
 
-# --- Judge (M5, RQ5): Claude via `claude -p` on the Max subscription ---
-# Transport = ONE function (src/judge/judge.py: call_claude); a billing change
+# --- Judge (M5, v4): Sonnet via the shared `claude -p` transport ---
+# Transport = ONE function (src/claude_cli.py: call_claude); a billing change
 # means swapping that function for an API call, nothing else. Model strings
-# are pinned in full and logged per verdict; judge selection (Haiku vs Sonnet)
-# is empirical over the hand-graded set - both are wired.
+# are pinned in full and logged per verdict. v4: the judge is FIXED to Sonnet
+# by decision (RQ5 scratched) and unvalidated - results are "Sonnet-judged
+# pass rates", never accuracy. Role separation: Opus authors references,
+# Haiku generates, Sonnet judges - no model wears two hats.
 JUDGE_MODELS = {
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-5",
 }
-JUDGE_DEFAULT = "haiku"
+JUDGE_DEFAULT = "sonnet"
 JUDGE_LOG_PATH = ROOT / "data" / "logs" / "judge.jsonl"
-JUDGE_TIMEOUT_S = 240.0
 
-# Parallel `claude -p` judge processes. One shared semaphore gates every
-# judging path, so this cap is global. Max's constraint is the usage window
-# (total tokens), not request rate, so concurrency is effectively free;
-# JUDGE_MAX_CONCURRENCY bounds local process sprawl.
-JUDGE_CONCURRENCY = 8
-JUDGE_MAX_CONCURRENCY = 16
-
-# RAGAS pass thresholds - PILOT DRAFT values, calibrated against hand grades
-# and frozen with the judged-metric rubric before Study 2 (d10 freeze table).
+# RAGAS pass thresholds - PILOT DRAFT values, frozen with the judged-metric
+# rubric before Study 2 (d10 freeze table). v4: no hand-grade calibration
+# (RQ5 scratched) - thresholds are frozen as-is and disclosed as such.
 # Pass = factual_correctness >= threshold AND (faithfulness >= threshold when
 # measurable). Adversarial questions bypass RAGAS (rubric-judge overlay).
 JUDGE_PASS_FACTUAL = 0.75

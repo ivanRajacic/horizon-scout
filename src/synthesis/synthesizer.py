@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 
 from src.config import LLM_CTX
-from src.llm import LlmClient
+from src.llm import make_llm
 from src.retrieval.vector_search import SearchResult
 
 # Context arithmetic: reserve room for the system/instruction prompt and the
@@ -81,8 +81,10 @@ def fit_to_budget(chunks: list[SearchResult],
 
 
 class Synthesizer:
-    def __init__(self, llm: LlmClient | None = None):
-        self.llm = llm or LlmClient(max_tokens=ANSWER_TOKENS)
+    def __init__(self, llm=None):
+        # max_tokens applies to the local backend only; the claude backend
+        # has no sampling controls (make_llm ignores it there).
+        self.llm = llm or make_llm(max_tokens=ANSWER_TOKENS)
 
     def synthesize(self, question: str,
                    chunks: list[SearchResult]) -> SynthesisResult:

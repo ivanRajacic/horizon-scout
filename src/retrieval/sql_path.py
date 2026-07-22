@@ -16,7 +16,7 @@ import duckdb
 
 from src.config import (DB_PATH, SCHEMA_DOCS_PATH, SQL_LOG_PATH, SQL_ROW_LIMIT,
                         SQL_TIMEOUT_S)
-from src.llm import LlmClient, fingerprint
+from src.llm import fingerprint, make_llm
 
 # Frozen after Study 0.5's single value-description intervention (d7); bump on
 # ANY edit. The fingerprint hashes the FULL system prompt including
@@ -93,11 +93,11 @@ def build_system_prompt() -> str:
 
 
 class SqlPath:
-    def __init__(self, llm: LlmClient | None = None, db_path=DB_PATH,
+    def __init__(self, llm=None, db_path=DB_PATH,
                  log_path=SQL_LOG_PATH, timeout_s: float = SQL_TIMEOUT_S,
                  row_limit: int = SQL_ROW_LIMIT,
                  system_prompt: str | None = None):
-        self.llm = llm or LlmClient()
+        self.llm = llm or make_llm()
         self.db_path = db_path
         self.log_path = log_path
         self.timeout_s = timeout_s

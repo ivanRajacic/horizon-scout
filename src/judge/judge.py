@@ -1,8 +1,10 @@
-"""Reference-based LLM judge (M5, RQ5): Claude via `claude -p`.
+"""Reference-based LLM judge (M5, v4): Sonnet via the shared `claude -p`
+transport.
 
 Design constraints from the plan:
-- Transport is ONE function (call_claude): subscription -> API is a one-
-  function swap, nothing downstream changes.
+- Transport is ONE function (src/claude_cli.py: call_claude, shared with
+  generation and RAGAS): subscription -> API is a one-function swap, nothing
+  downstream changes.
 - The judge is blind to experimental condition: it sees question, reference,
   answer - never which pipeline produced the answer.
 - The judge returns SUB-SCORES (coverage, missing facts, unsupported claims);
@@ -16,14 +18,12 @@ Design constraints from the plan:
 
 import json
 import re
-import shutil
-import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.config import (JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS,
-                        JUDGE_TIMEOUT_S)
+from src.claude_cli import ClaudeCliError, call_claude  # noqa: F401  (call_claude re-exported)
+from src.config import JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS
 from src.llm import fingerprint
 
 JUDGE_PROMPT_VERSION = "j0.1-pilot"
@@ -55,8 +55,10 @@ Reply with STRICT JSON only - no markdown fences, no commentary:
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
-class JudgeError(RuntimeError):
-    pass
+class JudgeError(ClaudeCliError):
+    """Judge-layer failure (malformed rubric output, etc.). Subclasses the
+    transport error so retry logic catching ClaudeCliError also catches
+    JudgeError raised by injected fake transports in tests."""
 
 
 @dataclass
@@ -71,38 +73,6 @@ class JudgeVerdict:
     passed: bool
     raw: str = ""                    # judge's raw text, for disagreement audits
     meta: dict = field(default_factory=dict)  # transport envelope subset
-
-
-def call_claude(prompt: str, model: str,
-                timeout_s: float = JUDGE_TIMEOUT_S) -> dict:
-    """THE transport function. `claude -p` on the Max subscription; swap this
-    body for an API call when billing changes (~EUR 3), nothing else moves.
-
-    Returns the CLI's JSON envelope; the judge text is in envelope["result"].
-    """
-    exe = shutil.which("claude")
-    if exe is None:
-        raise JudgeError("`claude` CLI not found on PATH - the judge runs on "
-                         "the Claude Code subscription via `claude -p`.")
-    cmd = [exe, "-p", "--model", model, "--output-format", "json",
-           "--max-turns", "1"]
-    try:
-        proc = subprocess.run(cmd, input=prompt, capture_output=True,
-                              text=True, encoding="utf-8", timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        raise JudgeError(f"judge call timed out after {timeout_s}s") from None
-    if proc.returncode != 0:
-        raise JudgeError(f"claude -p exited {proc.returncode}: "
-                         f"{(proc.stderr or proc.stdout).strip()[:500]}")
-    try:
-        envelope = json.loads(proc.stdout)
-    except json.JSONDecodeError as e:
-        raise JudgeError(f"claude -p emitted non-JSON envelope: {e}: "
-                         f"{proc.stdout[:500]}") from None
-    if envelope.get("is_error"):
-        raise JudgeError(f"claude -p returned an error result: "
-                         f"{str(envelope.get('result'))[:500]}")
-    return envelope
 
 
 def build_prompt(question: str, reference: str, answer: str) -> str:

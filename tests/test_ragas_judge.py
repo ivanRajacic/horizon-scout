@@ -9,10 +9,11 @@ import time
 
 import pytest
 
-from src.config import (JUDGE_MAX_CONCURRENCY, JUDGE_PASS_FACTUAL,
+from src import claude_cli
+from src.claude_cli import ClaudeCliError
+from src.config import (CLAUDE_MAX_CONCURRENCY, JUDGE_PASS_FACTUAL,
                         JUDGE_PASS_FAITHFULNESS)
 from src.judge.judge import JudgeError
-from src.judge import ragas_backend
 from src.judge.ragas_backend import ClaudeCliLLM
 from src.judge.ragas_judge import JudgePool, derive_ragas_pass
 
@@ -87,7 +88,7 @@ def test_backend_returns_llmresult_text():
 
 
 def test_backend_retries_transient_then_succeeds(monkeypatch):
-    monkeypatch.setattr(ragas_backend.time, "sleep", lambda s: None)
+    monkeypatch.setattr(claude_cli.time, "sleep", lambda s: None)
     calls = {"n": 0}
 
     def transport(prompt, model, **kw):
@@ -102,7 +103,7 @@ def test_backend_retries_transient_then_succeeds(monkeypatch):
 
 
 def test_backend_gives_up_after_backoff_exhausted(monkeypatch):
-    monkeypatch.setattr(ragas_backend.time, "sleep", lambda s: None)
+    monkeypatch.setattr(claude_cli.time, "sleep", lambda s: None)
     calls = {"n": 0}
 
     def transport(prompt, model, **kw):
@@ -110,9 +111,9 @@ def test_backend_gives_up_after_backoff_exhausted(monkeypatch):
         raise JudgeError("usage limit reached for this window")
 
     llm = ClaudeCliLLM("m", threading.Semaphore(1), transport=transport)
-    with pytest.raises(JudgeError, match="persisted"):
+    with pytest.raises(ClaudeCliError, match="persisted"):
         llm._call("p")
-    assert calls["n"] == 1 + len(ragas_backend._BACKOFF_S)
+    assert calls["n"] == 1 + len(claude_cli._BACKOFF_S)
 
 
 def test_backend_nontransient_fails_immediately():
@@ -137,8 +138,14 @@ def mk_pool(tmp_path, transport, concurrency=4):
 
 def test_concurrency_clamped(tmp_path):
     t = lambda p, m, **kw: envelope("x")  # noqa: E731
-    assert mk_pool(tmp_path, t, concurrency=99).concurrency == JUDGE_MAX_CONCURRENCY
+    assert mk_pool(tmp_path, t, concurrency=99).concurrency == CLAUDE_MAX_CONCURRENCY
     assert mk_pool(tmp_path, t, concurrency=0).concurrency == 1
+
+
+def test_default_pool_uses_shared_semaphore(tmp_path):
+    pool = JudgePool(model_key="haiku", log_path=tmp_path / "j.jsonl",
+                     transport=lambda p, m, **kw: envelope("x"))
+    assert pool._sem is claude_cli.shared_semaphore()
 
 
 def test_adversarial_dispatches_to_overlay(tmp_path):

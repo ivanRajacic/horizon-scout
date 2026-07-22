@@ -9,7 +9,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from src.llm import LlmClient
+from src.llm import make_llm
 
 MODES = ("sql", "vector", "scoped")
 
@@ -79,8 +79,8 @@ def _parse(text: str) -> tuple[str, str]:
 
 
 class Router:
-    def __init__(self, llm: LlmClient | None = None):
-        self.llm = llm or LlmClient()
+    def __init__(self, llm=None):
+        self.llm = llm or make_llm()
 
     def route(self, question: str) -> RouteDecision:
         messages = [{"role": "system", "content": SYSTEM_PROMPT},
