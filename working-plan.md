@@ -43,6 +43,8 @@ Nothing from the pilot counts as a result.
 
 Query-verified "what's in this database" doc (topic spread, funding percentiles, distributions, genuine absences, fields present in both columns and text). Doubles as the value-description source for Study 0.5's SQL prompt fix, so it is on the critical path twice. Then the category spec.
 
+**Decision (2026-07-22, design pending):** this is to be done by a dedicated exploration AGENT over the `horizon-draft` MCP tools (`run_sql`, traced), producing a versioned `corpus_profile.md` (sibling to schema_docs) organized by what each bank category needs: value distributions + near-miss trap pairs (SQL), topic clusters via the euroscivoc taxonomy with sizes mapped to L1/L2/L3 (vector), topic x filter survivor counts (hybrid), query-verified genuine absences (adversarial). Ivan is still working out the exact shape - do NOT run it yet. Optional dessert, decided after the profile exists: 2D embedding projection (UMAP) of the 190k vectors to find structure euroscivoc misses.
+
 ## Step 3 - d4-6: bank v1.0
 
 ~100 questions per the allocation table (SQL 22 / vector 25 / hybrid 24 / ambiguous 10 / adversarial 12 / compositional 3), generated per §2's pipeline, human-verified on a random 20% + all flagged. **Freeze the bank at d6.** Also freeze chunking + index config and make the metadata-in-chunk decision consciously before the full-corpus index build (the current dev index is 11.7k vectors; the full build must exist before d8).
@@ -65,4 +67,4 @@ Study 2 (RQ1) on the full bank, results assembly + surprising-verdict pass (skim
 
 ## Immediate next action
 
-Step 1 remaining items, in order: transfer surviving old-set questions through the drafting skills (item 6), author the rest of the pilot set (item 7), then the end-to-end pilot runs and router-prompt freeze (item 8). The full-corpus index build (Step 3 prerequisite) is prepared and can run any time the embed server is up.
+Step 1 remaining items, in order: transfer surviving old-set questions through the drafting skills (item 6), author the rest of the pilot set (item 7), then the end-to-end pilot runs and router-prompt freeze (item 8). **Full-corpus index: BUILT** (2026-07-22, 190,248 vectors, limit=null; FTS verified in sync) - vector/hybrid authoring is unblocked and grounds against the full corpus.

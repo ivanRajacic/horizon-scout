@@ -139,6 +139,8 @@ Single file/schema. Labels are columns; each metric script filters on which labe
 
 Skew rationale: L2 is modal everywhere (realistic + router-fair). **L1-SQL and L1-vector stay fat — they are RQ1's clean-route cells, where the v4 tie prediction is tested; under-populating them makes a tie indistinguishable from noise.** Adversarial+ambiguous do double duty (route-quality analysis + refusal-overlay cells). With a capable generator, the trap/value-grounded/L3/adversarial cells carry the discrimination — weight authoring effort there.
 
+**v4 rebalance note (open):** the table above is v3's RQ-weighting. With Haiku near-ceiling expected on clean cells, a modest shift toward the discriminating cells is on the table — e.g. 1–2 more SQL traps/value-grounded and +2–3 adversarial, paid for from L1 counts (keeping L1 fat enough that a tie stays measurable). Decide BEFORE the bank fills in; any change is recorded here first, then authored — never rebalanced after results are seen.
+
 **Granularity honesty:** per-cell differences under ~15 points are unresolvable; the route×complexity table *locates* effects and checks predicted signs; magnitude claims only at route/tier aggregates (n≈22–25). Never narrate single-question swings.
 
 Judged subset: **~35** (down from 40–50), stratified across routes.
