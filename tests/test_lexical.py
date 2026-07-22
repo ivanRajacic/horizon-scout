@@ -21,7 +21,13 @@ EBOVAC_PROJECTS = {115854, 115861}
 @pytest.fixture(scope="session")
 def retriever():
     n = build_fts_index()
-    assert n == 11684, f"expected 11684 chunks indexed, got {n}"
+    # Corpus-size agnostic (dev slice or full build): the FTS table must
+    # cover the chunk table exactly, whatever its current size.
+    con = duckdb.connect(str(config.DB_PATH), read_only=True)
+    n_chunks = con.execute("SELECT count(*) FROM chunk").fetchone()[0]
+    con.close()
+    assert n == n_chunks, (
+        f"FTS indexed {n} rows but chunk table has {n_chunks}")
     return LexicalRetriever()
 
 

@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 import duckdb
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
+from tqdm import tqdm
 
 from src.config import (CHUNK_TARGET, DB_PATH, EMBED_DIM, EMBED_MODEL,
                         GGUF_PATH, INDEX_DIR, INDEX_META_PATH, PROGRESS_PATH,
@@ -36,6 +37,10 @@ from src.embed_client import LlamaServerEmbeddings, check_server
 from src.ingest.chunker import Chunker, embedded_text, make_header
 
 CHECKPOINT_EVERY = 5000
+# Progress granularity inside a checkpoint: 2 full server rounds
+# (EMBED_BATCH 32 x EMBED_WORKERS 4 x 2), so the bar moves every few seconds
+# instead of once per 5000-chunk checkpoint.
+EMBED_LOG_BATCH = 256
 TMP_INDEX_DIR = INDEX_DIR.with_suffix(".tmp")
 
 
@@ -67,16 +72,14 @@ def build_chunk_table(con, limit: int | None, chunk_target: int,
     """).fetchall()
 
     rows, t0 = [], time.perf_counter()
-    for i, (pid, acr, title, obj, summ, work, final) in enumerate(projects):
+    for pid, acr, title, obj, summ, work, final in tqdm(
+            projects, desc="chunking", unit="proj"):
         sections = dict(zip(REPORT_SECTIONS, (summ, work, final)))
         docs = (chunker.chunk_report(pid, acr, title, sections)
                 + chunker.chunk_objective(pid, acr, title, obj))
         rows += [(d.metadata["chunk_id"], d.metadata["project_id"],
                   d.metadata["source"], d.metadata["section"],
                   d.metadata["n_tokens"], d.page_content) for d in docs]
-        if (i + 1) % 5000 == 0:
-            print(f"  chunked {i + 1}/{len(projects)} projects "
-                  f"({len(rows)} chunks, {time.perf_counter() - t0:.0f}s)")
 
     con.execute("""
         CREATE OR REPLACE TABLE chunk (
@@ -141,13 +144,22 @@ def build_index(limit: int | None = None, chunk_target: int = CHUNK_TARGET,
     if resume:
         print(f"resuming: chunk table reused ({n_chunks} chunks), "
               f"{done0} vectors already indexed")
+    print(f"embedding {len(rows) - done0} of {len(rows)} chunks - "
+          f"checkpoint every {CHECKPOINT_EVERY}; a killed run rerun with the "
+          f"same command resumes from the last checkpoint")
     t0 = time.perf_counter()
     done = done0
+    pbar = tqdm(total=len(rows), initial=done0, desc="embedding",
+                unit="chunk")
     while done < len(rows):
         batch = rows[done:done + CHECKPOINT_EVERY]
-        texts = [embedded_text(make_header(acr, title, sec), text)
-                 for _, _, _, sec, _, text, acr, title in batch]
-        vecs = client.embed_documents(texts)
+        vecs = []
+        for j in range(0, len(batch), EMBED_LOG_BATCH):
+            sub = batch[j:j + EMBED_LOG_BATCH]
+            texts = [embedded_text(make_header(acr, title, sec), text)
+                     for _, _, _, sec, _, text, acr, title in sub]
+            vecs += client.embed_documents(texts)
+            pbar.update(len(sub))
         pairs = [(r[5], v) for r, v in zip(batch, vecs)]  # CLEAN text stored
         metas = [{"chunk_id": r[0], "project_id": r[1], "source": r[2],
                   "section": r[3], "n_tokens": r[4]} for r in batch]
@@ -163,7 +175,11 @@ def build_index(limit: int | None = None, chunk_target: int = CHUNK_TARGET,
         PROGRESS_PATH.write_text(json.dumps({**progress, "n_done": done}),
                                  encoding="utf-8")
         rate = (done - done0) / (time.perf_counter() - t0)
-        print(f"  embedded {done}/{len(rows)} ({rate:.0f} chunks/s)")
+        eta_min = (len(rows) - done) / rate / 60 if rate else 0
+        # Durable line per checkpoint so a redirected log shows progress too.
+        tqdm.write(f"  checkpoint saved: {done}/{len(rows)} vectors "
+                   f"({rate:.0f} chunks/s, ~{eta_min:.0f} min left)")
+    pbar.close()
 
     # -------------------------------------------------------------- finalize
     wall = time.perf_counter() - t0
@@ -192,3 +208,5 @@ def build_index(limit: int | None = None, chunk_target: int = CHUNK_TARGET,
     print(f"index built: {len(rows)} vectors in {wall / 60:.1f} min -> "
           f"{INDEX_DIR}")
     print(f"meta -> {INDEX_META_PATH}")
+    print("NOTE: the chunk table was rebuilt - the lexical BM25 index is now "
+          "stale. Refresh it with:  python -m src.cli build-fts")
