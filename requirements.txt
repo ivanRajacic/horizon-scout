@@ -4,3 +4,5 @@ duckdb==1.5.4
 # vertexai import shim against langchain-community 0.4.x (see
 # src/judge/ragas_backend.py). Re-verify both before any upgrade.
 ragas==0.4.3
+# Drafting MCP server (M5 question authoring): official MCP Python SDK.
+mcp==1.28.1

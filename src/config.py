@@ -108,6 +108,16 @@ JUDGE_MAX_CONCURRENCY = 16
 JUDGE_PASS_FACTUAL = 0.75
 JUDGE_PASS_FAITHFULNESS = 0.80
 
+# --- Drafting MCP server (M5 question authoring) ---
+# schema_docs.md gets a version label like every other prompt asset: bump on
+# any meaningful edit; the content hash (src.llm.fingerprint) catches silent
+# ones. Appended bank questions record both.
+SCHEMA_DOCS_VERSION = "sd1-pilot"
+# The skill-authored bank (schema v2). The pre-skill smoke set is archived
+# under eval/archive/ in the old schema and is not validated anymore.
+BANK_PATH = ROOT / "eval" / "bank.jsonl"
+DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
+
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"
 FTS_STOPWORDS = "english"

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "horizon-draft": {
+      "command": "C:/horizon-scout/.venv/Scripts/python.exe",
+      "args": ["-m", "src.eval.mcp_server"]
+    }
+  }
+}

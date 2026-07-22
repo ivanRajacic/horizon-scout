@@ -10,7 +10,7 @@
                                    [--explain] [--quiet]
   python -m src.cli explore [--mode sql|vector|scoped] [-k 10]
   python -m src.cli smoke-router [--eval-file eval/smoke_router.jsonl]
-  python -m src.cli validate-bank [--bank eval/bank_pilot.jsonl]
+  python -m src.cli validate-bank [--bank eval/bank.jsonl]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
                                [--model haiku|sonnet]
 """
@@ -559,7 +559,7 @@ def main():
 
     vb = sub.add_parser("validate-bank",
                         help="validate a question-bank jsonl (M5 schema)")
-    vb.add_argument("--bank", default=str(ROOT / "eval" / "bank_pilot.jsonl"))
+    vb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     vb.set_defaults(fn=cmd_validate_bank)
 
     jf = sub.add_parser("judge-file",

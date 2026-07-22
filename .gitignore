@@ -15,3 +15,6 @@ data/logs/
 
 # server / process logs
 *.log
+
+# local Claude Code permission settings
+.claude/settings.local.json
