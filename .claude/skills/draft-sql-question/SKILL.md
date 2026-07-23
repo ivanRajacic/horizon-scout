@@ -13,6 +13,17 @@ Format: `<level> [subtype]` - e.g. `L2 value-grounded` or `L3`. Level values: `L
 
 This skill authors `route=sql` questions at levels L1-L3 only. ADV, vector, hybrid, and ambiguous questions have their own skills; if the user asks for one of those, point them there instead of stretching this one. One question per pass; never batch.
 
+## Orchestrated mode (question-drafter subagents only)
+
+When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
+
+- The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step. All grounding, execution-verification, reference, and reviewer steps run unchanged and in full.
+- Use the pre-assigned `question_id`, never "next free".
+- There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
+- Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Level disagreements that would normally go to the user go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
+
+Interactive invocations are unaffected: the per-question confirm gate stands.
+
 ## Tooling
 
 All data access goes through the `horizon-draft` MCP server:
@@ -20,6 +31,7 @@ All data access goes through the `horizon-draft` MCP server:
 - `run_sql(query, row_cap=50)` - SELECT-only, read-only, rows capped (hard ceiling 200), ~10s timeout. SQL failures come back as a `{"error": ...}` result, not a tool error - broken queries are data to reason about, which trap authoring depends on.
 - `get_schema_docs()` - schema_docs.md verbatim plus `{version, content_hash}`.
 - `get_bank_questions(route)` - existing entries for a route: id, text, level, subtype only.
+- `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics plus the coverage-axes ledger. An `{"error": ...}` result means the profile is not built yet - proceed without it.
 
 There are no write tools. The append at the end is a confirmation-gated file edit, done by this skill directly.
 
@@ -39,7 +51,9 @@ A bare single-table top-N is L1 `rank`, not L3 - ORDER BY + LIMIT alone never sa
 
 1. Call `get_schema_docs()`. Read it. Record the returned `content_hash` - every appended entry carries it as `schema_docs_hash`.
 2. Call `get_bank_questions("sql")`. Review existing questions (id, text, level, subtype) to avoid near-duplicates and to see subtype coverage. Keep them in mind throughout.
-3. If no subtype was given: state the current per-subtype counts for the requested level and propose the least-covered subtype. Wait for the user's pick.
+3. Call `get_corpus_profile(section="sql")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it.
+4. If no subtype was given: state the current per-subtype counts for the requested level and propose the least-covered subtype. Wait for the user's pick.
+5. When the user names no subject: propose one from the profile - prefer a candidate on a **least-covered axis** in the ledger (an axis or entity family the existing bank questions do not touch), not yet used by any bank question. Least-covered axis beats least-covered subtype when they conflict: width across the corpus is the ledger's whole point. Profile candidates are advisory seeds - Step 1 grounding and Step 3 verification run in full regardless.
 
 ## Step 1 - Ground
 
