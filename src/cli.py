@@ -11,6 +11,7 @@
   python -m src.cli explore [--mode sql|vector|scoped] [-k 10]
   python -m src.cli smoke-router [--eval-file eval/smoke_router.jsonl]
   python -m src.cli validate-bank [--bank eval/bank.jsonl]
+  python -m src.cli promote-drafts <draft-report.md> [--bank eval/bank.jsonl]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
                                [--model haiku|sonnet]
 """
@@ -448,6 +449,28 @@ def cmd_validate_bank(args):
     print(bank_summary(questions))
 
 
+def cmd_promote_drafts(args):
+    """Append the APPROVE-ticked questions of a /draft-batch report to the
+    bank. Deterministic: parses the report's decision boxes, validates the
+    combined bank before writing, refuses loudly on any problem."""
+    from src.eval.bank import bank_summary, load_bank
+    from src.eval.promote import PromoteError, promote
+
+    try:
+        res = promote(Path(args.report), Path(args.bank))
+    except PromoteError as e:
+        print("PROMOTE REFUSED - bank untouched:")
+        for line in str(e).splitlines():
+            print(f"  {line}")
+        sys.exit(1)
+    print(f"draft file: {res.draft_file}")
+    print(f"promoted ({len(res.promoted)}): "
+          f"{', '.join(res.promoted) if res.promoted else '-'}")
+    print(f"rejected ({len(res.rejected)}): "
+          f"{', '.join(res.rejected) if res.rejected else '-'}\n")
+    print(bank_summary(load_bank(args.bank)))
+
+
 def cmd_judge_file(args):
     """Judge a jsonl of {question_id, question, reference_answer, answer,
     contexts?, adversarial?, expect_pass?}. Ordinary cases go through the
@@ -566,6 +589,13 @@ def main():
                         help="validate a question-bank jsonl (M5 schema)")
     vb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     vb.set_defaults(fn=cmd_validate_bank)
+
+    pd = sub.add_parser("promote-drafts",
+                        help="append APPROVE-ticked /draft-batch drafts "
+                             "to the bank")
+    pd.add_argument("report", help="draft-report .md with ticked decision boxes")
+    pd.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    pd.set_defaults(fn=cmd_promote_drafts)
 
     jf = sub.add_parser("judge-file",
                         help="LLM judge over {question, reference, answer} jsonl")
