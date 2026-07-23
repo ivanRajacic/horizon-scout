@@ -132,6 +132,15 @@ SCHEMA_DOCS_VERSION = "sd1-pilot"
 BANK_PATH = ROOT / "eval" / "bank.jsonl"
 DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 
+# corpus_profile.md is the exploration agent's output (working-plan d3):
+# query-verified candidate topics for bank questions, sectioned per bank
+# category, plus the coverage-axes ledger the drafting skills consult so
+# the bank stays wide. Same versioning discipline as schema_docs: bump on
+# any meaningful edit; the content hash catches silent ones. "cp0-unbuilt"
+# until the first /explore-corpus run writes the file (then cp1).
+CORPUS_PROFILE_PATH = ROOT / "src" / "retrieval" / "corpus_profile.md"
+CORPUS_PROFILE_VERSION = "cp0-unbuilt"
+
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"
 FTS_STOPWORDS = "english"
