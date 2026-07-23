@@ -15,6 +15,18 @@ Schema decisions (locked 2026-07-22):
 - `sql_comparison` is `ordered` iff subtype is `rank` - both directions.
 - SQL ladder entries must carry `answer_columns`, `level_evidence`, and the
   `schema_docs_hash` they were authored against: the label is born verified.
+- v2.1 (2026-07-23): vector ladder entries are born verified too - they must
+  carry `gold_project_ids`, `term_style`, and `pooling_evidence` (the record
+  of the pooled retrieval verification: all conditions run, every candidate
+  adjudicated, index fingerprint). `pooling_evidence.accepted` must equal
+  `gold_project_ids` - the label IS the accepted set.
+- v2.2 (2026-07-23, reverses the v2 "not level-bound" note by decision):
+  hybrid subtypes are level-bound - filter-read=L1, filter-synthesize=L2,
+  filter-compare=L3, filter-survey=L3 - with per-subtype gold-count bounds
+  (read=1, synthesize/compare 2-4, survey >=5). Hybrid ladder entries carry
+  `gold_project_ids`, `term_style`, `pooling_evidence` (the SCOPED pooled
+  record), and `filter_evidence` (executed filter SQL, enumerated survivor
+  ids + true count, schema_docs hash); gold must be a subset of survivors.
 
 Route vocabulary follows the plan doc (sql | vector | hybrid | ambiguous);
 the runtime router calls the hybrid mode "scoped" - ROUTE_TO_MODE is the one
@@ -33,9 +45,9 @@ SPECIFICATIONS = ("well-specified", "underspecified")
 TERM_STYLES = ("exact-term", "paraphrase")
 SQL_COMPARISONS = ("set", "ordered")
 
-# Subtype vocabularies. For sql and vector the value is the set of levels
-# the subtype is legal at; hybrid subtypes are not level-bound; ADV subtypes
-# apply at level=ADV on any route.
+# Subtype vocabularies. For sql, vector, and hybrid the value is the set of
+# levels the subtype is legal at; ADV subtypes apply at level=ADV on any
+# route.
 SQL_SUBTYPE_LEVELS = {
     "lookup": ("L1",), "aggregate": ("L1",),
     "join-lookup": ("L2",), "value-grounded": ("L2",),
@@ -48,18 +60,36 @@ VECTOR_SUBTYPE_LEVELS = {
     "comparison": ("L2",), "synthesis": ("L2",),
     "survey": ("L3",),
 }
-HYBRID_SUBTYPES = ("filter-read", "filter-synthesize", "filter-compare",
-                   "filter-survey")
+HYBRID_SUBTYPE_LEVELS = {
+    "filter-read": ("L1",), "filter-synthesize": ("L2",),
+    "filter-compare": ("L3",), "filter-survey": ("L3",),
+}
 ADV_SUBTYPES = ("zero-match", "false-presupposition", "data-absent",
                 "unanswerable")
+
+# Gold-count bounds per hybrid subtype (hybrid level is defined by what the
+# filter does to the evidence problem, so the bound hangs off the subtype,
+# not the level). Value = (min, max); None = unbounded.
+HYBRID_SUBTYPE_GOLD_BOUNDS = {
+    "filter-read": (1, 1), "filter-synthesize": (2, 4),
+    "filter-compare": (2, 4), "filter-survey": (5, None),
+}
+
+# Required keys of the vector/hybrid ladder's pooled-verification record.
+POOLING_EVIDENCE_KEYS = ("conditions_run", "k", "pooled_candidate_count",
+                         "accepted", "rejected_count", "index_fingerprint")
+
+# Required keys of the hybrid ladder's filter-side record.
+FILTER_EVIDENCE_KEYS = ("filter_sql", "survivor_count", "survivor_ids",
+                        "schema_docs_hash")
 
 # Only these keys may appear in a bank record - typos never pass silently.
 KNOWN_FIELDS = frozenset({
     "question_id", "text", "expected_route", "acceptable_routes",
     "level", "subtype", "specification", "term_style", "compositional",
     "gold_sql", "sql_comparison", "answer_columns", "level_evidence",
-    "gold_project_ids", "reference_answer", "schema_docs_hash",
-    "reviewer_override", "notes",
+    "gold_project_ids", "pooling_evidence", "filter_evidence",
+    "reference_answer", "schema_docs_hash", "reviewer_override", "notes",
 })
 
 
@@ -88,6 +118,8 @@ class BankQuestion:
     answer_columns: list[str] | None = None
     level_evidence: dict | None = None
     gold_project_ids: list[int] | None = None
+    pooling_evidence: dict | None = None
+    filter_evidence: dict | None = None
     reference_answer: str | None = None
     schema_docs_hash: str | None = None
     reviewer_override: bool = False
@@ -137,9 +169,13 @@ def _validate_subtype(route, level, subtype, bad):
             bad(f"vector subtype {subtype!r} is only legal at "
                 f"{'/'.join(allowed)}, got {level}")
     elif route == "hybrid":
-        if subtype not in HYBRID_SUBTYPES:
-            bad(f"hybrid subtype must be one of {HYBRID_SUBTYPES}, "
-                f"got {subtype!r}")
+        allowed = HYBRID_SUBTYPE_LEVELS.get(subtype)
+        if allowed is None:
+            bad(f"hybrid subtype must be one of "
+                f"{tuple(HYBRID_SUBTYPE_LEVELS)}, got {subtype!r}")
+        elif level not in allowed:
+            bad(f"hybrid subtype {subtype!r} is only legal at "
+                f"{'/'.join(allowed)}, got {level}")
 
 
 def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | None:
@@ -218,9 +254,13 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
                 f"(got subtype={subtype!r}, "
                 f"sql_comparison={obj.get('sql_comparison', 'set')!r})")
 
-    # SQL ladder entries are born verified: pinned columns, computed
-    # evidence, and the schema_docs hash they were authored against.
+    # Ladder entries are born verified: SQL carries pinned columns, computed
+    # evidence, and the schema_docs hash; vector carries gold ids, term_style,
+    # and the pooled-verification record; hybrid additionally carries the
+    # filter-side record (executed filter SQL + enumerated survivors).
     sql_ladder = route == "sql" and level in LADDER
+    vector_ladder = route == "vector" and level in LADDER
+    hybrid_ladder = route == "hybrid" and level in LADDER
     answer_columns = obj.get("answer_columns")
     if answer_columns is not None:
         if gold_sql is None:
@@ -266,6 +306,77 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
                 bad(f"vector {level} requires |gold_project_ids| "
                     f"{'== 1' if level == 'L1' else 'in [2,4]' if level == 'L2' else '>= 5'},"
                     f" got {n}")
+        elif hybrid_ladder and subtype in HYBRID_SUBTYPE_GOLD_BOUNDS:
+            # Hybrid gold bounds hang off the subtype, not the level.
+            lo, hi = HYBRID_SUBTYPE_GOLD_BOUNDS[subtype]
+            n = len(gold_ids)
+            if n < lo or (hi is not None and n > hi):
+                want = f"== {lo}" if lo == hi else (
+                    f">= {lo}" if hi is None else f"in [{lo},{hi}]")
+                bad(f"hybrid subtype {subtype!r} requires "
+                    f"|gold_project_ids| {want}, got {n}")
+    elif vector_ladder or hybrid_ladder:
+        bad(f"{route} questions require gold_project_ids")
+
+    if (vector_ladder or hybrid_ladder) and term_style is None:
+        bad(f"{route} questions require term_style")
+
+    pooling_evidence = obj.get("pooling_evidence")
+    if pooling_evidence is not None:
+        if gold_ids is None:
+            bad("pooling_evidence requires gold_project_ids")
+        if not isinstance(pooling_evidence, dict):
+            bad("pooling_evidence must be an object")
+        else:
+            missing = [key for key in POOLING_EVIDENCE_KEYS
+                       if key not in pooling_evidence]
+            if missing:
+                bad(f"pooling_evidence missing keys: {', '.join(missing)}")
+            accepted = pooling_evidence.get("accepted")
+            if (not isinstance(accepted, list)
+                    or any(not isinstance(i, int) for i in accepted)):
+                bad("pooling_evidence.accepted must be a list of integers")
+            elif (isinstance(gold_ids, list)
+                    and set(accepted) != set(gold_ids)):
+                bad("pooling_evidence.accepted must equal gold_project_ids "
+                    "(the label IS the accepted set)")
+    elif vector_ladder or hybrid_ladder:
+        bad(f"{route} questions require pooling_evidence")
+
+    filter_evidence = obj.get("filter_evidence")
+    if filter_evidence is not None:
+        if route != "hybrid":
+            bad("filter_evidence is only legal on hybrid questions")
+        if not isinstance(filter_evidence, dict):
+            bad("filter_evidence must be an object")
+        else:
+            missing = [key for key in FILTER_EVIDENCE_KEYS
+                       if key not in filter_evidence]
+            if missing:
+                bad(f"filter_evidence missing keys: {', '.join(missing)}")
+            fsql = filter_evidence.get("filter_sql")
+            if (not isinstance(fsql, str) or not fsql.strip()
+                    or fsql.strip().split()[0].upper()
+                    not in ("SELECT", "WITH")):
+                bad("filter_evidence.filter_sql must be a single SELECT "
+                    "(or WITH...SELECT)")
+            survivors = filter_evidence.get("survivor_ids")
+            if (not isinstance(survivors, list)
+                    or any(not isinstance(i, int) for i in survivors)):
+                bad("filter_evidence.survivor_ids must be a list of integers")
+            else:
+                if len(set(survivors)) != len(survivors):
+                    bad("filter_evidence.survivor_ids contains duplicates")
+                if filter_evidence.get("survivor_count") != len(survivors):
+                    bad("filter_evidence.survivor_count must equal "
+                        "len(survivor_ids)")
+                if (isinstance(gold_ids, list)
+                        and not set(gold_ids) <= set(survivors)):
+                    bad("gold_project_ids must be a subset of "
+                        "filter_evidence.survivor_ids (gold outside the "
+                        "filter is a contradiction)")
+    elif hybrid_ladder:
+        bad("hybrid questions require filter_evidence")
 
     for key in ("reference_answer", "notes"):
         v = obj.get(key)
@@ -286,6 +397,8 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
         answer_columns=answer_columns,
         level_evidence=level_evidence,
         gold_project_ids=gold_ids,
+        pooling_evidence=pooling_evidence,
+        filter_evidence=filter_evidence,
         reference_answer=obj.get("reference_answer"),
         schema_docs_hash=schema_docs_hash,
         reviewer_override=obj.get("reviewer_override", False),
@@ -342,6 +455,8 @@ def bank_summary(questions: list[BankQuestion]) -> str:
         "gold_sql": sum(q.gold_sql is not None for q in questions),
         "answer_columns": sum(q.answer_columns is not None for q in questions),
         "gold_project_ids": sum(q.gold_project_ids is not None for q in questions),
+        "pooling_evidence": sum(q.pooling_evidence is not None for q in questions),
+        "filter_evidence": sum(q.filter_evidence is not None for q in questions),
         "reference_answer": sum(q.reference_answer is not None for q in questions),
         "term_style": sum(q.term_style is not None for q in questions),
         "underspecified": sum(q.specification == "underspecified" for q in questions),

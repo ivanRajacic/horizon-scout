@@ -22,7 +22,12 @@ VALID_SQL = {
 VALID_VECTOR = {
     "question_id": "t-02", "text": "Find the project about widget farming.",
     "expected_route": "vector", "level": "L1", "subtype": "identify",
+    "term_style": "paraphrase",
     "gold_project_ids": [101],
+    "pooling_evidence": {
+        "conditions_run": ["lexical", "dense", "hybrid", "hybrid_rerank"],
+        "k": 20, "pooled_candidate_count": 7, "accepted": [101],
+        "rejected_count": 6, "index_fingerprint": "be84cbad9182"},
 }
 
 
@@ -166,9 +171,125 @@ def test_term_style_allowed_via_ambiguous_topical_route(tmp_path):
 
 
 def test_vector_level_must_match_gold_count(tmp_path):
-    rec = {**VALID_VECTOR, "gold_project_ids": [1, 2, 3]}
+    rec = {**VALID_VECTOR, "gold_project_ids": [1, 2, 3],
+           "pooling_evidence": {**VALID_VECTOR["pooling_evidence"],
+                                "accepted": [1, 2, 3]}}
     assert "requires |gold_project_ids|" in errors_of(tmp_path, [rec])
     rec = {**rec, "level": "L2", "subtype": "comparison"}
+    assert len(load_bank(write_bank(tmp_path, [rec]))) == 1
+
+
+def test_vector_ladder_requires_verification_fields(tmp_path):
+    for missing in ("gold_project_ids", "term_style", "pooling_evidence"):
+        rec = dict(VALID_VECTOR)
+        del rec[missing]
+        assert f"require {missing}" in errors_of(tmp_path, [rec]), missing
+
+
+def test_pooling_evidence_keys_and_accepted_must_match_gold(tmp_path):
+    rec = {**VALID_VECTOR,
+           "pooling_evidence": {"conditions_run": ["lexical"], "k": 20}}
+    text = errors_of(tmp_path, [rec])
+    assert "pooling_evidence missing keys" in text
+    assert "pooled_candidate_count" in text
+    rec = {**VALID_VECTOR,
+           "pooling_evidence": {**VALID_VECTOR["pooling_evidence"],
+                                "accepted": [101, 202]}}
+    assert "must equal gold_project_ids" in errors_of(tmp_path, [rec])
+
+
+def test_pooling_evidence_requires_gold_project_ids(tmp_path):
+    rec = {**VALID_SQL,
+           "pooling_evidence": VALID_VECTOR["pooling_evidence"]}
+    assert "pooling_evidence requires gold_project_ids" in errors_of(
+        tmp_path, [rec])
+
+
+VALID_HYBRID = {
+    "question_id": "t-04",
+    "text": "What do the Croatian coastal-monitoring projects funded after "
+            "2020 monitor?",
+    "expected_route": "hybrid", "level": "L1", "subtype": "filter-read",
+    "term_style": "exact-term",
+    "gold_project_ids": [301],
+    "filter_evidence": {
+        "filter_sql": "SELECT id FROM project WHERE x", "survivor_count": 3,
+        "survivor_ids": [301, 302, 303], "schema_docs_hash": "c3435815b331"},
+    "pooling_evidence": {
+        "conditions_run": ["lexical", "dense", "hybrid", "hybrid_rerank"],
+        "k": 20, "pooled_candidate_count": 3, "accepted": [301],
+        "rejected_count": 2, "index_fingerprint": "be84cbad9182"},
+}
+
+
+def test_valid_hybrid_loads(tmp_path):
+    q = load_bank(write_bank(tmp_path, [VALID_HYBRID]))[0]
+    assert q.filter_evidence["survivor_count"] == 3
+    assert q.is_topical
+
+
+def test_hybrid_subtypes_are_level_bound(tmp_path):
+    assert "only legal at L1" in errors_of(
+        tmp_path, [{**VALID_HYBRID, "level": "L2"}])
+    assert "only legal at L3" in errors_of(
+        tmp_path, [{**VALID_HYBRID, "level": "L1",
+                    "subtype": "filter-survey"}])
+    assert "hybrid subtype must be one of" in errors_of(
+        tmp_path, [{**VALID_HYBRID, "subtype": "identify"}])
+
+
+def test_hybrid_ladder_requires_verification_fields(tmp_path):
+    for missing in ("gold_project_ids", "term_style", "pooling_evidence",
+                    "filter_evidence"):
+        rec = dict(VALID_HYBRID)
+        del rec[missing]
+        assert f"require {missing}" in errors_of(tmp_path, [rec]), missing
+
+
+def test_hybrid_gold_bounds_per_subtype(tmp_path):
+    # filter-read needs exactly one gold project.
+    rec = {**VALID_HYBRID, "gold_project_ids": [301, 302],
+           "pooling_evidence": {**VALID_HYBRID["pooling_evidence"],
+                                "accepted": [301, 302]}}
+    assert "|gold_project_ids| == 1" in errors_of(tmp_path, [rec])
+    # filter-survey needs 5+; 3 golds fail even though survivors allow them.
+    rec = {**VALID_HYBRID, "level": "L3", "subtype": "filter-survey",
+           "gold_project_ids": [301, 302, 303],
+           "pooling_evidence": {**VALID_HYBRID["pooling_evidence"],
+                                "accepted": [301, 302, 303]}}
+    assert "|gold_project_ids| >= 5" in errors_of(tmp_path, [rec])
+
+
+def test_hybrid_gold_must_be_subset_of_survivors(tmp_path):
+    rec = {**VALID_HYBRID, "gold_project_ids": [999],
+           "pooling_evidence": {**VALID_HYBRID["pooling_evidence"],
+                                "accepted": [999]}}
+    assert "subset" in errors_of(tmp_path, [rec])
+
+
+def test_filter_evidence_shape_and_route(tmp_path):
+    rec = {**VALID_HYBRID,
+           "filter_evidence": {"filter_sql": "DROP TABLE project",
+                               "survivor_count": 2,
+                               "survivor_ids": [301, 301],
+                               "schema_docs_hash": "x"}}
+    text = errors_of(tmp_path, [rec])
+    assert "single SELECT" in text and "duplicates" in text
+    rec = {**VALID_HYBRID,
+           "filter_evidence": {**VALID_HYBRID["filter_evidence"],
+                               "survivor_count": 7}}
+    assert "must equal len(survivor_ids)" in errors_of(tmp_path, [rec])
+    assert "only legal on hybrid" in errors_of(
+        tmp_path, [{**VALID_VECTOR,
+                    "filter_evidence": VALID_HYBRID["filter_evidence"]}])
+
+
+def test_adv_vector_needs_no_pooling_evidence(tmp_path):
+    # ADV is off-ladder: zero-match has an empty gold set by definition and
+    # carries no pooled-verification requirement.
+    rec = {"question_id": "t-adv2", "text": "Which projects cure dragons?",
+           "expected_route": "vector", "level": "ADV",
+           "subtype": "zero-match", "gold_project_ids": []}
     assert len(load_bank(write_bank(tmp_path, [rec]))) == 1
 
 
