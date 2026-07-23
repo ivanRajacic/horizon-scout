@@ -127,25 +127,27 @@ Single file/schema. Labels are columns; each metric script filters on which labe
 
 | | L1 | L2 | L3 | route total |
 |---|---|---|---|---|
-| SQL | 8 | 10 | 4* | 22 |
-| Vector | 8 | 10 | 7 | 25 |
-| Hybrid | 7 | 10 | 7 | 24 |
+| SQL | 7 | 11 | 5* | 23 |
+| Vector | 7 | 10 | 7 | 24 |
+| Hybrid | 6 | 10 | 7 | 23 |
 | Ambiguous-route | — spread — | | | 10 |
-| Adversarial (zero-match, false-presup., data-absent) | | | | 12 |
+| Adversarial (zero-match, false-presup., data-absent) | | | | 14 |
 | Compositional | | | | 3 |
-| **Total** | | | | **~96** |
+| **Total** | | | | **~97** |
 
 \* conditional on the pilot smoke test.
 
 Skew rationale: L2 is modal everywhere (realistic + router-fair). **L1-SQL and L1-vector stay fat — they are RQ1's clean-route cells, where the v4 tie prediction is tested; under-populating them makes a tie indistinguishable from noise.** Adversarial+ambiguous do double duty (route-quality analysis + refusal-overlay cells). With a capable generator, the trap/value-grounded/L3/adversarial cells carry the discrimination — weight authoring effort there.
 
-**v4 rebalance note (open):** the table above is v3's RQ-weighting. With Haiku near-ceiling expected on clean cells, a modest shift toward the discriminating cells is on the table — e.g. 1–2 more SQL traps/value-grounded and +2–3 adversarial, paid for from L1 counts (keeping L1 fat enough that a tie stays measurable). Decide BEFORE the bank fills in; any change is recorded here first, then authored — never rebalanced after results are seen.
+**v4 rebalance — RESOLVED (2026-07-23, before any cell filled past v3 counts):** the modest shift toward the discriminating cells is adopted; the table above is the binding allocation. Deltas vs v3 (in git history): SQL L1 8→7, L2 10→11 (the extra is value-grounded), L3 4→5 (the extra is a trap); vector L1 8→7; hybrid L1 7→6; adversarial 12→14 (~4–5 per subtype). Rationale: Haiku is expected near ceiling on clean cells, so marginal L1 questions carry little information, while trap/value-grounded/adversarial are where H1 predicts any real gap AND are the cheapest cells to author (execution-verified, no pooling). Clean-cell aggregate drops only 36→35, so the tie stays measurable at the route/tier level where magnitude claims live. No further stripping of L1 — beyond this, a tie becomes indistinguishable from noise.
+
+**term_style balance (added 2026-07-23):** RQ2's crossover table needs both legs — aim ~50/50 exact-term/paraphrase WITHIN vector and WITHIN hybrid, tracked in the drafting gap report; a drift past ~60/40 in either route gets corrected by the next questions authored, never by relabeling.
 
 **Granularity honesty:** per-cell differences under ~15 points are unresolvable; the route×complexity table *locates* effects and checks predicted signs; magnitude claims only at route/tier aggregates (n≈22–25). Never narrate single-question swings.
 
 Judged subset: **~35** (down from 40–50), stratified across routes.
 Topical (projectID-labeled) subset: **~50**, pooling as above; 40 is the floor.
-SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells).
+SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells). Arithmetic fixed 2026-07-23: the SQL route supplies 23; the remainder comes from ambiguous questions whose `acceptable_routes` include sql — those are authored WITH an executed `gold_sql` (they need one anyway to define the sql-acceptable answer), bringing the pool to ~30.
 
 ## 2. Question generation pipeline
 
@@ -153,7 +155,7 @@ SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells).
 2. **Category spec from that exploration**, aligned to literature vocabulary: TAG-Bench query types; BIRD difficulty **noting our tiers deliberately fold BIRD's four dimensions into three levels with ambiguity as a separate axis**; HotpotQA-lineage hop types; SUQL/HybridQA Type I–VI as the compositional vocabulary; **STaRK's construction pipeline as the synthesis-method precedent.**
 3. **Generation skill + MCP** on the real database → Opus generates per category, grounded in real data. STaRK's pattern adapted: sample structured slice → extract textual properties from a gold project → compose a question requiring both → **multi-LLM verification of which other projects also satisfy it** (the mechanism for honest pooled `gold_project_ids`).
 4. **Adversarial analyze skill** reviews generated questions against gold evidence.
-5. **Verification, evidence-gated at authoring time (v4):** every question passes through the drafting skills — grounding queries against the real DB, gold executed in-pass, mandatory reviewer checklist, explicit per-question confirm before append. This replaces the post-hoc random-20% human pass, which is dropped with manual review; the per-question confirm at authoring time is the human gate.
+5. **Verification, evidence-gated at authoring time (v4):** every question passes through the drafting skills — grounding queries against the real DB, gold executed in-pass, mandatory reviewer checklist, explicit per-question confirm before append. This replaces the post-hoc random-20% human pass, which is dropped with manual review; the per-question confirm at authoring time is the human gate. **Amendment (2026-07-23, batch drafting):** for questions authored via `/draft-batch`, the human gate moves — same evidence discipline (the drafting skills run unchanged in orchestrated mode, plus a mandatory adversarial `question-reviewer` pass per draft), but the confirm is batched: drafts are staged to `eval/drafts/` with full gold evidence and drafting history in a review report, and enter the bank only through the user's ticked APPROVE boxes executed by `promote-drafts` (deterministic, re-validates before appending). Interactive drafting keeps the per-question confirm. Details and bounds in working-plan.md Step 3.
 6. **Hand-write what generators won't produce:** ambiguous-route, underspecified, zero-match, false-presupposition, compositional.
 7. Track and report rejection/correction rates, with the three-point literature comparison (SUQL 23.6% gold errors; STaRK 86.6–98.9% verification; BIRD's double-blind still imperfect).
 
