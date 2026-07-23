@@ -19,7 +19,7 @@ This skill orchestrates and formats; it never drafts, never reviews, never edits
 
 1. Read `eval/bank.jsonl` and count questions per route x level x subtype. Read the allocation table in `horizon-scout.md` (section "Bank composition", the route x level table) LIVE - never from memory; the rebalance may have changed it.
 2. Also scan `eval/drafts/draft-bank-*.jsonl` for staged-but-unpromoted questions and count them separately.
-3. Print the gap report: per cell, filled / staged / target. Mark cells with no drafting skill (`ambiguous`, ADV subtypes, `compositional`) as "manual only - not draftable by this batch". Note the open v4 rebalance if `horizon-scout.md` still marks it open.
+3. Print the gap report: per cell, filled / staged / target. Mark `ambiguous`, ADV-subtype, and `compositional` cells as "interactive only - not draftable by this batch"; their skills exist (`/draft-ambiguous-question`, `/draft-adversarial-question`, `/draft-compositional-question`) but stay outside the batch until the user explicitly flips them in (compositional never - it is interactive-only by design). Note the open v4 rebalance if `horizon-scout.md` still marks it open.
 4. Ask the user, in plain text (never the multiple-choice window), which cells and how many questions each. Wait. The user's picks become the batch order; do not exceed any cell's target without the user saying so explicitly.
 
 ### 2. Candidates
