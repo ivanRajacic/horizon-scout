@@ -139,7 +139,7 @@ DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 # any meaningful edit; the content hash catches silent ones. "cp0-unbuilt"
 # until the first /explore-corpus run writes the file (then cp1).
 CORPUS_PROFILE_PATH = ROOT / "src" / "retrieval" / "corpus_profile.md"
-CORPUS_PROFILE_VERSION = "cp0-unbuilt"
+CORPUS_PROFILE_VERSION = "cp2"
 
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"
