@@ -140,13 +140,17 @@ BANK_PATH = ROOT / "eval" / "bank.jsonl"
 DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 
 # corpus_profile.md is the exploration agent's output (working-plan d3):
-# query-verified candidate topics for bank questions, sectioned per bank
-# category, plus the coverage-axes ledger the drafting skills consult so
-# the bank stays wide. Same versioning discipline as schema_docs: bump on
-# any meaningful edit; the content hash catches silent ones. "cp0-unbuilt"
-# until the first /explore-corpus run writes the file (then cp1).
+# a CUMULATIVE map of the database - what each explored region is about and
+# what questions it can support - plus query-verified candidate topics
+# sectioned per bank category. Its `## Frontier` table over the 46 euroSciVoc
+# buckets is what makes exploration cumulative: it records where we have and
+# have not been, so each run goes somewhere new and drafting stays wide.
+# Same versioning discipline as schema_docs: bump on any meaningful edit; the
+# content hash catches silent ones. "cp0-unbuilt" until the first
+# /explore-corpus run writes the file (then cp1). cp3 (2026-07-24) added the
+# frontier, the corpus map and the structural-findings list.
 CORPUS_PROFILE_PATH = ROOT / "src" / "retrieval" / "corpus_profile.md"
-CORPUS_PROFILE_VERSION = "cp2"
+CORPUS_PROFILE_VERSION = "cp3"
 
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"
