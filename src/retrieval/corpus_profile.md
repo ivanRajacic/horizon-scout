@@ -2,11 +2,119 @@
 
 ## Header
 
-- **Version:** cp2
-- **Generated:** 2026-07-23
-- **Scope history:** cp1 (2026-07-23) = scoped run `"find 15 vector topics"` - **Vector** only, 15 candidates. cp2 (2026-07-23) = scoped run `"pilot hybrid 10"` - **Hybrid** only, target 10 candidates (10 found). Still stubs, to be filled by later runs: Distributions, SQL, Adversarial, Ambiguous. Header and Coverage ledger are regenerated every run; Vector and Hybrid candidate blocks are append-only across runs (never renumbered or edited).
+- **Version:** cp3
+- **Generated:** 2026-07-24
 - **Corpus fingerprint:** 35,389 projects (`SELECT COUNT(*) FROM project`). Dense index `data/processed/index_meta.json`: 190,248 vectors, embedder `bge-base-en-v1.5-f16.gguf`, dim 768, built 2026-07-22T08:53:52Z. euroscivoc classification covers 32,236 of 35,389 projects across 111,614 rows (`SELECT COUNT(DISTINCT projectID), COUNT(*) FROM euroscivoc`).
-- **Grounded against schema_docs:** version `sd1-pilot`, content_hash `c3435815b331`.
+- **Grounded against schema_docs:** version `sd2`, content_hash `e2696e0f80f5`.
+
+**Run log** (scope, cost, frontier movement - one line per run):
+
+- cp1 (2026-07-23) scope `"find 15 vector topics"`: Vector only, 15 candidates. 2 subagents.
+- cp2 (2026-07-23) scope `"pilot hybrid 10"`: Hybrid only, 10 candidates (10 found). 2 subagents, 54 `run_sql`, 6 `get_project_text` calls (~15 projects). Frontier not yet in existence.
+- cp3 (2026-07-24) scope `"structural: add the frontier"`: no exploration subagents. Introduced `## Frontier`, `## Corpus map` and `## Structural findings`, built the 46-bucket frontier from the data and back-filled `seeds`/`bank` from the existing candidates and `eval/bank.jsonl`. Frontier established at `mapped 0/46 | mined 18/46`.
+
+**Reading order for a run:** `## Frontier` alone is enough to plan one (it says where we have not been). Read a section's candidates only when you are drafting from them. The whole file is never needed at once.
+
+## Frontier
+
+Where exploration has and has not been. **This is the only section needed to plan a run.**
+
+The denominator is `euroscivoc`, which already partitions the corpus - no taxonomy is invented here. **46 buckets:** 40 named second-level categories (`split_part(euroSciVocPath,'/',2)`, each under exactly one branch), 5 top-level-only paths (one per branch that has depth-1 rows; agricultural sciences has none), and 1 `(unclassified)` bucket for projects with no euroSciVoc row. Verified: `SELECT split_part(euroSciVocPath,'/',1), split_part(euroSciVocPath,'/',2), COUNT(DISTINCT projectID) FROM euroscivoc GROUP BY 1,2` -> 45 rows (40 named + 5 blank), plus `SELECT COUNT(*) FROM project p WHERE NOT EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id)` -> 3,153.
+
+**Caveat, stated because it is real:** a project carries 1-5 euroSciVoc rows, so a project can appear in more than one bucket. This is a cover, not a strict partition, and bucket project-counts therefore sum to more than 35,389. For a coverage checklist that is fine.
+
+**Statuses:** `unexplored` (nobody has been there) -> `mapped` (a `## Corpus map` entry exists - we know what is in there and what it can support) -> `mined` (at least one bank question has been drawn from it). `status`, `seeds` and `bank` are recomputed each run; `map` is carried.
+
+The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-route questions with no gold project ids do not appear in it.
+
+| bucket | projects | status | map | seeds | bank |
+|---|---|---|---|---|---|
+| natural sciences / biological sciences | 8,057 | mined | - | vector-01, vector-12 | vec-01, vec-05 |
+| natural sciences / computer and information sciences | 7,654 | mined | - | vector-07 | vec-01 |
+| natural sciences / physical sciences | 5,788 | mined | - | hybrid-10 | hyb-03, vec-04, vec-05 |
+| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | - | vector-05 | hyb-03, vec-01 |
+| engineering and technology / environmental engineering | 5,178 | mined | - | vector-11 | hyb-03, vec-05 |
+| social sciences / economics and business | 4,711 | mined | - | vector-10 | vec-05 |
+| medical and health sciences / clinical medicine | 4,661 | mined | - | vector-06, vector-13 | vec-02 |
+| natural sciences / chemical sciences | 4,331 | mined | - | - | hyb-03, vec-05 |
+| medical and health sciences / basic medicine | 4,252 | unexplored | - | vector-15 | - |
+| social sciences / sociology | 3,802 | unexplored | - | - | - |
+| engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05 |
+| (unclassified - no euroSciVoc row) | 3,153 | unexplored | - | - | - |
+| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, vec-05 |
+| medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05 |
+| engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, vec-05 |
+| natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05 |
+| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | vec-05 |
+| social sciences / political sciences | 1,795 | unexplored | - | - | - |
+| humanities / history and archaeology | 1,669 | unexplored | - | vector-08 | - |
+| engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03 |
+| medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02 |
+| social sciences / social geography | 870 | unexplored | - | - | - |
+| social sciences / law | 866 | unexplored | - | - | - |
+| engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05 |
+| social sciences / psychology | 636 | unexplored | - | - | - |
+| engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05 |
+| humanities / philosophy, ethics and religion | 627 | unexplored | - | vector-04 | - |
+| engineering and technology / industrial biotechnology | 613 | unexplored | - | - | - |
+| humanities / arts | 552 | unexplored | - | hybrid-08 | - |
+| humanities / languages and literature | 490 | unexplored | - | - | - |
+| engineering and technology / medical engineering | 472 | unexplored | - | - | - |
+| social sciences / other social sciences | 417 | unexplored | - | - | - |
+| agricultural sciences / animal and dairy science | 402 | unexplored | - | - | - |
+| social sciences / educational sciences | 308 | unexplored | - | - | - |
+| engineering and technology / chemical engineering | 288 | unexplored | - | - | - |
+| engineering and technology / environmental biotechnology | 286 | unexplored | - | - | - |
+| social sciences / media and communications | 177 | unexplored | - | - | - |
+| humanities / other humanities | 164 | unexplored | - | - | - |
+| agricultural sciences / agricultural biotechnology | 104 | unexplored | - | - | - |
+| social sciences / (top-level only) | 46 | unexplored | - | - | - |
+| medical and health sciences / other medical sciences | 32 | unexplored | - | - | - |
+| humanities / (top-level only) | 19 | unexplored | - | - | - |
+| agricultural sciences / veterinary sciences | 15 | unexplored | - | - | - |
+| natural sciences / (top-level only) | 14 | unexplored | - | - | - |
+| medical and health sciences / (top-level only) | 13 | unexplored | - | - | - |
+| engineering and technology / (top-level only) | 2 | unexplored | - | - | - |
+
+`mapped 0/46 | mined 18/46 | unexplored 28/46`
+
+No bucket is `mapped` yet: the map is new at cp3 and no region has a `## Corpus map` entry. 18 buckets are `mined` (a bank question was drawn from them, traced through `gold_project_ids`), and a further 4 carry cp1/cp2 candidate seeds with no bank question yet - the `seeds` column keeps that history, but seeds are not a map, so those buckets still read `unexplored`.
+
+## Corpus map
+
+What each explored region of the database actually contains, and what it can support. Written from project text that was READ, never from the taxonomy label alone - cp1 established that euroSciVoc leaf labels lie on interdisciplinary and MSCA projects (`ethnomycology` tagged an aquatic-fungi ecology project; `sustainable architecture` tagged a district-heating project; `agroecology` tagged a green-economy ethnography). A map entry that paraphrases its own tag is worthless.
+
+Append-only: entries are added as buckets are explored, never rewritten. Format:
+
+```
+- region: m<NN>
+  bucket: <top-level> / <second-level>
+  slice: <the SQL predicate that DEFINES this bucket>
+  size: <N> projects  (<count query> -> <N>)
+  about: <2-3 sentences on the work that actually lives here>
+  texture: <report_text coverage; tag echoed verbatim vs paraphrased; tag noisiness; anything that changes how a question must be written>
+  good for: <which question kinds this region supports - route/level/subtype - and why>
+  thin for: <what it cannot support, and why>
+  mapped: <cpN>
+```
+
+*No entries yet - the map is new at cp3. The 18 buckets carrying `seeds` in the frontier have candidate blocks in the Vector and Hybrid sections below, but no region description; mapping them is the first job of the next `/explore-corpus` run.*
+
+## Structural findings
+
+Corpus facts that are not topical and therefore have no bucket list to check off: trap pairs, verified absences, facts carried in both a structured column and free text, and value inventories. Feeds the SQL, Adversarial and Ambiguous routes. Append-only, no denominator.
+
+- id: sf-01
+  kind: value-inventory
+  claim: `euroSciVocPath` values do NOT begin with a leading slash, despite the leading-slash example that stood in schema_docs.md until `sd2`. Matching a subtree needs `LIKE 'natural sciences/%'` or `LIKE '%/leaf%'`, never `LIKE '/natural sciences/%'`.
+  evidence: `SELECT COUNT(*) FROM euroscivoc WHERE euroSciVocPath LIKE '/%'` -> 0 of 111,614. The sibling column `euroSciVocCode` DOES lead with a slash (e.g. '/25/61/383'), which is why the wrong form looked plausible.
+  serves: every route that filters on topic; recorded here because it silently returned empty results for both exploration and the runtime SQL path.
+
+- id: sf-02
+  kind: value-inventory
+  claim: euroSciVoc has 6 top-level branches, not the 40-ish that a `split_part(...,'/',2)` inventory suggests - index 2 is the second level (40 named fields of science), index 1 is the branch.
+  evidence: `SELECT COUNT(DISTINCT split_part(euroSciVocPath,'/',1)) FROM euroscivoc` -> 6; `... ,'/',2))` -> 41 (40 named + the empty string on the 94 depth-1 rows). Branch counts: natural sciences 22,075 projects, engineering and technology 13,696, social sciences 10,099, medical and health sciences 8,580, humanities 2,699, agricultural sciences 2,302.
+  serves: slice partitioning and the width rule, both of which are stated in terms of "top-level branches"; cp1/cp2 used second-level categories under that name.
 
 ## Distributions
 
@@ -211,7 +319,7 @@ Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
 
 Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
 
-## Coverage ledger
+## Coverage notes
 
 Regenerated at cp2. Covers the Vector candidates (cp1, vector-01..15), the Hybrid candidates (cp2, hybrid-01..10), and current bank usage (all routes, from `get_bank_questions`).
 
