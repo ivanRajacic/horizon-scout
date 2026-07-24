@@ -82,6 +82,19 @@ Files changed: `.claude/skills/review-question/SKILL.md`, `.claude/agents/questi
 
 Still deferred: **P2** (incremental checkpointing in `/draft-batch` - a kill still loses completed slots) and the orchestrator's raw context bloat at high session effort (the "judge over outputs, don't investigate" rule bounds it but does not eliminate it). `draft-batch` still writes its two files only at the end.
 
+## Decisions taken (2026-07-24) - orchestrator audit + optimization, IMPLEMENTED
+
+Third pass, resolved with Ivan one finding at a time. Prompt-asset only (all edits in `.claude/skills/draft-batch/SKILL.md`); no code - `promote.py`, `bank.py`, the report format, and the `promote-drafts` contract are untouched. This closes the two deferred orchestrator items (P2 + context bloat) and two coherence gaps this audit surfaced. Constraint held: same safety, less spend.
+
+Whole-system coherence verdict first: the orchestrator, drafter, and reviewer gel at every interface (prompt in; package / DRAFT-FAILED out; `DRAFT:` block = RECORD + EVIDENCE to the reviewer; all five reviewer verdicts handled by the judge; warm-drafter one-round rectification matches the drafter contract; MINOR carve-outs consistent across the reviewer and the three drafting skills). Four gaps found and fixed:
+
+- **F1 - servers-down handling (was a real waste bug).** The reviewer's `SKIPPED` had a "stop dispatching topical slots" handler; the drafter's identical `DRAFT-FAILED - retrieval servers down` did not, so it fell through to the spare-candidate fallback and burned BOTH candidates on the (same) dead servers, for every topical slot, before anything stopped. Fix = **Option C (both)**: a **pre-flight `search_corpus("probe", k=1)` health check** before any drafter is spawned (only when the batch has topical slots), which stops topical dispatch up front; PLUS a **reactive backstop** routing the drafter's servers-down DRAFT-FAILED to the same stop-dispatch path and explicitly NOT consuming the spare (covers servers dying mid-run, which the pre-flight cannot catch). Framed as an environment health check, consistent with "orchestrate, don't author".
+- **F2 - P2 checkpointing, via a working journal (DONE).** Added a **third persistent file**: an append-only JSONL working journal in the output dir, written at every slot transition (raw draft on return; reviewer verdict + finding; rectified draft; final disposition). **Never validated mid-run** by design; **validation stays at the end** on accepted records only, then the two canonical outputs are produced from the journal's accepted slots (format unchanged, so `promote.py` untouched). **No automatic resume logic** - resume is a manual op (hand the journal to an agent); Ivan's call, to avoid persisting hidden in-run state. Supersedes the earlier "incremental append to the canonical files" sketch: the journal is a cleaner crash-recovery layer that leaves the canonical outputs end-of-run and validated.
+- **F3 - context bloat (Option C).** Closed-slot discipline (once journaled, do not re-quote/re-reason over a slot's evidence; reassemble the report by reading the journal) + a launch-effort recommendation (run the orchestrator session at low/medium effort). Honest ceiling recorded: the one-time receipt of each drafter package is unavoidable while drafters stay read-only and the report restates evidence in full - this bounds bloat, does not remove it.
+- **F4 - override-accept traceability (Option A).** The judge's evidence-based override valve now sets `reviewer_override: true` on the accepted RECORD (verified schema-safe and tallied in `bank.py`), so an overridden question is marked in the promoted bank exactly as the interactive "confirm anyway" path marks it - closing the trace gap. One narrow carve-out to the "byte-identical RECORD" standing rule; the override rationale stays in the report (parity with interactive).
+
+Standing-rule edits: "Two files, ever" -> "two canonical outputs + one working journal"; the byte-identical rule gained the single `reviewer_override` carve-out; the opening paragraph now says three files; the report Tally line gained a `blocked` count.
+
 ## Next actions
 
 - [x] Let the current run finish; capture `eval/drafts/draft-bank-2026-07-24.jsonl` + report.
@@ -91,7 +104,7 @@ Still deferred: **P2** (incremental checkpointing in `/draft-batch` - a kill sti
 - [x] Apply agreed changes to drafter + reviewer (k=10, V1-V5). Orchestrator (P2 checkpointing) still pending.
 - [x] Review-loop re-architecture: lean adversary + orchestrator-as-judge + one-round-then-spare + drafter topic-fit/fast-fix (see "Decisions taken - review-loop re-architecture" above).
 - [ ] Re-run a small batch and measure the new cost against this baseline (~70% of a 5-hour window for 5 questions); confirm the lean reviewer still flags a genuine defect and the loop terminates fast.
-- [ ] P2 incremental checkpointing in `/draft-batch` (still deferred).
+- [x] P2 checkpointing in `/draft-batch` - DONE (2026-07-24) via the append-only working journal; see "Decisions taken - orchestrator audit + optimization". Also closed F1 (servers-down), F3 (context bloat), F4 (override stamp).
 
 ## Status of the triggering run - COMPLETE
 
