@@ -352,6 +352,78 @@ def test_get_project_text_found_report_and_missing(server):
         "finalResults": "Alpha results"}
 
 
+def test_get_project_text_fields_selects_a_subset(server):
+    result = get_project_text([1], fields=["objective", "teaser"])
+    assert result["projects"] == [
+        {"project_id": 1, "objective": "Alpha objective",
+         "report": {"teaser": "Alpha teaser"}}]
+    assert result["truncated"] is None
+
+
+def test_get_project_text_fields_project_only_drops_the_report(server):
+    # No report field asked for -> no `report` key at all, so a caller that
+    # only wants the objective never pays for the report join's text.
+    result = get_project_text([1], fields=["acronym", "objective"])
+    assert result["projects"] == [
+        {"project_id": 1, "acronym": "ALPHA", "objective": "Alpha objective"}]
+
+
+def test_get_project_text_report_title_is_distinct_from_project_title(server):
+    result = get_project_text([1], fields=["title", "report_title"])
+    assert result["projects"] == [
+        {"project_id": 1, "title": "Alpha title",
+         "report": {"title": "Alpha report"}}]
+
+
+def test_get_project_text_report_fields_survive_a_missing_report(server):
+    # Project 2 has no report row: the key stays, the value is None.
+    result = get_project_text([2], fields=["summary"])
+    assert result["projects"] == [{"project_id": 2, "report": None}]
+
+
+def test_get_project_text_rejects_unknown_fields(server):
+    assert "error" in get_project_text([1], fields=["objectve"])
+    assert "error" in get_project_text([1], fields=[])
+    assert "error" in get_project_text([1], fields="objective")
+
+
+def test_get_project_text_max_chars_truncates_longest_first(server):
+    long_db = server.db_path.parent / "long.duckdb"
+    con = duckdb.connect(str(long_db))
+    con.execute("CREATE TABLE project (id BIGINT, acronym VARCHAR, "
+                "title VARCHAR, objective VARCHAR)")
+    con.execute("INSERT INTO project VALUES (1, 'A', 'ab', ?)",
+                ["x" * 1000])
+    con.execute("CREATE TABLE report_text (projectID BIGINT, title VARCHAR, "
+                "teaser VARCHAR, summary VARCHAR, workPerformed VARCHAR, "
+                "finalResults VARCHAR)")
+    con.close()
+    server.db_path = long_db
+
+    result = get_project_text([1], fields=["title", "objective"],
+                              max_chars=100)
+    project = result["projects"][0]
+    # Water-filling spends the budget on breadth: the 2-char title survives
+    # whole, the 1000-char objective absorbs the whole cut.
+    assert project["title"] == "ab"
+    assert project["objective"] == "x" * 98
+    assert result["truncated"] == {
+        "max_chars": 100, "field_char_cap": 98, "chars_dropped": 902,
+        "fields_truncated": 1}
+
+
+def test_get_project_text_max_chars_under_budget_is_a_no_op(server):
+    result = get_project_text([1], max_chars=100_000)
+    assert result["truncated"] is None
+    assert result["projects"][0]["objective"] == "Alpha objective"
+
+
+def test_get_project_text_rejects_bad_max_chars(server):
+    assert "error" in get_project_text([1], max_chars=0)
+    assert "error" in get_project_text([1], max_chars=-5)
+    assert "error" in get_project_text([1], max_chars=True)
+
+
 def test_get_project_text_validation_and_cap(server):
     assert "error" in get_project_text([])
     assert "error" in get_project_text(["1"])

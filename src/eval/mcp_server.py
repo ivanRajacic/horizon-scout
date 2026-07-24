@@ -14,7 +14,10 @@ gold_project_ids are project labels, never chunk labels, and the pooling
 protocol ("label the union of all retrieval conditions' top-k") needs every
 condition's view at once. get_project_text is the gold-evidence channel:
 full objective + report sections for grounding, candidate relevance judging,
-and reference writing. Retrieval failures (embed/rerank server down, missing
+and reference writing. Its optional `fields` / `max_chars` arguments let a
+caller that only needs the gist (corpus exploration confirming a theme) pull
+a fraction of the ~8.1k-char full payload; both default to off, so the
+drafting skills' full-evidence reads are unchanged. Retrieval failures (embed/rerank server down, missing
 index) come back as {"error": ...} results, matching run_sql's contract.
 
 Safety is enforced in code, not prompt - twice over: the statement guard
@@ -63,6 +66,21 @@ SEARCH_CHUNK_OVERFETCH = 5
 SCOPE_CEILING = 500  # scope_project_ids cap: filters must stay enumerable
 
 PROJECT_TEXT_CAP = 10  # get_project_text ids per call
+
+# get_project_text field selection. A full payload averages ~8.1k chars per
+# project, of which workPerformed + finalResults are ~48% - the least useful
+# half for "does this text actually carry the theme", which is all the
+# exploration agent needs. Callers that only need the gist ask for a subset
+# (e.g. ["objective", "teaser"], ~2.1k chars); fields=None keeps the full
+# payload, so drafting (which reads gold evidence in full) is unchanged.
+PROJECT_TEXT_FIELDS = ("acronym", "title", "objective",
+                       "report_title", "teaser", "summary",
+                       "workPerformed", "finalResults")
+_PROJECT_FIELDS = ("acronym", "title", "objective")
+# result key -> report_text column, for the report sub-dict
+_REPORT_FIELDS = {"report_title": "title", "teaser": "teaser",
+                  "summary": "summary", "workPerformed": "workPerformed",
+                  "finalResults": "finalResults"}
 
 
 @dataclass
@@ -415,15 +433,45 @@ def search_corpus(query: str, condition: str = "pooled",
             "projects": ordered}
 
 
-def get_project_text(project_ids: list[int]) -> dict:
-    """Full free-text fields for up to 10 projects: acronym, title, and
-    objective from `project`, plus the published report sections (title,
-    teaser, summary, workPerformed, finalResults) when a report exists.
+def _waterfill_cap(lengths: list[int], budget: int) -> int:
+    """Largest per-field char cap c with sum(min(len, c)) <= budget.
+
+    Truncates the longest fields first and leaves short ones whole, so a
+    budget is spent on breadth rather than on one runaway report.
+    """
+    lo, hi = 0, max(lengths)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if sum(min(n, mid) for n in lengths) <= budget:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def get_project_text(project_ids: list[int],
+                     fields: list[str] | None = None,
+                     max_chars: int | None = None) -> dict:
+    """Free-text fields for up to 10 projects: acronym, title and objective
+    from `project`, plus the published report sections (title, teaser,
+    summary, workPerformed, finalResults) when a report exists.
 
     The gold-evidence channel for vector/hybrid authoring: grounding a seed
     project, judging pooled candidates in or out of gold_project_ids, and
     writing reference answers from gold evidence only. Ids not in the
     database are listed under `missing`, not errors.
+
+    fields (optional) selects a subset and keeps the payload small - one of
+    acronym | title | objective | report_title | teaser | summary |
+    workPerformed | finalResults. Omit it for the full payload (~8.1k chars
+    per project). To confirm what a project is ABOUT, ["objective",
+    "teaser"] costs ~2.1k chars and carries the theme; workPerformed and
+    finalResults are ~48% of a full payload and are only worth pulling when
+    you need the results themselves.
+
+    max_chars (optional) is a ceiling on total text returned by this call.
+    Over budget, the longest fields are truncated first (short ones stay
+    whole) and `truncated` reports what was cut.
     """
     def fail(error: str) -> dict:
         _log("get_project_text", project_ids=project_ids, ok=False,
@@ -438,6 +486,19 @@ def get_project_text(project_ids: list[int]) -> dict:
     if len(ids) > PROJECT_TEXT_CAP:
         return fail(f"at most {PROJECT_TEXT_CAP} project_ids per call, "
                     f"got {len(ids)}")
+    if fields is not None:
+        if not isinstance(fields, list) or not fields:
+            return fail("fields must be a non-empty list of strings when "
+                        f"given; valid: {', '.join(PROJECT_TEXT_FIELDS)}")
+        unknown = [f for f in fields if f not in PROJECT_TEXT_FIELDS]
+        if unknown:
+            return fail(f"unknown fields {unknown}; valid: "
+                        f"{', '.join(PROJECT_TEXT_FIELDS)}")
+        fields = list(dict.fromkeys(fields))
+    if max_chars is not None and (isinstance(max_chars, bool)
+                                  or not isinstance(max_chars, int)
+                                  or max_chars < 1):
+        return fail("max_chars must be a positive integer when given")
 
     placeholders = ", ".join("?" for _ in ids)
     con = _connect()
@@ -462,14 +523,60 @@ def get_project_text(project_ids: list[int]) -> dict:
             "workPerformed": work, "finalResults": final})
     found = {pid: (acronym, title, objective)
              for pid, acronym, title, objective in proj_rows}
-    result_projects = [
-        {"project_id": pid, "acronym": found[pid][0], "title": found[pid][1],
-         "objective": found[pid][2], "report": reports.get(pid)}
-        for pid in ids if pid in found]
+
+    # fields=None keeps the historical shape exactly; a subset drops the
+    # unasked keys, and the `report` sub-dict disappears entirely when no
+    # report field was asked for.
+    want_project = [f for f in _PROJECT_FIELDS
+                    if fields is None or f in fields]
+    want_report = [f for f in _REPORT_FIELDS
+                   if fields is None or f in fields]
+    result_projects = []
+    for pid in ids:
+        if pid not in found:
+            continue
+        row = dict(zip(_PROJECT_FIELDS, found[pid]))
+        entry: dict = {"project_id": pid}
+        entry.update({f: row[f] for f in want_project})
+        if want_report:
+            report = reports.get(pid)
+            entry["report"] = None if report is None else {
+                _REPORT_FIELDS[f]: report[_REPORT_FIELDS[f]]
+                for f in want_report}
+        result_projects.append(entry)
+
+    truncated = None
+    if max_chars is not None:
+        # (container, key) for every text value actually being returned.
+        slots = []
+        for entry in result_projects:
+            for key, value in entry.items():
+                if isinstance(value, str):
+                    slots.append((entry, key))
+            report = entry.get("report")
+            if isinstance(report, dict):
+                slots.extend((report, key) for key, value in report.items()
+                             if isinstance(value, str))
+        lengths = [len(box[key]) for box, key in slots]
+        total = sum(lengths)
+        if lengths and total > max_chars:
+            cap = _waterfill_cap(lengths, max_chars)
+            cut = 0
+            for box, key in slots:
+                if len(box[key]) > cap:
+                    cut += len(box[key]) - cap
+                    box[key] = box[key][:cap]
+            truncated = {"max_chars": max_chars, "field_char_cap": cap,
+                         "chars_dropped": cut,
+                         "fields_truncated": sum(1 for n in lengths
+                                                 if n > cap)}
+
     missing = [pid for pid in ids if pid not in found]
     _log("get_project_text", project_ids=ids, ok=True,
-         found=len(result_projects), missing=len(missing))
-    return {"projects": result_projects, "missing": missing}
+         found=len(result_projects), missing=len(missing),
+         fields=fields, max_chars=max_chars, truncated=truncated)
+    return {"projects": result_projects, "missing": missing,
+            "truncated": truncated}
 
 
 def main() -> None:
