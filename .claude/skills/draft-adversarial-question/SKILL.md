@@ -60,7 +60,7 @@ Subtype boundaries are checked by the reviewer (SUBTYPE-FIT): a question provabl
 ## Startup (every invocation)
 
 1. Call `get_bank_questions` for all four routes. Review existing ADV entries (level=ADV rows) to avoid near-duplicates and see subtype coverage; review the costume route's entries so the ADV question blends in with, rather than clones, its L1-L3 siblings. If subtype was not given: state current per-subtype counts, propose the least-covered, wait for the pick.
-2. Call `get_corpus_profile(section="adversarial")` and `get_corpus_profile(section="coverage-ledger")`. If the profile or section is not built yet, note that and proceed without it. When the user names no subject: propose one from a profile candidate on a least-covered axis; candidates are advisory - every absence is re-proven in this pass regardless.
+2. Call `get_corpus_profile(section="adversarial")` and `get_corpus_profile(section="structural-findings")`. If the profile or section is not built yet, note that and proceed without it. When the user names no subject: propose one from a profile candidate on a least-covered axis; candidates are advisory - every absence is re-proven in this pass regardless.
 3. Call `get_schema_docs()`. Record the returned `content_hash` - entries whose proof relies on schema structure (`data-absent`, and any subtype whose proof queries lean on value notes) record it as `schema_docs_hash`.
 4. If the protocol for the chosen subtype requires a `search_corpus` sweep, probe the retrieval stack: `search_corpus("probe", condition="pooled", k=1)`. An error result means a server is down - report it and end the pass before any drafting work.
 

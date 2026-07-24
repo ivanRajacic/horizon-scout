@@ -17,7 +17,7 @@ This skill authors `route=sql` questions at levels L1-L3 only. ADV, vector, hybr
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
-- The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="sql")` and `coverage-ledger`): the candidate block IS your profile slice, and the ledger only matters when choosing a subject. Still call `get_schema_docs()` (record the hash) and `get_bank_questions("sql")`.
+- The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="sql")` and `frontier`): the candidate block IS your profile slice, and the frontier only matters when choosing a subject. Still call `get_schema_docs()` (record the hash) and `get_bank_questions("sql")`.
 - **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (executed SQL + its result) is proven-by-execution and merge-pass spot-checked: trust and confirm it - start from that SQL and re-execute once as a drift check, rather than re-sampling the value space from scratch. Everything else it asserts - route/level/subtype - is ADVISORY and re-verified in full: recompute level_evidence from the executed gold SQL and recompute the level from it, never from the candidate's recommendation. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
@@ -33,7 +33,7 @@ All data access goes through the `horizon-draft` MCP server:
 - `run_sql(query, row_cap=50)` - SELECT-only, read-only, rows capped (hard ceiling 200), ~10s timeout. SQL failures come back as a `{"error": ...}` result, not a tool error - broken queries are data to reason about, which trap authoring depends on.
 - `get_schema_docs()` - schema_docs.md verbatim plus `{version, content_hash}`.
 - `get_bank_questions(route)` - existing entries for a route: id, text, level, subtype only.
-- `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics plus the coverage-axes ledger. An `{"error": ...}` result means the profile is not built yet - proceed without it.
+- `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics plus the `frontier` coverage table. An `{"error": ...}` result means the profile is not built yet - proceed without it.
 
 There are no write tools. The append at the end is a confirmation-gated file edit, done by this skill directly.
 
@@ -53,9 +53,9 @@ A bare single-table top-N is L1 `rank`, not L3 - ORDER BY + LIMIT alone never sa
 
 1. Call `get_schema_docs()`. Read it. Record the returned `content_hash` - every appended entry carries it as `schema_docs_hash`.
 2. Call `get_bank_questions("sql")`. Review existing questions (id, text, level, subtype) to avoid near-duplicates and to see subtype coverage. Keep them in mind throughout.
-3. Call `get_corpus_profile(section="sql")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it.
+3. Call `get_corpus_profile(section="sql")` and `get_corpus_profile(section="frontier")`. If the profile is not built yet, note that and proceed without it. The frontier tells you which buckets are `mapped` but not yet `mined` - prefer a subject from one of those.
 4. If no subtype was given: state the current per-subtype counts for the requested level and propose the least-covered subtype. Wait for the user's pick.
-5. When the user names no subject: propose one from the profile - prefer a candidate on a **least-covered axis** in the ledger (an axis or entity family the existing bank questions do not touch), not yet used by any bank question. Least-covered axis beats least-covered subtype when they conflict: width across the corpus is the ledger's whole point. Profile candidates are advisory seeds: the route/level/subtype is re-verified in full (level_evidence recomputed from the executed gold SQL), while the candidate's executed `evidence` SQL is only re-confirmed cheaply - see Orchestrated mode for the two-tier rule. (Orchestrated mode skips both these profile calls - the candidate block already carries the section.)
+5. When the user names no subject: propose one from the profile - prefer a candidate on a **least-covered axis** (an axis or entity family the existing bank questions do not touch; the frontier's `mapped`-but-not-`mined` buckets are the first place to look), not yet used by any bank question. Least-covered axis beats least-covered subtype when they conflict: width across the corpus is the frontier's whole point. Profile candidates are advisory seeds: the route/level/subtype is re-verified in full (level_evidence recomputed from the executed gold SQL), while the candidate's executed `evidence` SQL is only re-confirmed cheaply - see Orchestrated mode for the two-tier rule. (Orchestrated mode skips both these profile calls - the candidate block already carries the section.)
 
 ## Step 1 - Ground
 

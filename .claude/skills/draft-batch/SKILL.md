@@ -28,8 +28,9 @@ This skill orchestrates and formats; it never drafts, never reviews, never edits
 
 ### 2. Candidates
 
-1. Call `mcp__horizon-draft__get_corpus_profile` for each needed route section plus `coverage-ledger`. An `{"error": ...}` result means the profile is unbuilt - STOP and tell the user to run `/explore-corpus` first; this skill does not draft from thin air.
-2. For each ordered slot pick one candidate whose `recommend:` matches the cell, preferring least-covered axes and skipping candidates whose axis values or named entities are already used by bank questions or by candidates picked for this batch. Keep one spare candidate per cell for replacement. Candidates are advisory seeds - the drafters re-verify everything.
+1. Call `mcp__horizon-draft__get_corpus_profile` for `frontier` plus each needed route section. An `{"error": ...}` result means the profile is unbuilt - STOP and tell the user to run `/explore-corpus` first; this skill does not draft from thin air.
+2. For each ordered slot pick one candidate whose `recommend:` matches the cell. **Prefer candidates from buckets the frontier marks `mapped` but not yet `mined`** - those are regions we have deliberately explored and not yet drawn from, which is what keeps the bank spread across the corpus instead of clustered. Break remaining ties on least-covered axes, and skip candidates whose axis values or named entities are already used by bank questions or by candidates picked for this batch. Keep one spare candidate per cell for replacement. Candidates are advisory seeds - the drafters re-verify everything.
+3. If a candidate carries a `bucket:` line, pull that bucket's `## Corpus map` entry and pass its `good for:` / `thin for:` / `texture:` lines to the drafter with the candidate block. That is the region knowledge exploration paid for - it tells the drafter what shape of question the region can actually support (and what it cannot) before it starts grounding.
 
 ### 3. Pre-assign ids
 

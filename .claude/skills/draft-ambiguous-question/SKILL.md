@@ -61,7 +61,7 @@ Classic ambiguous shapes (from the archived pilot): count-over-topic ("how many 
 ## Startup (every invocation)
 
 1. Call `get_bank_questions("ambiguous")`. Review existing questions to avoid near-duplicates and see level and route-set coverage. If level or routes were not given: state current counts, propose the least-covered combination, wait for the pick.
-2. Call `get_corpus_profile(section="ambiguous")` and `get_corpus_profile(section="coverage-ledger")`. If the profile or section is not built yet, note that and proceed without it. When the user names no topic: propose one from a profile candidate on a least-covered axis; candidates are advisory - every leg is re-verified in this pass regardless.
+2. Call `get_corpus_profile(section="ambiguous")` and `get_corpus_profile(section="structural-findings")`. If the profile or section is not built yet, note that and proceed without it. When the user names no topic: propose one from a profile candidate on a least-covered axis; candidates are advisory - every leg is re-verified in this pass regardless.
 3. Call `get_schema_docs()` if sql will be acceptable. Record its `content_hash` for `schema_docs_hash`.
 4. If vector or hybrid will be acceptable, probe the retrieval stack: `search_corpus("probe", condition="pooled", k=1)`. An error result means a server is down - report it and end the pass before any drafting work.
 
