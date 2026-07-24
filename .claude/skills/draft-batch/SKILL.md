@@ -39,14 +39,18 @@ Per slot:
 
 1. Spawn a `question-drafter` agent. Prompt: the pre-assigned `question_id`, the cell (route/level/subtype, term_style if topical), the candidate block verbatim, and the instruction to follow the route's drafting skill in orchestrated mode.
 2. On a returned package (RECORD / CHECKLIST / EVIDENCE / WHY-GOOD / HISTORY): spawn a `question-reviewer` agent in draft mode. Prompt: a `DRAFT:` block containing the RECORD JSON and the EVIDENCE section verbatim.
-3. Verdict handling:
-   - **SOUND** -> accept the draft.
-   - **FLAWED / BROKEN** -> send the reviewer's RECOMMENDATION blocks to the SAME drafter via SendMessage (its context is warm - never respawn for rectification). When the revised package returns, send it to the SAME reviewer via SendMessage for ONE re-review. SOUND -> accept; anything else -> mark REJECTED-BY-REVIEWER. **Hard cap: two reviews per question, one rectification round.**
+3. Judge the verdict (you are the judge - the drafter drafts, the reviewer attacks, you decide):
+   - **SOUND** (includes MINOR-only) -> accept the draft. Record any MINOR flags in the report; never redraft for a MINOR.
+   - **FATAL-RECOVERABLE** -> send the reviewer's FATAL fix directions to the SAME drafter via SendMessage (its context is warm - never respawn for rectification); you may sharpen or reframe the direction as you relay. When the revised package returns, send it to the SAME reviewer via SendMessage for ONE re-review.
+     - SOUND -> accept.
+     - Still FATAL (recoverable or dead) -> do NOT grind another round; abandon this candidate and go to the spare (item 4). A fix that failed once is a weak bet; a fresh candidate is the better shot.
+     You MAY instead override-accept over a FATAL only when the drafter's own executed evidence plainly refutes the finding - record the override and the refuting evidence in the report. Evidence-based, not a taste call, and never over a DEAD finding.
+   - **FATAL-DEAD** -> abandon this candidate immediately and go to the spare (item 4). No rectification round - rounds never fix a dead candidate.
    - **SKIPPED** (servers down) -> stop dispatching topical slots, report which slots are blocked, finish the rest.
    - **REVIEW-FAILED / dead agent** -> retry that agent once, then mark the slot FAILED.
-4. `DRAFT-FAILED` from the drafter: try the slot's spare candidate with a fresh drafter (once). Fails too -> mark the slot FAILED with both histories. Never invent a third candidate.
+4. **Spare-candidate fallback (one per slot).** Whenever a candidate is abandoned - a `DRAFT-FAILED` from the drafter, a `FATAL-DEAD` verdict, or a `FATAL-RECOVERABLE` whose one fix round did not reach SOUND - try the slot's spare candidate with a FRESH drafter (once). The spare runs the same draft -> review -> at-most-one-fix loop. Spare abandoned too -> mark the slot FAILED with both histories. Never invent a third candidate.
 
-Never re-litigate findings yourself: drafters draft, reviewers judge, this skill routes messages and records history.
+Judge over the two agents' outputs, do not run your own investigation: you weigh the reviewer's FATAL findings against the drafter's evidence and decide accept / rectify-once / abandon - but you never author, never re-review, and never open the MCP tools to form a finding of your own. Your judgment is over what the drafter and reviewer produced, not a third independent analysis (that would just re-buy the cost this design removes).
 
 ### 5. Validate the batch
 
@@ -61,7 +65,7 @@ If either file already exists, STOP and ask before overwriting - it may hold an 
 
 ### 7. Close out
 
-Final message: both paths, the tally (accepted / rejected-by-reviewer / failed / blocked), id gaps left, and the promote command:
+Final message: both paths, the tally (accepted / failed / blocked), id gaps left, and the promote command:
 `./.venv/Scripts/python.exe -m src.cli promote-drafts <report path>`
 
 ## Report format
@@ -74,13 +78,13 @@ Self-containment is the point: the user reads this file cold, with no session tr
 Draft-bank-file: eval/drafts/draft-bank-<YYYY-MM-DD>.jsonl
 Order: <the cells and counts the user asked for>
 Corpus profile: <version> <hash> | schema_docs: <version> <hash> | index: <fingerprint or n/a>
-Tally: <A> accepted / <R> rejected-by-reviewer / <F> failed
+Tally: <A> accepted / <F> failed (each with its reason: DEAD, failed-fix, or DRAFT-FAILED)
 
 ## Summary
 
 | id | route/level/subtype | candidate topic | review verdict | decision |
 |----|---------------------|-----------------|----------------|----------|
-(one row per slot; rejected/failed rows say "-" in the decision column)
+(one row per slot; failed/blocked rows say "-" in the decision column)
 
 ## <id> - <review verdict>
 
@@ -95,10 +99,11 @@ was rectified>
 
 Decision: [ ] APPROVE  [ ] REJECT
 
-## <id> - REJECTED-BY-REVIEWER / FAILED
+## <id> - FAILED
 
-Same section minus the decision line, ending instead with the reviewer's surviving
-findings or the failure reason - the history is kept, not silently dropped.
+Same section minus the decision line, ending instead with the failure reason
+(DEAD, failed-fix, or DRAFT-FAILED) plus the reviewer's surviving FATAL findings
+and both candidates' histories - kept, not silently dropped.
 ```
 
 Formatting rules:
@@ -111,7 +116,7 @@ Formatting rules:
 
 - **Two files, ever.** The staged jsonl and the report. Never `eval/bank.jsonl`, never skills, never agents, never the corpus profile.
 - **Orchestrate, do not author.** No drafting, no reviewing, no editing of records at aggregation time. Records land in the jsonl byte-identical to the drafter's RECORD line.
-- **Every slot accounted for.** N ordered slots in, N summary rows out - accepted, rejected-by-reviewer, failed, or blocked. No silent gaps.
-- **Bounded everything.** Max 3 agents in flight; 2 reviews and 1 rectification round per question; 1 spare candidate per slot; 1 retry per dead agent; 1 schema-fix round. When a bound is hit, record and move on - never loop.
+- **Every slot accounted for.** N ordered slots in, N summary rows out - accepted, failed, or blocked. No silent gaps.
+- **Bounded everything.** Max 3 agents in flight; 1 rectification round per candidate, then abandon to the spare - never grind rounds; 1 spare candidate per slot (two candidate attempts total); 1 retry per dead agent; 1 schema-fix round. When a bound is hit, record and move on - never loop.
 - **The quota is the user's.** Cells and counts come from the gap-report conversation; never top up beyond the order because a candidate looked promising.
 - **Existing output files are never overwritten without asking.**

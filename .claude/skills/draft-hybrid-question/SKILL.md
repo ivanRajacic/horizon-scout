@@ -17,9 +17,11 @@ This skill authors `route=hybrid` questions at levels L1-L3 only. SQL questions 
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
-- The candidate block is the subject and the batch order fixes subtype (=> level) and term_style - skip every propose-and-wait step. All grounding, filter execution, adjudication, discrimination checks, reference, and reviewer steps run unchanged and in full.
+- The candidate block is the subject and the batch order fixes subtype (=> level) and term_style - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="hybrid")` and `coverage-ledger`): the candidate block IS your profile slice, and the ledger only matters when choosing a subject. Still call `get_bank_questions("hybrid")`, run the retrieval-server probe, and call `get_schema_docs()` (the filter needs its value notes).
+- **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (the executed filter SQL + its survivor/total counts) and sample ids are proven-by-execution and merge-pass spot-checked: trust and confirm them - start from the candidate's filter SQL and re-execute it once to confirm the survivor count has not drifted, rather than re-sampling the filter's value space from scratch. Everything else it asserts - route/level/subtype, term_style, filter load-bearingness, and gold membership - is ADVISORY and re-verified in full: read the survivors' text (euroSciVoc leaf tags are noisy), run the discrimination check, adjudicate to gold, and check |gold| against the subtype's bound. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the pure-judgment polish items the independent `question-reviewer` owns.
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Bound disagreements that would normally go to the user (|gold| contradicting the subtype) go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -39,7 +41,7 @@ All data access goes through the `horizon-draft` MCP server:
 
 - `run_sql(query, row_cap=50)` - SELECT-only. Designs and executes the gold filter, enumerates survivors (raise row_cap up to 200), runs the survivor-scoped sweep.
 - `get_project_text(project_ids)` - full free text (objective + report sections) for up to 10 projects per call; batch for more. The adjudication and reference channel.
-- `search_corpus(query, condition="pooled", k=20, scope_project_ids=[...])` - project-level pooled retrieval. With `scope_project_ids` (max 500) it searches WITHIN the survivors - the runtime scoped path's analog. Unscoped, it powers the filter-discrimination check. Returns the per-condition rank matrix, `scope_size`, and `index_meta.content_hash`. Requires the embed AND reranker llama-servers; errors come back as results, and in pooled mode one dead condition fails the whole call.
+- `search_corpus(query, condition="pooled", k=10, scope_project_ids=[...])` - project-level pooled retrieval. With `scope_project_ids` (max 500) it searches WITHIN the survivors - the runtime scoped path's analog. Unscoped, it powers the filter-discrimination check. Returns the per-condition rank matrix, `scope_size`, and `index_meta.content_hash`. Requires the embed AND reranker llama-servers; errors come back as results, and in pooled mode one dead condition fails the whole call.
 - `get_schema_docs()` - schema + value notes for designing the filter; its `content_hash` is recorded as `filter_evidence.schema_docs_hash`.
 - `get_bank_questions("hybrid")` - existing entries: id, text, level, subtype only.
 - `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics (topic x filter combos with survivor counts already in the drafting windows) plus the coverage-axes ledger. An `{"error": ...}` result means the profile is not built yet - proceed without it.
@@ -62,13 +64,13 @@ Subtypes are level-bound and carry gold-count bounds (validator-enforced both wa
 ## Startup (every invocation)
 
 1. Call `get_bank_questions("hybrid")`. Review existing questions for near-duplicates and subtype/term_style coverage. If subtype or term_style was not given: state current counts, propose the least-covered combination, wait for the pick.
-2. Call `get_corpus_profile(section="hybrid")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it. When the user names no filter or topic: propose a profile candidate on a **least-covered axis** in the ledger (a filter dimension or topic branch no bank question touches yet), not yet used by any bank question - least-covered axis beats least-covered subtype when they conflict. Candidates are advisory; the survivor count is re-executed and both sides re-verified in this pass regardless.
+2. Call `get_corpus_profile(section="hybrid")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it. When the user names no filter or topic: propose a profile candidate on a **least-covered axis** in the ledger (a filter dimension or topic branch no bank question touches yet), not yet used by any bank question - least-covered axis beats least-covered subtype when they conflict. Candidates are advisory: their route/level/subtype/term_style and gold membership are re-verified in full (both sides adjudicated in this pass), while the executed filter SQL and its survivor count are only re-confirmed cheaply - see Orchestrated mode for the two-tier rule. (Orchestrated mode skips both these profile calls - the candidate block already carries the section.)
 3. Probe the retrieval stack: `search_corpus("probe", condition="pooled", k=1)`. An error result means a server is down - report and end the pass. Record `index_meta.content_hash` for `pooling_evidence.index_fingerprint`.
 3. Call `get_schema_docs()`. Record its `content_hash` for `filter_evidence.schema_docs_hash`; use its value notes when designing the filter.
 
 ## Step 1 - Ground (evidence first, two-sided)
 
-- **Design the gold filter** via `run_sql`, grounded in observed values: sample the enum/code/range the filter uses (country codes, fundingScheme values, date ranges, funding percentiles - schema_docs value notes are the map). Execute the candidate filter; the TRUE survivor count (row_count) shapes the level: 2-10 for filter-read, ~5-20 for synthesize, tight-but-rich for compare/survey. Count > 200: tighten and re-run.
+- **Design the gold filter** via `run_sql`, grounded in observed values: sample the enum/code/range the filter uses (country codes, fundingScheme values, date ranges, funding percentiles - schema_docs value notes are the map). Execute the candidate filter; the TRUE survivor count (row_count) shapes the level: 2-10 for filter-read, ~5-20 for synthesize, tight-but-rich for compare/survey. Count > 200: tighten and re-run. **Orchestrated mode:** start from the candidate's filter SQL and re-execute it once to confirm the survivor count; skip re-sampling the value space the candidate already grounded.
 - **Enumerate survivors:** `SELECT id ...` with row_cap high enough to capture all of them.
 - **Read the survivors:** `get_project_text` in batches of <= 10 - ALL of them when S <= 20, otherwise a representative read now and full adjudication in Step 3. The question is composed from the filter plus what these texts actually say.
 
@@ -89,9 +91,9 @@ Every draft is verified in the same pass. Any edit to the question text or the f
 1. **Filter side:** execute `filter_sql` via `run_sql`; record `survivor_ids` and the true count.
 2. **Text side - adjudicate to gold:**
    - S <= 20: read EVERY survivor's text; each gets IN or OUT with a one-line justification grounded in its text. Exhaustive - no pooling gap exists.
-   - S in 21-200: scoped pooled search (`search_corpus(question, "pooled", k=20, scope_project_ids=survivors)`) and adjudicate every returned candidate, PLUS the non-embedding channel: `run_sql` keyword/LIKE sweep over the SURVIVORS' objectives on the question's key concepts and obvious synonyms; read and adjudicate its hits too.
+   - S in 21-200: scoped pooled search (`search_corpus(question, "pooled", k=10, scope_project_ids=survivors)`); adjudicate every returned candidate - clear-off-topic ones from the best-chunk text the search already returned (no fetch), plausible-IN or borderline ones from a full `get_project_text` read (collect ids, batch <= 10 per call). PLUS the non-embedding channel: `run_sql` keyword/LIKE sweep over the SURVIVORS' objectives on the question's key concepts and obvious synonyms; read and adjudicate its hits too.
    - `gold_project_ids` = accepted survivors. Gold is a subset of survivors by construction.
-3. **Filter-discrimination check (is the filter load-bearing?):** run the pooled search UNSCOPED with the same question. Look for projects that satisfy the textual part but FAIL the filter. Found: record them as counter-examples proving the filter does work. None found: the topical part alone identifies the gold set - vector question in disguise; rewrite the question or the filter.
+3. **Filter-discrimination check (is the filter load-bearing?):** run the pooled search UNSCOPED (`k=10`) with the same question. Look for projects that satisfy the textual part but FAIL the filter. Found: record them as counter-examples proving the filter does work. None found: the topical part alone identifies the gold set - vector question in disguise; rewrite the question or the filter.
 4. **Scoped retrievability:** every gold member should appear in at least one condition's scoped top-k. A gold member absent everywhere is a WARN - the runtime scoped path cannot connect the question to that evidence; consider rewording.
 5. **Check the bounds:** |gold| against the subtype's bound (read = 1, synthesize/compare 2-4, survey >= 5). Mismatch: say so, and either rewrite (tighten/broaden filter or question) or re-subtype - the user chooses. Never append a question whose gold count contradicts its subtype.
 
@@ -105,7 +107,9 @@ Written from the gold survivors' texts plus the filter facts (the filter is part
 
 ## Step 5 - Reviewer (mandatory, every pass)
 
-Re-read question, filter, survivor list, adjudications, discrimination counter-examples, reference. Every item gets an explicit PASS / FAIL / WARN plus one sentence. Skip nothing.
+Re-read question, filter, survivor list, adjudications, discrimination counter-examples, reference. Every item gets an explicit PASS / FAIL / WARN plus one sentence.
+
+**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NO-TELEGRAPH, NEAR-DUPLICATE, and GENERIC-FACT as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste), so skip all four here - run every other item (including the FILTER-LOAD-BEARING and TEXT-LOAD-BEARING gates) in full.
 
 ```
 FILTER-EXECUTED       filter_sql ran this session; survivor_ids and true count recorded; count <= 200.

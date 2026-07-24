@@ -17,9 +17,11 @@ This skill authors `route=sql` questions at levels L1-L3 only. ADV, vector, hybr
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
-- The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step. All grounding, execution-verification, reference, and reviewer steps run unchanged and in full.
+- The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="sql")` and `coverage-ledger`): the candidate block IS your profile slice, and the ledger only matters when choosing a subject. Still call `get_schema_docs()` (record the hash) and `get_bank_questions("sql")`.
+- **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (executed SQL + its result) is proven-by-execution and merge-pass spot-checked: trust and confirm it - start from that SQL and re-execute once as a drift check, rather than re-sampling the value space from scratch. Everything else it asserts - route/level/subtype - is ADVISORY and re-verified in full: recompute level_evidence from the executed gold SQL and recompute the level from it, never from the candidate's recommendation. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate except the pure-judgment polish items the independent `question-reviewer` owns.
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Level disagreements that would normally go to the user go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -53,11 +55,11 @@ A bare single-table top-N is L1 `rank`, not L3 - ORDER BY + LIMIT alone never sa
 2. Call `get_bank_questions("sql")`. Review existing questions (id, text, level, subtype) to avoid near-duplicates and to see subtype coverage. Keep them in mind throughout.
 3. Call `get_corpus_profile(section="sql")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it.
 4. If no subtype was given: state the current per-subtype counts for the requested level and propose the least-covered subtype. Wait for the user's pick.
-5. When the user names no subject: propose one from the profile - prefer a candidate on a **least-covered axis** in the ledger (an axis or entity family the existing bank questions do not touch), not yet used by any bank question. Least-covered axis beats least-covered subtype when they conflict: width across the corpus is the ledger's whole point. Profile candidates are advisory seeds - Step 1 grounding and Step 3 verification run in full regardless.
+5. When the user names no subject: propose one from the profile - prefer a candidate on a **least-covered axis** in the ledger (an axis or entity family the existing bank questions do not touch), not yet used by any bank question. Least-covered axis beats least-covered subtype when they conflict: width across the corpus is the ledger's whole point. Profile candidates are advisory seeds: the route/level/subtype is re-verified in full (level_evidence recomputed from the executed gold SQL), while the candidate's executed `evidence` SQL is only re-confirmed cheaply - see Orchestrated mode for the two-tier rule. (Orchestrated mode skips both these profile calls - the candidate block already carries the section.)
 
 ## Step 1 - Ground
 
-Explore the real data the question will touch, via `run_sql`, before drafting anything. Small targeted queries only:
+Explore the real data the question will touch, via `run_sql`, before drafting anything. Small targeted queries only. **Orchestrated mode:** start from the candidate's `evidence` SQL and re-execute it once to confirm it still returns the stated result; skip re-sampling the value space the candidate already grounded, and run only the extra targeted queries the specific subtype needs (e.g. the trap's wrong-query, a value-note check).
 
 - Confirm the tables and columns involved exist as schema_docs describes them.
 - Sample actual values for any column the question will filter or group on (`SELECT DISTINCT ... LIMIT 20`, or a small aggregate to see the distribution).
@@ -106,7 +108,9 @@ Written from the executed result, nothing else.
 
 ## Step 5 - Reviewer (mandatory, every pass)
 
-Re-read question, gold SQL, executed result, level_evidence, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence. Skip nothing; items marked with a subtype apply only to that subtype, and must be answered N/A for others.
+Re-read question, gold SQL, executed result, level_evidence, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence; items marked with a subtype apply only to that subtype, and must be answered N/A for others.
+
+**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NO-TELEGRAPH, NEAR-DUPLICATE, and GENERIC-FACT as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste - no one runs it), so skip all four here - run every other item (including all subtype obligations) in full.
 
 ```
 EXECUTED-GOLD        Gold SQL executed this session; result recorded; non-empty. FAIL otherwise.

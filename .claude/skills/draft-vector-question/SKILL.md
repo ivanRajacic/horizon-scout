@@ -17,9 +17,11 @@ This skill authors `route=vector` questions at levels L1-L3 only. SQL questions 
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
-- The candidate block is the subject and the batch order fixes level/subtype/term_style - skip every propose-and-wait step. All grounding, pooled verification, the completeness sweep, reference, and reviewer steps run unchanged and in full.
+- The candidate block is the subject and the batch order fixes level/subtype/term_style - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="vector")` and `coverage-ledger`): the candidate block IS your profile slice, and the ledger only matters when choosing a subject. Still call `get_bank_questions("vector")` and run the retrieval-server probe.
+- **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (executed SQL + counts) and `sample_ids` are proven-by-execution and merge-pass spot-checked: trust and confirm them - re-run the candidate's SQL once as a drift check and `get_project_text` the `sample_ids` directly, rather than hunting seeds with a fresh `run_sql`. Everything else it asserts - route/level/subtype, term_style, and above all gold/cluster membership - is ADVISORY and re-verified in full: euroSciVoc leaf tags are noisy, so confirm the theme by READING text, the gold set by pooled verification + the completeness sweep, and recompute the level from |gold|. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the pure-judgment polish items the independent `question-reviewer` owns.
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Level disagreements that would normally go to the user (|gold| contradicting the requested level) go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -32,7 +34,7 @@ Interactive invocations are unaffected: the per-question confirm gate stands.
 
 All data access goes through the `horizon-draft` MCP server:
 
-- `search_corpus(query, condition="pooled", k=20)` - project-level rankings over the chunk corpus. `pooled` runs all four conditions (lexical | dense | hybrid | hybrid_rerank) and returns the union with a per-condition rank matrix, each project carrying the full text of its best chunk, plus `index_meta` (embedding model, n_vectors, `content_hash`). Requires the embed AND reranker llama-servers; a down server comes back as an `{"error": ...}` result, and in pooled mode any dead condition fails the whole call - by design, partial pooling would bias labels.
+- `search_corpus(query, condition="pooled", k=10)` - project-level rankings over the chunk corpus. `pooled` runs all four conditions (lexical | dense | hybrid | hybrid_rerank) and returns the union with a per-condition rank matrix, each project carrying the full text of its best chunk, plus `index_meta` (embedding model, n_vectors, `content_hash`). Requires the embed AND reranker llama-servers; a down server comes back as an `{"error": ...}` result, and in pooled mode any dead condition fails the whole call - by design, partial pooling would bias labels.
 - `get_project_text(project_ids)` - full free text for up to 10 projects: acronym, title, objective, and published report sections (summary, workPerformed, finalResults). The gold-evidence channel: grounding, candidate adjudication, reference writing.
 - `run_sql(query, row_cap=50)` - SELECT-only. Used here for seed selection (euroscivoc topic clusters, metadata slices) and the completeness sweep.
 - `get_schema_docs()` - schema reference when composing seed-selection SQL.
@@ -60,16 +62,16 @@ The pooled rank matrix is the honesty check: gold projects found by `lexical` im
 ## Startup (every invocation)
 
 1. Call `get_bank_questions("vector")`. Review existing questions to avoid near-duplicates and see subtype/term_style coverage. If subtype or term_style was not given: state the current counts, propose the least-covered combination, and wait for the user's pick.
-2. Call `get_corpus_profile(section="vector")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it. When the user names no topic: propose seeds from a profile candidate on a **least-covered axis** in the ledger (a topic branch or entity family no bank question touches yet), not yet used by any bank question - least-covered axis beats least-covered subtype when they conflict. Candidates are advisory seeds; evidence-first reading and pooled verification run in full regardless.
+2. Call `get_corpus_profile(section="vector")` and `get_corpus_profile(section="coverage-ledger")`. If the profile is not built yet, note that and proceed without it. When the user names no topic: propose seeds from a profile candidate on a **least-covered axis** in the ledger (a topic branch or entity family no bank question touches yet), not yet used by any bank question - least-covered axis beats least-covered subtype when they conflict. Candidates are advisory seeds: their route/level/subtype/term_style and gold membership are re-verified in full (evidence-first reading + pooled verification), while their executed `evidence` and `sample_ids` are only re-confirmed cheaply - see Orchestrated mode for the two-tier rule. (Orchestrated mode skips both these profile calls - the candidate block already carries the section.)
 3. Probe the retrieval stack: `search_corpus("probe", condition="pooled", k=1)`. An error result means a server is down - report it and end the pass before any drafting work. Record `index_meta.content_hash` from the probe; every appended entry carries it as `pooling_evidence.index_fingerprint`.
 
 ## Step 1 - Ground (evidence first)
 
 Select seed project(s) sized to the requested level and READ them before drafting anything:
 
-- Find candidate seeds via `run_sql` - euroscivoc topic clusters for topic-shaped questions (`SELECT ... FROM euroscivoc WHERE ... GROUP BY ...`), or a metadata slice, or the user names a topic/project directly.
+- Find candidate seeds via `run_sql` - euroscivoc topic clusters for topic-shaped questions (`SELECT ... FROM euroscivoc WHERE ... GROUP BY ...`), or a metadata slice, or the user names a topic/project directly. **Orchestrated mode:** take the seeds from the candidate's `sample_ids` and re-execute the candidate's `evidence` SQL once to confirm the cluster size has not drifted - do not run a fresh seed hunt.
 - L1: one seed. L2: 2-4 seeds that genuinely share a theme (comparison/synthesis needs real common ground). L3: a topic whose cluster plausibly has 5+ satisfying projects.
-- `get_project_text` on the seeds. Read the objectives and report sections - the question will be built from THIS text.
+- `get_project_text` on the seeds (batch up to 10 ids per call). Read the objectives and report sections - the question will be built from THIS text.
 
 Present a short grounding summary: which seeds, what their texts actually say, which observed phrases or facts the question will be built on. If the texts do not support the intended question shape (thin objectives, no shared theme, degenerate cluster), say so and pivot before drafting.
 
@@ -86,10 +88,10 @@ For `identify`: confirm the question does not name the acronym/title. For `exact
 
 Every draft is verified by pooled retrieval in the same pass. ANY edit to the question text invalidates prior verification - re-run the search, never carry stale results.
 
-1. `search_corpus(question_text, condition="pooled", k=20)`. Record the per-condition project counts and the rank matrix.
+1. `search_corpus(question_text, condition="pooled", k=10)`. Record the per-condition project counts and the rank matrix.
 2. **Seed check:** every seed should appear in at least one condition's top-k. A seed absent everywhere is a red flag - the question probably does not ask what the seed's text says. Rewrite before proceeding (a question no condition can connect to its own evidence is a bad benchmark item).
-3. **Adjudicate every pooled candidate.** Fetch texts with `get_project_text` (batches of <= 10). For each candidate: IN or OUT with a one-line justification grounded in its text. IN means its text genuinely satisfies the question as asked - not "related topic", satisfies. `gold_project_ids` = seeds + accepted candidates.
-4. **Completeness sweep (mandatory at L1/L2, advisory at L3):** the pool only shows what retrieval surfaced; sweep a non-embedding channel for satisfying projects outside it. Via `run_sql`: keyword/LIKE queries over `project.objective` on the question's key concepts (and their obvious synonyms), plus euroscivoc topic membership for the relevant codes. Read and adjudicate any hits not already seen. At L1/L2 an unswept gold set is unverified - a missed satisfying project makes the level label wrong and unfairly fails any system that finds it.
+3. **Adjudicate every pooled candidate.** First pass from the best-chunk text `search_corpus` already returned for each candidate: a candidate whose best chunk is *clearly* off-topic is OUT, no fetch needed. Only for candidates that plausibly satisfy the question or are genuinely borderline, do a full read - collect their ids and `get_project_text` them in as few batched calls as possible (<= 10 per call). Every candidate ends IN or OUT with a one-line justification grounded in its text (best chunk for clear OUTs, full text for IN/borderline). IN means its text genuinely satisfies the question as asked - not "related topic", satisfies. `gold_project_ids` = seeds + accepted candidates.
+4. **Completeness sweep (mandatory at every level):** the pool only shows what retrieval surfaced - and at k=10 it surfaces less - so this non-embedding sweep, not pool depth, is the real completeness guarantee. Via `run_sql`: keyword/LIKE queries over `project.objective` on the question's key concepts (and their obvious synonyms), plus euroscivoc topic membership for the relevant codes. Read and adjudicate any hits not already seen (batch the reads, <= 10 per call). An unswept gold set is unverified - a missed satisfying project makes the level label wrong and unfairly fails any system that finds it; at L3 the large gold set is exactly where the pool misses most, so the sweep is not optional there.
 5. **Compute the level** from final |gold|. Mismatch with the request: say so, and either rewrite (tighten or broaden the question) or relabel - the user chooses. Never append a question whose gold count contradicts its level.
 
 ## Step 4 - Reference answer
@@ -102,7 +104,9 @@ Written from the gold projects' texts only - never from rejected candidates, nev
 
 ## Step 5 - Reviewer (mandatory, every pass)
 
-Re-read question, gold set, adjudications, sweep results, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence. Skip nothing.
+Re-read question, gold set, adjudications, sweep results, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence.
+
+**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NEAR-DUPLICATE, GENERIC-FACT, and the general-shape check of NO-TELEGRAPH as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste), so skip those here - but the identify acronym/title leak stays a FAIL gate you run - and run every other item in full.
 
 ```
 POOLED-VERIFIED      All four conditions ran this session at the recorded k; every pooled
@@ -112,7 +116,7 @@ LEVEL-EVIDENCE       |gold_project_ids| satisfies the claimed level (L1=1, L2=2-
 SEED-RETRIEVED       Every seed appears in at least one condition's top-k. WARN otherwise,
                      stating why the question was kept anyway.
 POOL-COMPLETENESS    Non-embedding sweep (objective keywords + euroscivoc) run and its hits
-                     adjudicated. FAIL if skipped at L1/L2; WARN at L3.
+                     adjudicated. FAIL if skipped at any level.
 TERM-STYLE-HONEST    Declared term_style is consistent with the rank-matrix heuristic
                      (lexical-found gold vs dense-only gold). WARN otherwise.
 TEXT-NOT-SQL         The answer lives in free text, not in a stored column. FAIL otherwise.
