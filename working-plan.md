@@ -69,6 +69,64 @@ Opus writes references from gold evidence only, via the drafting/reference skill
 
 Study 2 (RQ1) on the full bank, results assembly + surprising-verdict pass (skim odd judge verdicts while reading results - a habit, not a protocol), agentic condition (RQ4, H4a/H4b), analysis buffer + failure-analysis pass. Drop-order under pressure is pre-decided in §3: compositional cells always run, then agentic H4b.
 
+## Deferred optimizations (not blocking the pilot)
+
+- **Raise the `/draft-batch` concurrency cap (currently 3 subagents in flight).** The cap lives in `.claude/skills/draft-batch/SKILL.md` step 4 and exists only because the `horizon-draft` MCP server (`src/eval/mcp_server.py`) is a single stdio process serving requests serially over ONE read-only DuckDB connection - so more than 3 concurrent drafters/reviewers just queue on the DB and risk timeouts. This throttles batch throughput for no fundamental reason: DuckDB supports concurrent reads across multiple connections in one process. Fix direction: make the MCP server handle requests concurrently (async / threadpool) backed by a small pool of read-only connections (one cursor per in-flight request), then raise the in-flight cap in the skill. Caveat: `search_corpus` for vector/hybrid gold verification still hits the single-GPU embedder/reranker llama-servers, which serialize independently - so widening the MCP side helps SQL-route drafting most; vector/hybrid concurrency stays GPU-bound until that side is addressed too. Worth doing before the Step-3 bulk bank build (~97 questions) where batch throughput actually matters; the 13-question pilot does not need it.
+
+## Status 2026-07-24 - first `/draft-batch` run complete (pilot ladder)
+
+**What ran:** the 5 batch-eligible pilot ladder cells (vector L2/L3, hybrid L1/L2/L3) via `/draft-batch`, orchestrated in a separate Opus/high-effort session (swarm launcher), 10 subagents bounded to 3 in flight. Candidates from `corpus_profile.md` cp2.
+
+**Result: 4 accepted / 1 rejected. Staged, NOT promoted** - files at `eval/drafts/draft-bank-2026-07-24.jsonl` + `eval/drafts/draft-report-2026-07-24.md`. `validate-bank` on existing-bank + 4 accepted = OK (17 questions).
+- vec-04 vector/L2/comparison (knot theory in physical field equations) - SOUND
+- vec-05 vector/L3/survey (freshwater microplastics + toxic cyanobacterial blooms) - SOUND after 1 rectification
+- hyb-01 hybrid/L1/filter-read (post-2021 glaciology x Beyond EPICA / DEEPICE) - SOUND
+- hyb-03 hybrid/L3/filter-compare (top-budget superconductivity, >P95) - SOUND
+- **hyb-02 hybrid/L2/filter-synthesize - REJECTED (abandoned).** Both candidates were unsound: musicology filter `MSCA-IF-EF-ST` is a coding artifact no user could express; the SHM x Spain spare defined gold by a hidden, inconsistently-applied euroSciVoc tag while worded in paraphrase. **The hybrid L2 cell is still empty** - re-draft later with a filter that is BOTH user-expressible AND consistently applied (or run SHM/Spain as hybrid/L3/filter-survey, country=ES, which the evidence shows is well-populated).
+
+**Quality verdict: GOOD.** Read by hand; the 4 are evidence-first, execution-verified, honestly labelled. The adversarial reviewer earned its keep (caught the vec-05 completeness defect and both hyb-02 invalidating defects) - so cost-cutting must preserve review, not remove it.
+
+**Promoted 2026-07-24:** all 4 ticked APPROVE and promoted via `promote-drafts`; bank now 17 (see the 2026-07-24 (cont.) status below).
+
+**New doc: `drafting-pipeline-audit.md`** (repo root) - the batch cost ~70% of a 5-hour window for 5 questions. Audit + prioritized optimizations (P1 reviewer effort down; P2 incremental checkpointing; P3 skip reviewer for pilots; P4 Sonnet-for-review [needs role-separation decision]; P5 candidate pre-vetting) under a "same safety, less spend" constraint. Do this before the Step-3 bulk build.
+
+**Env notes:** embedder (:8080) + reranker (:8082) llama-servers were started this session (children of it - they stop when it closes; relaunch commands in `src/config.py`). `.claude/settings.local.json` gained scoped allow-rules (`mcp__horizon-draft`, `Task`, `Edit(eval/drafts/**)`, `Bash(...validate-bank:*)`).
+
+## Status 2026-07-24 (cont.) - pilot drafts promoted; drafting-pipeline efficiency pass (drafter side) done
+
+**Promoted.** The 4 approved drafts (vec-04, vec-05, hyb-01, hyb-03) are in `eval/bank.jsonl`; `validate-bank` = OK, 17 questions. hyb-02 stays abandoned (**hybrid L2 cell still empty**). Draft + report files remain in `eval/drafts/` for the record.
+
+**Drafting-pipeline efficiency pass - drafter + reviewer-effort done** (details + rationale in `drafting-pipeline-audit.md` "Decisions taken"). Prompt assets only, no code; `pytest` = 184 passing. Constraint held: same safety, less spend; all drafter changes scoped to orchestrated (batch) mode, interactive drafting unchanged.
+- **Reviewer pinned `model: opus` / `reasoningEffort: low`**, matching the drafter. Rationale (Ivan): adversarial value comes from a *separate, independent* agent, not the effort dial. Supersedes the audit's earlier "keep review >= medium" note and drops P4 (Sonnet-for-review).
+- **k=20 -> k=10** in the vector/hybrid `search_corpus` calls; vector L3 completeness sweep promoted advisory -> **mandatory** (the sweep, not pool depth, is the real completeness net).
+- **V1** best-chunk adjudication (clear-OUT from the returned best chunk; full read only for IN/borderline - vector Step 3 + hybrid S 21-200; hybrid S<=20 exhaustive read untouched). **V2** batched reads. **V3** orchestrated startup skips the two `get_corpus_profile` calls. **V4** orchestrated Step-5 self-checklist skips pure-judgment polish (reviewer owns it; all FAIL-gates + retrievability/term-style diagnostics stay). **V5** two-tier grounding: trust-and-confirm the candidate's executed evidence (one drift-check re-execution), re-verify advisory route/level/subtype/term_style/gold membership in full - resolves the prior skills-vs-drafter contradiction.
+- Files: `.claude/agents/question-{reviewer,drafter}.md`, `.claude/skills/draft-{sql,vector,hybrid}-question/SKILL.md`, `drafting-pipeline-audit.md`.
+
+**Still deferred from the audit (next targets):** P2 (incremental checkpointing) and P5 (candidate pre-vetting) in `/draft-batch`, plus the orchestrator's own high-effort context bloat; the reviewer's *work* (not just its effort) is not yet optimized. `draft-batch/SKILL.md`, `promote.py`, `bank.py` untouched.
+
+## Status 2026-07-24 (cont. 2) - review-loop re-architecture (lean adversary + orchestrator-as-judge)
+
+Second drafting-pipeline efficiency pass. Prompt assets only, no code; `pytest` = 184 passing. Constraint held: same safety, less spend. This pass targets the reviewer's *work* and the review *loop* (the drafter-effort pass in cont. 1 targeted effort); optimization-track items 1 (reviewer) and 2 (orchestrator/drafter) done together, because a lean reviewer without a downstream judge would make over-rectification worse.
+
+**The structural fix.** The reviewer used to do two jobs - attack AND self-adjudicate - and the orchestrator did not judge: `draft-batch` forced a rectification round on any FLAWED/BROKEN even though FLAWED = "the question stands", so a valid question could cost a whole extra pass over a non-fatal objection.
+
+- **Lean adversary** (`review-question/SKILL.md`, `question-reviewer.md`): two-bucket severity - **FATAL** (invalid / mislabeled / non-discriminating; the only redraft trigger) and **MINOR** (everything else, incl. taste). Deleted the FATAL/MAJOR/NOTE taxonomy, "balanced not maximal", "what is never a finding", and the standalone discrimination audit. Catalog distilled to a route-specific FATAL-class core (the pilot-defect catchers: gold-alive, reference-truth, gold-satisfies, missed-gold, filter-rerun/filter-matters, ADV absence) + a 3-probe budget. Kept: every finding cites executed evidence. Each FATAL classified **RECOVERABLE** (with a fix direction) or **DEAD** (unsalvageable) - the adversary's call. Verdict now `SOUND | FATAL-RECOVERABLE | FATAL-DEAD`.
+- **Orchestrator = judge** (`draft-batch/SKILL.md` step 4): accept on SOUND/MINOR-only (never redraft on taste, MINOR flags recorded in the report); FATAL-DEAD -> abandon candidate, pull the spare; FATAL-RECOVERABLE -> ONE targeted fix round, then switch to the spare rather than grind; evidence-based override valve so the adversary doesn't auto-win; the judge weighs the two agents' outputs and never runs its own MCP investigation. **One round, then switch candidates** replaces "1 round then REJECTED-BY-REVIEWER-and-stop"; the spare fallback (was DRAFT-FAILED-only) now also fires on DEAD and failed-fix. Two candidate attempts per slot.
+- **Drafter** (`question-drafter.md`): up-front topic-fit check (reject-at-birth before a full grounding pass - partial P5) + fast targeted fix on rectification (was: re-run the full checklist).
+- **Taste**: NO-TELEGRAPH / GENERIC-FACT / NEAR-DUPLICATE stay MINOR (read off evidence in hand); NATURAL-PHRASING dropped entirely. Carve-out notes in the three `draft-*-question` skills updated; no FAIL-gate moved (vector's identify-leak stays a drafter FAIL). Ivan keeps the promote-time veto via the report's MINOR flags.
+
+Full rationale in `drafting-pipeline-audit.md` ("Decisions taken - review-loop re-architecture"). **Still deferred:** P2 incremental checkpointing in `/draft-batch` and the orchestrator's raw context bloat.
+
 ## Immediate next action
 
-Step 1 remaining items, in order: transfer surviving old-set questions through the drafting skills (item 6), author the rest of the pilot set (item 7), then the end-to-end pilot runs and router-prompt freeze (item 8). **Full-corpus index: BUILT** (2026-07-22, 190,248 vectors, limit=null; FTS verified in sync) - vector/hybrid authoring is unblocked and grounds against the full corpus.
+**Optimization track (agreed order - resume here after context clear):**
+1. **Optimize the reviewer - DONE (2026-07-24, review-loop re-architecture).** `review-question/SKILL.md` + `question-reviewer.md` rewritten as a LEAN ADVERSARY: two-bucket severity (FATAL / MINOR), catalog distilled to the route-specific FATAL-class core that caught the pilot defects + a 3-probe budget, self-adjudication machinery deleted, every FATAL classified RECOVERABLE/DEAD by the adversary. Verdict now SOUND | FATAL-RECOVERABLE | FATAL-DEAD. Taste kept as MINOR (NO-TELEGRAPH/GENERIC-FACT/NEAR-DUPLICATE); NATURAL-PHRASING dropped. Details in `drafting-pipeline-audit.md`.
+2. **Optimize the orchestrator + drafter - MOSTLY DONE (2026-07-24).** `draft-batch/SKILL.md` step 4 is now a JUDGE (not a mechanical verdict->action map): accept on SOUND/MINOR-only, ONE targeted fix round on FATAL-RECOVERABLE then switch to the spare candidate, straight to spare on FATAL-DEAD, plus an evidence-based override valve; the old "1 rectification round then REJECTED-BY-REVIEWER-and-stop" is replaced by two candidate attempts per slot. `question-drafter.md` gained an up-front topic-fit check (reject-at-birth before deep grounding - partial P5) and a fast targeted fix on rectification (was: re-run the full checklist). **Still pending: P2 incremental checkpointing** (a kill still loses completed slots) and the orchestrator's raw context bloat at high session effort.
+3. **Re-run a small batch and measure** vs the ~70%-of-a-5h-window-for-5-questions baseline (needs embedder :8080 + reranker :8082 up); confirm the lean reviewer still flags a genuine defect (quality net intact) and the loop terminates fast.
+
+**Pilot-completion track (unblocked; after/alongside the optimization track):**
+4. Re-draft the empty **hybrid L2** cell with a valid filter (user-expressible AND consistently applied; or run SHM/Spain as hybrid/L3/filter-survey, country=ES) - see the hyb-02 note above.
+5. Author the rest of the pilot set: **2 ambiguous + 2 adversarial** (interactive-only; corpus_profile Adversarial/Ambiguous sections still stubs but the skills self-ground) + the **deliberately-broken judge canary**.
+6. Then item 8: end-to-end pilot runs on the Haiku generator, wire real contexts into the judge, record the smoke verdict, and **freeze + version the router prompt** (`r1-pilot`).
+
+**Full-corpus index: BUILT** (2026-07-22, 190,248 vectors, limit=null; FTS verified in sync) - vector/hybrid authoring grounds against the full corpus.
