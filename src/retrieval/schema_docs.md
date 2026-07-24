@@ -38,8 +38,12 @@ Join key everywhere: `<table>.projectID = project.id`. `rcn` and `contentUpdateD
 ## legal_basis - programme parts funding a project (N per project, 65,807 rows).
 projectID; legalBasis (code); title (programme name); uniqueProgrammePart BOOLEAN - true marks the main programme, exactly one true row per project (1 project has 3); null otherwise (never false).
 
-## euroscivoc - science-vocabulary classification. 111,614 rows; 1-5 rows per project; covers 32,236 of 35,389 projects.
-projectID; euroSciVocCode (e.g. '/25/61/383'); euroSciVocPath (hierarchy '/engineering and technology/.../biofuels'); euroSciVocTitle (leaf term); euroSciVocDescription - always null.
+## euroscivoc - science-vocabulary classification. 111,614 rows; 1-5 rows per project; covers 32,236 of 35,389 projects (3,153 have no row).
+projectID; euroSciVocCode (e.g. '/25/61/383' - numeric, leading slash); euroSciVocTitle (leaf term, e.g. 'nuclear fusion'); euroSciVocDescription - always null.
+euroSciVocPath - slash-separated hierarchy, 1-7 levels, NO leading slash: 'natural sciences/physical sciences/nuclear physics/nuclear fusion'. Match with LIKE 'natural sciences/%'; LIKE '/natural sciences/%' returns 0 rows.
+- Level 1 = split_part(euroSciVocPath,'/',1) - the 6 top-level branches: natural sciences (22,075 projects), engineering and technology (13,696), social sciences (10,099), medical and health sciences (8,580), humanities (2,699), agricultural sciences (2,302).
+- Level 2 = split_part(euroSciVocPath,'/',2) - 40 named fields of science (e.g. 'biological sciences', 'chemical sciences'), each under exactly one branch; empty string on the 94 rows that are top-level only.
+- euroSciVocTitle is the LAST path component, not a level: filter a whole area by path prefix, a specific term by title.
 
 ## report_summary + report_text - published result summaries. 34,712 rows each; 1:1 with each other (same id set) and per project; ~98% of projects have one.
 - report_summary: id VARCHAR (PK), title, projectID, projectAcronym, attachment (CORDIS doc URIs).

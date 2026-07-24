@@ -21,7 +21,11 @@ from src.llm import fingerprint, make_llm
 # Frozen after Study 0.5's single value-description intervention (d7); bump on
 # ANY edit. The fingerprint hashes the FULL system prompt including
 # schema_docs.md, so doc edits are visible in traces too.
-SQL_PROMPT_VERSION = "q1-pilot"
+# q2-pilot (2026-07-24): no prompt text changed here - schema_docs.md was
+# corrected to sd2 (euroSciVocPath leading-slash bug), which changes this
+# prompt's content and therefore its fingerprint. Study 0.5's baseline is
+# q2-pilot/sd2; the study has not run, so nothing is contaminated.
+SQL_PROMPT_VERSION = "q2-pilot"
 
 
 class SqlGuardrailError(ValueError):

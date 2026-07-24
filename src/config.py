@@ -126,7 +126,14 @@ JUDGE_PASS_FAITHFULNESS = 0.80
 # schema_docs.md gets a version label like every other prompt asset: bump on
 # any meaningful edit; the content hash (src.llm.fingerprint) catches silent
 # ones. Appended bank questions record both.
-SCHEMA_DOCS_VERSION = "sd1-pilot"
+# sd2 (2026-07-24): euroSciVocPath was documented WITH a leading slash, which
+# no row has (0 of 111,614) - so every generated `LIKE '/natural sciences/%'`
+# returned zero rows. Corrected, plus the 6 top-level branches and the
+# split_part level idiom. A ground-truth bug fix, NOT Study 0.5's
+# pre-registered value-description intervention; see working-plan.md Step 4.
+# Bank entries authored before this carry the sd1-pilot hash as provenance -
+# that is honest history, not staleness (bank.py never re-checks the hash).
+SCHEMA_DOCS_VERSION = "sd2"
 # The skill-authored bank (schema v2). The pre-skill smoke set is archived
 # under eval/archive/ in the old schema and is not validated anymore.
 BANK_PATH = ROOT / "eval" / "bank.jsonl"
