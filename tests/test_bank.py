@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-from src.eval.bank import BankValidationError, ROUTE_TO_MODE, load_bank
+from src.eval.bank import (BankValidationError, ROUTE_TO_MODE, load_bank,
+                           validate_record)
 
 VALID_SQL = {
     "question_id": "t-01", "text": "How many projects were terminated?",
@@ -51,6 +52,36 @@ def test_valid_records_load(tmp_path):
     assert q.subtype == "aggregate" and q.answer_columns == ["count"]
     assert q.specification == "well-specified" and not q.compositional
     assert not q.reviewer_override and not q.is_adversarial
+
+
+def test_validate_record_accepts_a_clean_record():
+    # The single-record gate /draft-batch runs at slot close.
+    assert validate_record(VALID_SQL) == []
+    assert validate_record(VALID_VECTOR) == []
+
+
+def test_validate_record_reports_every_violation():
+    broken = {**VALID_SQL, "subtype": "trap", "nope": 1}
+    del broken["answer_columns"]
+    errors = "\n".join(validate_record(broken, "slot sql-18"))
+    assert "slot sql-18" in errors           # the caller's label, not a lineno
+    assert "unknown field 'nope'" in errors
+    assert "only legal at L3" in errors      # trap subtype on an L1 record
+    assert "require answer_columns" in errors
+
+
+def test_validate_record_skips_ladder_rules_when_the_level_is_unknown():
+    # An unrecognised level is reported, and the level-dependent rules stay
+    # silent rather than asserting a requirement against a cell that does not
+    # exist - one loud root cause, not a cascade.
+    errors = validate_record({**VALID_SQL, "level": "L9"})
+    assert any("level must be one of" in e for e in errors)
+    assert not any("answer_columns" in e for e in errors)
+
+
+def test_validate_record_rejects_a_non_object():
+    assert validate_record(["not", "a", "record"]) == [
+        "record: record must be a JSON object"]
 
 
 def test_route_to_mode_covers_all_concrete_routes():

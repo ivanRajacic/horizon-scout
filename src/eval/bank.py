@@ -405,6 +405,21 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
         notes=obj.get("notes"))
 
 
+def validate_record(obj: dict, where: str = "record") -> list[str]:
+    """Schema-validate ONE record; return every violation (empty = valid).
+
+    The single-record entry point behind `python -m src.cli validate-record`,
+    used to gate one drafted slot at close time. Same rules as `load_bank`
+    applies per line - only the cross-record checks (duplicate ids) are out of
+    scope, since one record cannot collide with itself.
+    """
+    if not isinstance(obj, dict):
+        return [f"{where}: record must be a JSON object"]
+    errors: list[str] = []
+    _validate_record(obj, where, errors)
+    return errors
+
+
 def load_bank(path: str | Path) -> list[BankQuestion]:
     """Parse + validate a bank JSONL. Raises BankValidationError listing EVERY
     violation in the file; returns the questions only if all lines are clean."""
