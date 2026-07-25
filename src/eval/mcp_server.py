@@ -1,12 +1,20 @@
 """Read-only MCP server for question-bank drafting (M5).
 
-Exposes exactly six tools to the drafting agents (/draft-sql-question, the
+Exposes exactly seven tools to the drafting agents (/draft-sql-question, the
 vector/hybrid skills) and the exploration agent (/explore-corpus): run_sql,
 get_schema_docs, get_bank_questions, search_corpus, get_project_text,
-get_corpus_profile. Deliberately minimal - the agent must be able to ground
-questions in real data and verify gold labels by execution (SQL routes) or
-pooled retrieval (vector/hybrid routes), and nothing more. No write tools:
+get_corpus_profile, precheck_record. Deliberately minimal - the agent must be
+able to ground questions in real data, verify gold labels by execution (SQL
+routes) or pooled retrieval (vector/hybrid routes), and re-check the finished
+record's factual claims before emitting it, and nothing more. No write tools:
 bank appends are confirmation-gated in the skill layer, outside the MCP.
+
+precheck_record is the drafter's deterministic self-gate: everything a drafted
+record asserts that a machine can settle by re-execution (gold SQL runs and is
+non-empty, gold projects have text, filter survivors still match, schema_docs
+hash is the live one). It lives here rather than in the CLI because it runs
+inside the drafter's own loop, and the drafter has no shell. Schema validation
+is deliberately elsewhere (`python -m src.cli validate-record`).
 
 search_corpus runs the real retrieval stack (lexical | dense | hybrid |
 hybrid_rerank, or "pooled" = all four) and returns PROJECT-level rankings -
@@ -579,6 +587,287 @@ def get_project_text(project_ids: list[int],
             "truncated": truncated}
 
 
+# --- precheck_record: the drafter's deterministic self-gate ---------------
+#
+# Everything a drafted record claims that a machine can settle by execution.
+# It lives on the MCP server rather than the CLI because it runs INSIDE the
+# drafter's own loop, and the drafter has no shell and must stay read-only by
+# construction. Schema validation is deliberately NOT here - that is
+# `python -m src.cli validate-record`, run by the orchestrator at slot close.
+
+# The hybrid skill's hard authoring limit: a survivor set that cannot be
+# enumerated cannot be adjudicated.
+SURVIVOR_CEILING = 200
+# Accepted spellings of the project-id column in a filter_sql result; the
+# first matching column wins, else column 0.
+_ID_COLUMN_NAMES = ("id", "project_id", "projectid")
+
+
+def _precheck_execute(con, sql: str, fetch: int) -> tuple[list[str], list[tuple], str | None]:
+    """(columns, rows, error) - guardrail and DuckDB failures as strings."""
+    try:
+        checked = validate_sql(sql)
+    except SqlGuardrailError as e:
+        return [], [], f"guardrail: {e}"
+    try:
+        columns, rows = _execute(con, checked, fetch=fetch)
+    except duckdb.InterruptException:
+        return [], [], f"timeout: query exceeded {cfg.timeout_s}s"
+    except duckdb.Error as e:
+        return [], [], f"{type(e).__name__}: {e}"
+    return columns, rows, None
+
+
+def _id_column(columns: list[str]) -> int:
+    for i, name in enumerate(columns):
+        if name.lower() in _ID_COLUMN_NAMES:
+            return i
+    return 0
+
+
+def precheck_record(record: dict | str) -> dict:
+    """Re-execute a drafted bank record's factual claims. Read-only.
+
+    Checks, each PASS | FAIL | N/A with a one-line detail:
+
+      GOLD-SQL         gold_sql executes and returns a non-empty result
+      ANSWER-COLUMNS   every answer_column appears in that result
+      GOLD-TEXT        every gold_project_id exists and has stored text
+      FILTER-SURVIVORS filter_sql re-executes to exactly the recorded
+                       survivor_ids, and the set is enumerable (<= 200)
+      GOLD-SUBSET      gold_project_ids is a subset of the live survivors
+      SCHEMA-DOCS      recorded schema_docs hashes match the live document
+
+    `ok` is true iff nothing FAILed. A drafter must not emit a package until
+    it does. Malformed input comes back as {"error": ...}, matching run_sql's
+    contract; a failing check is a RESULT, not an error - the whole point is
+    for the drafter to read it and fix the draft.
+
+    This is a gate for a record being authored RIGHT NOW, which is why a
+    schema_docs hash that is not the live one FAILs: the drafter called
+    get_schema_docs this pass, so a different hash means it recorded the wrong
+    thing. Pointed at older bank entries instead, SCHEMA-DOCS will FAIL on
+    every entry authored against an earlier version - that is provenance, not
+    a defect (bank.py deliberately never re-checks the field), so read those
+    failures accordingly.
+    """
+    def fail(error: str) -> dict:
+        _log("precheck_record", ok=False, error=error)
+        return {"error": error}
+
+    if isinstance(record, str):
+        try:
+            record = json.loads(record)
+        except json.JSONDecodeError as e:
+            return fail(f"record is not valid JSON ({e})")
+    if not isinstance(record, dict):
+        return fail("record must be a JSON object (the bank entry)")
+    qid = record.get("question_id")
+    if not isinstance(qid, str) or not qid.strip():
+        return fail("record must carry a non-empty question_id")
+
+    try:
+        live_docs_hash = fingerprint(
+            cfg.schema_docs_path.read_text(encoding="utf-8"))
+    except OSError as e:
+        return fail(f"schema_docs unreadable ({e})")
+
+    checks: list[dict] = []
+
+    def check(name: str, status: str, detail: str) -> None:
+        checks.append({"name": name, "status": status, "detail": detail})
+
+    route, level = record.get("expected_route"), record.get("level")
+    ladder = level in ("L1", "L2", "L3")
+    sql_ladder = route == "sql" and ladder
+    hybrid_ladder = route == "hybrid" and ladder
+
+    con = _connect()
+    try:
+        # --- GOLD-SQL + ANSWER-COLUMNS ---
+        gold_sql = record.get("gold_sql")
+        gold_columns: list[str] | None = None
+        if not isinstance(gold_sql, str) or not gold_sql.strip():
+            check("GOLD-SQL", "FAIL" if sql_ladder else "N/A",
+                  "no gold_sql recorded"
+                  + (" - a SQL ladder entry requires one" if sql_ladder
+                     else ""))
+        else:
+            columns, rows, error = _precheck_execute(
+                con, gold_sql, fetch=ROW_CAP_CEILING + 1)
+            if error is not None:
+                check("GOLD-SQL", "FAIL", f"gold_sql did not execute: {error}")
+            elif not rows:
+                check("GOLD-SQL", "FAIL",
+                      "gold_sql executed and returned 0 rows - an empty gold "
+                      "answer is a zero-match ADV question wearing a ladder "
+                      "label")
+            else:
+                gold_columns = columns
+                more = "+" if len(rows) > ROW_CAP_CEILING else ""
+                check("GOLD-SQL", "PASS",
+                      f"executed, {len(rows)}{more} row(s), "
+                      f"columns {columns}")
+
+        answer_columns = record.get("answer_columns")
+        if not isinstance(answer_columns, list) or not answer_columns:
+            check("ANSWER-COLUMNS", "N/A", "no answer_columns recorded")
+        elif gold_columns is None:
+            check("ANSWER-COLUMNS", "N/A",
+                  "gold_sql produced no result to check against")
+        else:
+            have = {str(c).lower() for c in gold_columns}
+            missing = [c for c in answer_columns
+                       if str(c).lower() not in have]
+            if missing:
+                check("ANSWER-COLUMNS", "FAIL",
+                      f"answer_columns {missing} absent from the gold result "
+                      f"columns {gold_columns}")
+            else:
+                check("ANSWER-COLUMNS", "PASS",
+                      f"all {len(answer_columns)} present in the gold result")
+
+        # --- GOLD-TEXT ---
+        gold_ids = record.get("gold_project_ids")
+        if not isinstance(gold_ids, list):
+            check("GOLD-TEXT", "N/A", "no gold_project_ids recorded")
+        elif not gold_ids:
+            check("GOLD-TEXT", "N/A",
+                  "gold_project_ids is empty - absence is the gold label")
+        elif any(isinstance(i, bool) or not isinstance(i, int)
+                 for i in gold_ids):
+            check("GOLD-TEXT", "FAIL",
+                  "gold_project_ids must be integers")
+        else:
+            placeholders = ", ".join("?" for _ in gold_ids)
+            try:
+                rows = con.execute(
+                    "SELECT p.id, (COALESCE(NULLIF(TRIM(p.objective), ''),"
+                    " NULLIF(TRIM(r.summary), ''),"
+                    " NULLIF(TRIM(r.teaser), ''),"
+                    " NULLIF(TRIM(r.workPerformed), ''),"
+                    " NULLIF(TRIM(r.finalResults), '')) IS NOT NULL) "
+                    "FROM project p LEFT JOIN report_text r "
+                    "ON r.projectID = p.id "
+                    f"WHERE p.id IN ({placeholders})", gold_ids).fetchall()
+            except duckdb.Error as e:
+                check("GOLD-TEXT", "FAIL",
+                      f"gold text lookup failed: {type(e).__name__}: {e}")
+            else:
+                found = {pid: bool(has_text) for pid, has_text in rows}
+                absent = [i for i in gold_ids if i not in found]
+                textless = sorted(i for i, ok in found.items() if not ok)
+                if absent or textless:
+                    check("GOLD-TEXT", "FAIL",
+                          f"not in the database: {absent or 'none'}; "
+                          f"no stored text: {textless or 'none'}")
+                else:
+                    check("GOLD-TEXT", "PASS",
+                          f"all {len(gold_ids)} gold project(s) exist and "
+                          "carry text")
+
+        # --- FILTER-SURVIVORS + GOLD-SUBSET ---
+        filter_evidence = record.get("filter_evidence")
+        live_survivors: set[int] | None = None
+        if not isinstance(filter_evidence, dict):
+            detail = ("no filter_evidence recorded"
+                      + (" - a hybrid ladder entry requires one"
+                         if hybrid_ladder else ""))
+            check("FILTER-SURVIVORS", "FAIL" if hybrid_ladder else "N/A",
+                  detail)
+        else:
+            filter_sql = filter_evidence.get("filter_sql")
+            recorded = filter_evidence.get("survivor_ids")
+            if not isinstance(filter_sql, str) or not filter_sql.strip():
+                check("FILTER-SURVIVORS", "FAIL",
+                      "filter_evidence.filter_sql is missing or empty")
+            elif (not isinstance(recorded, list)
+                  or any(isinstance(i, bool) or not isinstance(i, int)
+                         for i in recorded)):
+                check("FILTER-SURVIVORS", "FAIL",
+                      "filter_evidence.survivor_ids must be a list of "
+                      "integers to compare against")
+            else:
+                columns, rows, error = _precheck_execute(
+                    con, filter_sql, fetch=SURVIVOR_CEILING + 1)
+                if error is not None:
+                    check("FILTER-SURVIVORS", "FAIL",
+                          f"filter_sql did not execute: {error}")
+                elif len(rows) > SURVIVOR_CEILING:
+                    check("FILTER-SURVIVORS", "FAIL",
+                          f"filter_sql returns more than {SURVIVOR_CEILING} "
+                          "rows - the survivor set must stay enumerable; "
+                          "tighten the filter")
+                else:
+                    col = _id_column(columns)
+                    live_survivors = {r[col] for r in rows}
+                    missing = sorted(set(recorded) - live_survivors)
+                    extra = sorted(live_survivors - set(recorded))
+                    if missing or extra:
+                        check("FILTER-SURVIVORS", "FAIL",
+                              f"live filter_sql ({columns[col]!r}, "
+                              f"{len(live_survivors)} ids) does not match the "
+                              f"recorded {len(recorded)}: recorded-but-gone "
+                              f"{missing or 'none'}, live-but-unrecorded "
+                              f"{extra or 'none'}")
+                    else:
+                        check("FILTER-SURVIVORS", "PASS",
+                              f"{len(live_survivors)} survivor(s), identical "
+                              "to survivor_ids")
+
+        if live_survivors is None:
+            check("GOLD-SUBSET", "N/A",
+                  "no live survivor set to compare gold against")
+        elif not isinstance(gold_ids, list) or not gold_ids:
+            check("GOLD-SUBSET", "N/A", "no gold_project_ids to place")
+        else:
+            outside = sorted(set(gold_ids) - live_survivors)
+            if outside:
+                check("GOLD-SUBSET", "FAIL",
+                      f"gold {outside} lies outside the live survivor set - "
+                      "gold outside the filter is a contradiction")
+            else:
+                check("GOLD-SUBSET", "PASS",
+                      f"all {len(gold_ids)} gold id(s) are survivors")
+    finally:
+        con.close()
+
+    # --- SCHEMA-DOCS ---
+    recorded_hashes = []
+    if isinstance(record.get("schema_docs_hash"), str):
+        recorded_hashes.append(("schema_docs_hash",
+                                record["schema_docs_hash"]))
+    if isinstance(record.get("filter_evidence"), dict) and isinstance(
+            record["filter_evidence"].get("schema_docs_hash"), str):
+        recorded_hashes.append(("filter_evidence.schema_docs_hash",
+                                record["filter_evidence"]["schema_docs_hash"]))
+    required = sql_ladder or hybrid_ladder
+    if not recorded_hashes:
+        check("SCHEMA-DOCS", "FAIL" if required else "N/A",
+              f"no schema_docs hash recorded (live is {live_docs_hash})"
+              + (" - this route requires one" if required else ""))
+    else:
+        stale = [f"{where}={value}" for where, value in recorded_hashes
+                 if value != live_docs_hash]
+        if stale:
+            check("SCHEMA-DOCS", "FAIL",
+                  f"recorded {', '.join(stale)} but the live schema_docs "
+                  f"({SCHEMA_DOCS_VERSION}) hashes to {live_docs_hash} - "
+                  "record the hash this pass returned")
+        else:
+            check("SCHEMA-DOCS", "PASS",
+                  f"matches live {SCHEMA_DOCS_VERSION} {live_docs_hash}")
+
+    failures = [c["name"] for c in checks if c["status"] == "FAIL"]
+    result = {"question_id": qid, "ok": not failures, "checks": checks,
+              "failures": failures,
+              "schema_docs": {"version": SCHEMA_DOCS_VERSION,
+                              "content_hash": live_docs_hash}}
+    _log("precheck_record", question_id=qid, ok=not failures,
+         failures=failures)
+    return result
+
+
 def main() -> None:
     # SDK import stays local so tests of the tool functions above never
     # depend on it.
@@ -586,7 +875,8 @@ def main() -> None:
 
     server = FastMCP("horizon-scout-draft")
     for fn in (run_sql, get_schema_docs, get_bank_questions,
-               search_corpus, get_project_text, get_corpus_profile):
+               search_corpus, get_project_text, get_corpus_profile,
+               precheck_record):
         server.tool()(fn)
     server.run()  # stdio
 

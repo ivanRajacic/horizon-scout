@@ -13,7 +13,8 @@ from src.config import CORPUS_PROFILE_VERSION, SCHEMA_DOCS_VERSION
 from src.eval import mcp_server
 from src.eval.mcp_server import (ServerConfig, get_bank_questions,
                                  get_corpus_profile, get_project_text,
-                                 get_schema_docs, run_sql, search_corpus)
+                                 get_schema_docs, precheck_record, run_sql,
+                                 search_corpus)
 from src.llm import fingerprint
 from src.retrieval.base import SearchResult
 
@@ -56,7 +57,9 @@ def server(tmp_path, monkeypatch):
         "INSERT INTO project VALUES "
         "(1, 'ALPHA', 'Alpha title', 'Alpha objective'), "
         "(2, 'BETA', 'Beta title', 'Beta objective'), "
-        "(3, 'GAMMA', 'Gamma title', 'Gamma objective')")
+        "(3, 'GAMMA', 'Gamma title', 'Gamma objective'), "
+        # No objective and no report row: the textless-gold case.
+        "(4, 'DELTA', 'Delta title', NULL)")
     con.execute(
         "CREATE TABLE report_text (projectID BIGINT, title VARCHAR, "
         "teaser VARCHAR, summary VARCHAR, workPerformed VARCHAR, "
@@ -432,6 +435,153 @@ def test_get_project_text_validation_and_cap(server):
     result = get_project_text([1] * (mcp_server.PROJECT_TEXT_CAP + 5))
     assert "error" not in result
     assert [p["project_id"] for p in result["projects"]] == [1]
+
+
+# --- precheck_record: the drafter's deterministic self-gate ---------------
+
+def status_of(result, name):
+    return next(c["status"] for c in result["checks"] if c["name"] == name)
+
+
+def status_detail(result, name):
+    return next(c["detail"] for c in result["checks"] if c["name"] == name)
+
+
+def sql_record(**overrides):
+    record = {
+        "question_id": "sql-90", "text": "How many rows are there?",
+        "expected_route": "sql", "level": "L1", "subtype": "aggregate",
+        "gold_sql": "SELECT COUNT(*) AS n FROM t",
+        "answer_columns": ["n"],
+        "schema_docs_hash": fingerprint(DOCS_TEXT)}
+    record.update(overrides)
+    return record
+
+
+def hybrid_record(**overrides):
+    record = {
+        "question_id": "hyb-90", "text": "What do the early projects do?",
+        "expected_route": "hybrid", "level": "L1", "subtype": "filter-read",
+        "term_style": "exact-term", "gold_project_ids": [1],
+        "filter_evidence": {
+            "filter_sql": "SELECT id FROM project WHERE id < 3",
+            "survivor_count": 2, "survivor_ids": [1, 2],
+            "schema_docs_hash": fingerprint(DOCS_TEXT)}}
+    record.update(overrides)
+    return record
+
+
+def test_precheck_passes_a_clean_sql_record(server):
+    result = precheck_record(sql_record())
+    assert result["ok"] and result["failures"] == []
+    assert status_of(result, "GOLD-SQL") == "PASS"
+    assert status_of(result, "ANSWER-COLUMNS") == "PASS"
+    assert status_of(result, "SCHEMA-DOCS") == "PASS"
+    # Nothing topical to check on a SQL record.
+    assert status_of(result, "GOLD-TEXT") == "N/A"
+    assert status_of(result, "FILTER-SURVIVORS") == "N/A"
+
+
+def test_precheck_accepts_a_json_string(server):
+    # Agents sometimes hand a tool the JSON line rather than the object.
+    assert precheck_record(json.dumps(sql_record()))["ok"]
+    assert "error" in precheck_record("{not json")
+    assert "error" in precheck_record(["nope"])
+    assert "error" in precheck_record({"text": "no id"})
+
+
+def test_precheck_fails_an_empty_gold_result(server):
+    result = precheck_record(sql_record(
+        gold_sql="SELECT i AS n FROM t WHERE i > 1000"))
+    assert not result["ok"] and result["failures"] == ["GOLD-SQL"]
+    assert "0 rows" in status_detail(result, "GOLD-SQL")
+
+
+def test_precheck_fails_broken_and_guarded_gold_sql(server):
+    broken = precheck_record(sql_record(gold_sql="SELECT * FROM nope"))
+    assert broken["failures"] == ["GOLD-SQL"]
+    guarded = precheck_record(sql_record(gold_sql="DROP TABLE t"))
+    assert "guardrail" in status_detail(guarded, "GOLD-SQL")
+
+
+def test_precheck_requires_gold_sql_on_the_sql_ladder(server):
+    result = precheck_record(sql_record(gold_sql=None))
+    assert status_of(result, "GOLD-SQL") == "FAIL"
+    assert "SQL ladder entry requires one" in status_detail(result, "GOLD-SQL")
+
+
+def test_precheck_catches_answer_columns_absent_from_the_result(server):
+    result = precheck_record(sql_record(answer_columns=["n", "total_cost"]))
+    assert result["failures"] == ["ANSWER-COLUMNS"]
+    assert "total_cost" in status_detail(result, "ANSWER-COLUMNS")
+
+
+def test_precheck_checks_gold_projects_exist_and_carry_text(server):
+    assert precheck_record(hybrid_record())["ok"]
+    absent = precheck_record(hybrid_record(
+        gold_project_ids=[1, 999],
+        filter_evidence={**hybrid_record()["filter_evidence"],
+                         "filter_sql": "SELECT id FROM project WHERE id < 3 "
+                                       "OR id = 999"}))
+    assert "GOLD-TEXT" in absent["failures"]
+    assert "999" in status_detail(absent, "GOLD-TEXT")
+    textless = precheck_record(hybrid_record(
+        gold_project_ids=[4],
+        filter_evidence={**hybrid_record()["filter_evidence"],
+                         "filter_sql": "SELECT id FROM project WHERE id = 4",
+                         "survivor_count": 1, "survivor_ids": [4]}))
+    assert "GOLD-TEXT" in textless["failures"]
+    assert "no stored text: [4]" in status_detail(textless, "GOLD-TEXT")
+
+
+def test_precheck_zero_match_gold_is_not_a_text_failure(server):
+    result = precheck_record({
+        "question_id": "adv-90", "text": "Any projects on warp drives?",
+        "expected_route": "vector", "level": "ADV", "subtype": "zero-match",
+        "gold_project_ids": []})
+    assert status_of(result, "GOLD-TEXT") == "N/A"
+    assert result["ok"]
+
+
+def test_precheck_catches_drifted_filter_survivors(server):
+    result = precheck_record(hybrid_record(filter_evidence={
+        "filter_sql": "SELECT id FROM project WHERE id < 3",
+        "survivor_count": 3, "survivor_ids": [1, 2, 3],
+        "schema_docs_hash": fingerprint(DOCS_TEXT)}))
+    assert result["failures"] == ["FILTER-SURVIVORS"]
+    assert "recorded-but-gone [3]" in status_detail(result,
+                                                    "FILTER-SURVIVORS")
+
+
+def test_precheck_catches_gold_outside_the_live_survivors(server):
+    result = precheck_record(hybrid_record(gold_project_ids=[3]))
+    assert result["failures"] == ["GOLD-SUBSET"]
+    assert "[3]" in status_detail(result, "GOLD-SUBSET")
+
+
+def test_precheck_requires_filter_evidence_on_the_hybrid_ladder(server):
+    result = precheck_record(hybrid_record(filter_evidence=None))
+    assert status_of(result, "FILTER-SURVIVORS") == "FAIL"
+    assert status_of(result, "GOLD-SUBSET") == "N/A"
+
+
+def test_precheck_catches_a_stale_schema_docs_hash(server):
+    result = precheck_record(sql_record(schema_docs_hash="deadbeef0000"))
+    assert result["failures"] == ["SCHEMA-DOCS"]
+    detail = status_detail(result, "SCHEMA-DOCS")
+    assert "deadbeef0000" in detail and fingerprint(DOCS_TEXT) in detail
+
+
+def test_precheck_is_logged(server):
+    precheck_record(sql_record())
+    precheck_record(sql_record(schema_docs_hash="deadbeef0000"))
+    precheck_record("{not json")
+    lines = [json.loads(l) for l in
+             server.log_path.read_text(encoding="utf-8").splitlines()]
+    assert [(e["tool"], e["ok"]) for e in lines
+            if e["tool"] == "precheck_record"] == [
+        ("precheck_record", True), ("precheck_record", False),
+        ("precheck_record", False)]
 
 
 def test_new_tools_are_logged(fakes, server):
