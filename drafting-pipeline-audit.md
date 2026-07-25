@@ -95,6 +95,97 @@ Whole-system coherence verdict first: the orchestrator, drafter, and reviewer ge
 
 Standing-rule edits: "Two files, ever" -> "two canonical outputs + one working journal"; the byte-identical rule gained the single `reviewer_override` carve-out; the opening paragraph now says three files; the report Tally line gained a `blocked` count.
 
+## Decisions taken (2026-07-25) - four nodes, typed state, deterministic gates, IMPLEMENTED
+
+Fourth pass, and the first to touch code after three prompt-asset-only passes. **Nothing was executed** - the changes were authored and left for Ivan to run (see "Handoff" below); `promote.py` and the `promote-drafts` report contract are untouched.
+
+### Why: two conflicts of interest and a pile of hand-done mechanical work
+
+The previous design put two jobs in each of two nodes:
+
+1. **The reviewer both attacked and ruled.** It classified each FATAL `RECOVERABLE` or `DEAD`, and `DEAD` was binding - the orchestrator abandoned the candidate with no appeal. The adversary had unilateral kill power, so its findings were never actually weighed.
+2. **The orchestrator both judged and paid.** It decided accept / fix / abandon, while every FATAL it upheld cost it a round, a spare candidate, or a FAILED slot against the quota. Accepting was cheap; upholding was expensive. Its evidence-based override valve sat exactly on that conflict.
+
+Separately, expensive Opus nodes were doing work with a right answer (does the gold SQL execute and return rows, do the recorded survivors still match), and the orchestrator burned context re-reading every accepted slot's evidence to format a report that is a pure function of data it had already written.
+
+The fix splits authority from execution, moves everything mechanical into code, and types the state that flows between nodes.
+
+### The graph
+
+```
+SETUP     [D] gap-report -> [H] pick cells -> [A] orchestrator picks 3 candidates/slot
+          -> [D] next-ids -> [D] health probe (topical batches only)
+
+PER SLOT  budget: 3 candidates x (1 draft + 1 fix) = 6 drafter passes max
+
+  [A] DRAFTER -> [D] precheck_record (internal gate) -> [D] validate-record
+  -> [A] CRITIC (findings only) -> [A] JUDGE (rules, then ACCEPT|FIX|ABANDON)
+
+CLOSE-OUT [D] write-batch (runs batch-crosscheck) -> [H] tick -> [D] promote-drafts
+```
+
+All agent-to-agent edges physically transit the orchestrator as a message bus; that is what keeps the judge warm across a slot's rounds without nesting agents.
+
+### The nodes
+
+- **Shared brief - new versioned prompt asset** (`src/eval/bank_brief.md`, `BANK_BRIEF_VERSION` = `bb1`, hashed by `src/llm.py:fingerprint`, same discipline as `schema_docs.md`). Read by drafter, critic, and judge so their standard cannot drift. Holds: what the bank is (M5's measuring instrument, not a quiz); *a defective question does not produce a wrong answer, it produces a wrong finding in a study*; the four properties of "good" here; the two failure modes that matter (measures nothing / measures the wrong thing); the route/level/subtype reference; the `HIGH|MID|LOW` definitions; and the role boundaries.
+- **Critic** (`review-question/SKILL.md` + `question-reviewer.md`, names kept so `/review-question` and `/review-bank` do not ripple). Verdict and the `RECOVERABLE`/`DEAD` classification deleted entirely; fixability survives as an advisory `fix_direction`. This also makes the node **mode-independent** - previously the verdict's *meaning* changed between batch and bank mode, which is why the shared node was fragile. Severity is now `HIGH | MID | LOW`; the middle tier is safe precisely because a judge exists to weigh it (it was the nitpick engine when a mechanical map forced a round on it). The catalog stops being a mandatory procedure and becomes a **labelling vocabulary plus advice on what usually fails**: method free, output typed, tag every finding with a class or `OTHER:<slug>` (a recurring slug tells us the vocabulary needs a new entry). **Two items stay mandatory as bias controls, not defect lookups:** `BLIND-SOLVE` (write your own SQL before reading the gold) and `OWN-WORDING` (search with your own reformulations, never the author's). Budget: 3 attack angles. `SKIPPED` / `REVIEW-FAILED` survive as channel signals under a new `STATUS` line.
+- **Judge - new node** (`question-judge.md` + `judge-question/SKILL.md`). Opus/low, read-only, **no MCP tools**: both sides' claims already carry executed evidence, so this is a logic check, not a third investigation. Must rule `UPHELD`/`DISMISSED` with a reason on every `HIGH` and `MID` finding *before* emitting a disposition - that ordering is the anti-cherry-pick mitigation, and it lands in the report for free. Warm across a slot's rounds, sees only its own slot, enforces the stop rules off typed state. Explicit rule: the budget is never an argument for ACCEPT, only for ABANDON.
+- **Drafter** (`question-drafter.md`): self-verifies facts, **stops self-adjudicating quality** (that is the judge's job now; paying twice was the duplication). Gated by `precheck_record` - it cannot emit a package until the gate returns `ok`. One fix round per candidate; a named fix that turns out impossible is reported plainly rather than substituted.
+- **Orchestrator** (`draft-batch/SKILL.md`): Step 4 is pure routing. Three irreducible jobs left - negotiate cells, pick candidates, relay messages. It judges nothing. `reviewer_override` is no longer written in batch mode: with a real judge there is nothing to override (the field stays for the interactive "confirm anyway" path, and `bank.py` still tallies it). Two candidates per slot became **three**; the end-of-batch schema-fix round is deleted, superseded by per-slot `validate-record`. Server-outage handling (pre-flight probe + reactive backstop) stays here and never reaches the judge - an outage is a channel signal, not a quality signal.
+- **Route skills** (`draft-{sql,vector,hybrid}-question`): point at the brief, add the precheck gate, drop the checklist items a machine now owns (SQL: `EXECUTED-GOLD`, `PINNED-COLUMNS`, `SUBTYPE-LEGAL`; hybrid: `FILTER-EXECUTED`, `GOLD-WITHIN-SURVIVORS`), and update the carve-out notes to the LOW vocabulary. Interactive mode is otherwise unchanged - there, Ivan is the judge.
+
+### Typed slot state
+
+One append-only JSONL journal, one line per transition, latest line per `question_id` wins; line 0 is a batch header (order, budgets, corpus-profile / schema-docs / bank-brief / index versions and hashes). **The envelope is always valid; `record` is an opaque payload that may be schema-invalid mid-run** - that preserves the never-validated-mid-run rule while giving every node a typed contract. Who reads what: judge gets its own slot only; drafter on a fix gets only the named targets; critic gets `record` + `evidence` + the precheck result and is blind to budget and to prior rounds (so **a re-attack after a fix goes to a FRESH critic**); orchestrator writes every line and reads back only `ACCEPTED` ones.
+
+**Stop rules** (judge-enforced, on typed state): same defect `class` upheld twice on one candidate -> next candidate; same `class` kills two candidates -> fail the slot and flag the cell suspect; 6 passes or 3 candidates exhausted -> fail the slot.
+
+**Concurrency**: 3 drafters + 3 critics + 3 judges. The binding number is **6 MCP-touching agents**, up from today's 5 - which was itself never measured (the pilot ran at 3). Judges touch no MCP tools and are free.
+
+**Model and effort**: every subagent Opus/low (`question-judge` included); the orchestrator session at **medium** (was "low or medium"), never high. Consistent with the recorded rationale that adversarial and judgment value comes from a *separate, independent* node, not from the effort dial.
+
+### Deterministic nodes (the code)
+
+| New | Where | Does |
+|---|---|---|
+| `precheck_record` | MCP tool, `src/eval/mcp_server.py` | gold SQL executes and is non-empty; `answer_columns` present in the result; every gold project exists and has text; `filter_sql` re-executes to exactly the recorded survivors (enumerable, gold inside); `schema_docs_hash` is live |
+| `validate-record` | `src/cli.py` | schema-validates ONE record at slot close, via a new public `validate_record` wrapper in `src/eval/bank.py` |
+| `gap-report` | `src/cli.py` | filled / staged / target per cell against the allocation table, parsed LIVE from `horizon-scout.md`; plus subtypes, term_style balance, next free ids |
+| `next-ids` | `src/cli.py` + `src/eval/batch.py` | next free `sql-NN` / `vec-NN` / `hyb-NN`, counting bank + every staged draft file |
+| `batch-crosscheck` | `src/cli.py` + `src/eval/batch.py` | near-duplicate (token/trigram overlap - **no embedder**, so close-out has no server dependency), gold-set overlap, named-entity and axis collision, spread |
+| `write-batch` | `src/cli.py` + `src/eval/batch.py` | journal `ACCEPTED` lines -> `draft-bank-<date>.jsonl` + `draft-report-<date>.md`, format unchanged |
+
+`precheck_record` is an **MCP tool, not a CLI**, because it runs inside the drafter's own loop and the drafter has no shell and must stay read-only by construction. It fits the server's charter exactly (read-only, SQL-guarded, every call logged), and the interactive drafting skills get the same gate free.
+
+The writer closes audit finding **F3** properly rather than bounding it: the orchestrator's last contact with a slot's evidence becomes the relay, and the machine-parsed `Draft-bank-file:` / `Decision: [ ] APPROVE  [ ] REJECT` lines stop being a format a model must reproduce from prose. `batch-crosscheck` catches what no per-slot node can see - the critic's near-duplicate check reads `get_bank_questions`, which returns the *promoted* bank, so parallel slots can converge and nothing notices. Its output is **flags on the report**, never a gate and never a redraft.
+
+### Found and deferred, not fixed
+
+**`/review-bank` is stale.** Its report format still references the deleted `FLAWED` / `BROKEN` verdicts and `MAJOR` / `NOTE` severities, and it now also expects a `VERDICT` line the critic no longer emits. It is a separate orchestrator on a separate trigger (post-promotion audit of `eval/bank.jsonl`), so it was noted, not newly broken, and not bundled into this change. A STALE admonition was added at the top of that file with what updating it involves - including the open question of whether a post-promotion sweep wants a judge at all (it has no drafter to fix anything, so probably not: there, the user is the judge).
+
+### Offline confirmation - RUN 2026-07-25, all green
+
+Everything that can be checked without a live batch was run. Results:
+
+- **Suite: 230 passing** (192 baseline + 38 new). Two things the run caught and that are now fixed:
+  - a **test** bug - the multi-violation `validate_record` case set `level: "L9"`, which correctly suppresses the level-dependent ladder rules, so the expected `answer_columns` error never fired. Split into two cases; the suppression behaviour is now asserted on purpose (one loud root cause, not a cascade).
+  - a **real gap-report bug** - it counted every record in `eval/drafts/draft-bank-*.jsonl` as "staged", including an already-promoted batch whose draft file stays on disk. vec-04/vec-05/hyb-01/hyb-03 were being double-counted as both filled and pending. Staged now means staged-but-UNPROMOTED (staged records whose id is already in the bank are excluded), with a regression test.
+- **`gap-report`** against the live allocation table: bank 17, 4 unpromoted staged, all three routes' targets parsed. Next free ids `sql-11 / vec-06 / hyb-08` - `next-ids` correctly treats the unpromoted hyb-04..07 as taken.
+- **`batch-crosscheck`** on the real staged batch: two true-positive `AXIS-COLLISION` flags (two slots on euroSciVoc+country, two on euroSciVoc+fundingScheme - exactly the spread that batch's own report described in prose), no near-duplicate, entity, or gold-overlap false positives. Signal-to-noise looks right on real data.
+- **`validate-record`** on all four staged records: clean.
+- **`precheck_record` over the whole promoted bank** (17 entries, real DuckDB): **zero substantive failures** - every gold SQL re-executes non-empty, every gold project has text, both hybrid filters still produce their recorded survivors. The only failures are 12 `SCHEMA-DOCS` on entries carrying the `sd1-pilot` hash, which is provenance, not a defect; the tool's docstring now says so explicitly, since it is a gate for records being authored now. Re-run on the four freshest staged records: fully clean, including `filter_sql` re-executing to exactly 7 / 13 / 18 / 15 survivors with gold inside each.
+- **Refusals are legible**, not tracebacks: the pre-2026-07-25 journal is rejected by both `write-batch` (untyped envelope, no batch header) and `batch-crosscheck` (a guard added during this pass, so an old journal is not silently mistaken for a staged draft file).
+
+Not covered offline, by nature: the writer against a real journal (no new-format journal exists yet), and everything above the CLI - the four-node loop, the critic's new output contract, and the judge.
+
+### Handoff - Ivan still verifies (needs models or servers)
+
+1. **Restart the session** so the `horizon-draft` MCP server relaunches with `precheck_record` - the drafter's gate silently degrades to "cannot call it" otherwise.
+2. **Critic regression check.** `working-plan.md` records that the reviewer caught the `vec-05` completeness defect and both `hyb-02` invalidating defects; the histories are in `eval/drafts/draft-report-2026-07-24.md`. Replay those drafts through the reframed critic. If purpose-driven attack still finds them, the smaller skill wins outright; if one is missed, that specific item earns its way back to mandatory and we know which. This is how the catalog reframe gets settled by measurement instead of argument.
+3. **Measured batch, SQL-only first** (needs no llama servers): 2-3 slots at 3/3/3. Record drafter passes per accepted question against the ~70%-of-a-5h-window-for-5-questions baseline above, and confirm the loop terminates on the stop rules rather than the hard cap. Then repeat with topical slots once the embedder (:8080) and reranker (:8082) are up, watching for MCP and rerank contention at 6 MCP-touching agents. The first such run also produces the first new-format journal, which is the only way to exercise `write-batch` end to end.
+4. `./.venv/Scripts/python.exe -m src.cli validate-bank` on existing bank + staged records before any promote.
+
 ## Next actions
 
 - [x] Let the current run finish; capture `eval/drafts/draft-bank-2026-07-24.jsonl` + report.
@@ -103,7 +194,9 @@ Standing-rule edits: "Two files, ever" -> "two canonical outputs + one working j
 - [x] Decide P1-P5 with Ivan, under the "same safety, less spend" constraint. (See "Decisions taken" above; P1 reframed as opus/low, P2/P5 deferred, P4 dropped.)
 - [x] Apply agreed changes to drafter + reviewer (k=10, V1-V5). Orchestrator (P2 checkpointing) still pending.
 - [x] Review-loop re-architecture: lean adversary + orchestrator-as-judge + one-round-then-spare + drafter topic-fit/fast-fix (see "Decisions taken - review-loop re-architecture" above).
-- [ ] Re-run a small batch and measure the new cost against this baseline (~70% of a 5-hour window for 5 questions); confirm the lean reviewer still flags a genuine defect and the loop terminates fast.
+- [x] Four-node re-architecture: split authority (critic reports / judge rules), typed journal state, deterministic gates and generated outputs (2026-07-25; changes authored, NOT run - see "Decisions taken (2026-07-25)").
+- [ ] **Ivan:** run the handoff list under "Decisions taken (2026-07-25)" - pytest, the critic regression replay on vec-05 / hyb-02, then a measured SQL-only batch against the ~70%-of-a-5h-window-for-5-questions baseline; then a topical batch at 6 MCP-touching agents.
+- [ ] `/review-bank` report format is stale against the critic's new output (noted 2026-07-25, deliberately deferred).
 - [x] P2 checkpointing in `/draft-batch` - DONE (2026-07-24) via the append-only working journal; see "Decisions taken - orchestrator audit + optimization". Also closed F1 (servers-down), F3 (context bloat), F4 (override stamp).
 
 ## Status of the triggering run - COMPLETE
