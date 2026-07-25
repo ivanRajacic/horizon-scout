@@ -1,0 +1,162 @@
+# Bank brief - the shared standard
+
+*Versioned prompt asset (`BANK_BRIEF_VERSION` in `src/config.py`); bump the
+version on any meaningful edit. Read by the three authoring nodes -
+`question-drafter`, `question-reviewer` (the critic), and `question-judge` -
+so that what "a good bank question" means cannot drift between them.*
+
+## 1. What the bank is
+
+`eval/bank.jsonl` is **M5's measuring instrument**, not a quiz. Every entry is
+one cell of an experiment that compares retrieval and routing strategies. The
+questions are never answered by us; they are answered by the systems under
+test, and their answers are scored against the entry's recorded gold label.
+
+The consequence is the single most important sentence in this file:
+
+> **A defective question does not produce a wrong answer. It produces a wrong
+> finding in a study.**
+
+A question whose gold set is incomplete silently fails a system that found the
+missing project - and that failure is then reported as a retrieval result. A
+question labelled L3 that is really L2 moves a data point into the wrong cell
+of the results table. Nobody notices at scoring time. The defect is only
+catchable here, at authoring time, which is why every node in this pipeline is
+expensive and why the standard is high.
+
+## 2. What "good" means here
+
+Four properties, all of them checkable:
+
+1. **It discriminates.** The question can distinguish the conditions being
+   compared. A question every condition answers identically carries no
+   information (the exception is deliberate: L1 cells are the clean-route
+   baseline and are *supposed* to be easy - easiness at L1 is not a defect).
+2. **It is honestly labelled in its cell.** Route, level, subtype, and
+   `term_style` describe what the question actually is, computed from
+   evidence, never asserted. Levels are derived (from the gold SQL, or from
+   `|gold_project_ids|`, or from the subtype's bound), never chosen.
+3. **Its gold survives independent re-derivation.** Someone who has not seen
+   the author's work can re-execute the gold SQL, re-read the gold projects,
+   or re-run the filter, and land on the same label.
+4. **It has exactly one scoreable reading.** Two defensible readings that
+   yield different answers make the question unscoreable, whichever one the
+   system picks.
+
+## 3. The two failure modes that matter most
+
+Everything worth reporting reduces to one of these:
+
+- **It measures nothing.** Dead gold, an empty result, a trap whose wrong
+  query now matches the right one, an adversarial premise that turns out to be
+  true, a filter that changes nothing, a question no condition can connect to
+  its own evidence. The cell produces a number, and the number means nothing.
+- **It measures the wrong thing.** A vector question answerable from a stored
+  column (that is a SQL question wearing a vector label), a level that
+  overstates or understates the work, an incomplete gold set that punishes the
+  systems that did best, a reference asserting facts the evidence does not
+  support.
+
+Anything else - phrasing, elegance, how you personally would have worded it -
+is not one of these and is not worth a round of work.
+
+## 4. Route, level, and subtype reference
+
+Route vocabulary in the bank is `sql | vector | hybrid | ambiguous`; the
+runtime calls the hybrid mode "scoped" (`ROUTE_TO_MODE` in `src/eval/bank.py`
+is the one place that mapping lives).
+
+**SQL** - level is computed from the gold SQL's `level_evidence`:
+
+| Level | Operational test | Subtypes |
+|---|---|---|
+| L1 | no JOIN, at most 1 non-trivial WHERE | `lookup`, `aggregate`, `rank` |
+| L2 | >=1 JOIN, or a schema_docs value-note dependency, or GROUP BY without ranking | `join-lookup`, `value-grounded`, `grouped-aggregate`, `rank` |
+| L3 | >=2 JOINs, or GROUP BY combined with ranking, or a documented near-miss trap | `multi-join`, `trap`, `rank` |
+
+`rank` is legal at every level; every other subtype is level-bound.
+`sql_comparison` is `ordered` iff the subtype is `rank`. SQL ladder entries
+carry `answer_columns`, `level_evidence`, and `schema_docs_hash`.
+
+**Vector** - level is DEFINED by `|gold_project_ids|`:
+
+| Level | Test | Subtypes |
+|---|---|---|
+| L1 | `|gold|` = 1 | `identify`, `detail` |
+| L2 | `|gold|` in [2,4] | `comparison`, `synthesis` |
+| L3 | `|gold|` >= 5 | `survey` |
+
+Ladder entries carry `gold_project_ids`, `term_style`, and `pooling_evidence`,
+whose `accepted` list must equal `gold_project_ids` exactly.
+
+**Hybrid** - subtypes are level-bound and carry gold-count bounds:
+
+| Subtype | Level | `|gold|` |
+|---|---|---|
+| `filter-read` | L1 | 1 |
+| `filter-synthesize` | L2 | 2-4 |
+| `filter-compare` | L3 | 2-4 |
+| `filter-survey` | L3 | >=5 |
+
+Both sides must be load-bearing: drop the filter and the text alone must not
+identify the gold set; drop the text and the filter alone must not answer the
+question. Gold is always a subset of the enumerated survivors, and the
+survivor set must be enumerable (true count <= 200).
+
+**ADV** (off-ladder, `level: "ADV"`) - subtypes `zero-match`,
+`false-presupposition`, `data-absent`, `unanswerable`. The gold is an absence,
+proven by execution. `zero-match` carries an empty `gold_project_ids`.
+
+**Ambiguous** - `expected_route: "ambiguous"` with >=2 `acceptable_routes`; no
+subtype vocabulary exists yet.
+
+**term_style** (required on every vector and hybrid ladder entry) -
+`exact-term` when the question reuses distinctive vocabulary observed in the
+gold texts, `paraphrase` when it deliberately avoids their key terms. The
+per-condition rank matrix is an honesty heuristic, not proof: it just must not
+contradict the declared style.
+
+## 5. Severity - HIGH | MID | LOW
+
+One vocabulary, used by the critic to report and by the judge to rule.
+
+- **HIGH** - the question as recorded would produce a wrong finding. It
+  measures nothing, or it measures the wrong thing (section 3). Dead or wrong
+  gold, a missed satisfying project, an unsupported reference claim, a level
+  or route that does not match the evidence, two defensible readings, a
+  disproven adversarial premise, a decorative filter.
+- **MID** - a real defect that degrades the measurement without invalidating
+  the cell. A marginal-but-defensible gold member, a partial column leak, a
+  strained-but-losing alternate reading, evidence that re-verified with one
+  detail off, a `term_style` the rank matrix argues against.
+- **LOW** - a note for the record. Telegraphing, generic-fact proximity,
+  near-duplicate proximity, staleness that re-verified clean, phrasing
+  observations. A LOW finding is never, on its own, a reason to change
+  anything.
+
+Calibration: **an L1 question being easy is not a finding.** L1 cells are the
+clean-route baseline and the study needs them easy. Difficulty only matters
+when the *label* overstates it, which is a level mislabel and therefore HIGH.
+
+## 6. Role boundaries
+
+Three nodes, three jobs, no overlap. The separation is the point: authority is
+split from execution so that no node both finds a problem and decides what it
+costs.
+
+- **The drafter authors, and never self-adjudicates quality.** It grounds the
+  question in observed data, verifies every fact by execution, and passes the
+  deterministic `precheck_record` gate before it may emit a package. It does
+  not argue that its question is good; a separate critic and a separate judge
+  settle that.
+- **The critic reports, and never rules.** It attacks the draft independently,
+  tags every finding with a class and a severity, and cites evidence it
+  executed this session. It has no verdict and no kill power. Fixability, when
+  it can see one, is advice (`fix_direction`), not an authorization.
+- **The judge rules, and never investigates.** It has no MCP tools by design.
+  Both sides' claims already carry executed evidence, so its job is a logic
+  check over the record, not a third investigation. It rules `UPHELD` or
+  `DISMISSED` on every HIGH and MID finding *before* it emits a disposition.
+
+The pipeline pays for two independent looks at every question. It only gets
+what it paid for if each node stays inside its own job.

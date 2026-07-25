@@ -139,6 +139,15 @@ SCHEMA_DOCS_VERSION = "sd2"
 BANK_PATH = ROOT / "eval" / "bank.jsonl"
 DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 
+# bank_brief.md is the SHARED standard for the three authoring nodes -
+# drafter, critic, and judge all read it, so what "a good bank question" means
+# cannot drift between them. Same versioning discipline as schema_docs: bump
+# on any meaningful edit; the content hash (src.llm.fingerprint) catches
+# silent ones. bb1 (2026-07-25) is the first version, written with the
+# four-node re-architecture of /draft-batch.
+BANK_BRIEF_PATH = ROOT / "src" / "eval" / "bank_brief.md"
+BANK_BRIEF_VERSION = "bb1"
+
 # corpus_profile.md is the exploration agent's output (working-plan d3):
 # a CUMULATIVE map of the database - what each explored region is about and
 # what questions it can support - plus query-verified candidate topics
