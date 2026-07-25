@@ -17,11 +17,15 @@ This skill authors `route=vector` questions at levels L1-L3 only. SQL questions 
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
+- **Read `src/eval/bank_brief.md` first.** It is the shared standard the drafter, the critic, and the judge all work from - what the bank is for, what "good" means, the route/level/subtype reference, and the role boundaries. The most useful thing in it for you: a defective question does not produce a wrong answer, it produces a wrong finding in a study.
+- **The precheck gate.** Before you may emit a package, call `precheck_record(<your finished RECORD>)` and get `ok: true`. On this route it confirms every `gold_project_id` exists and carries stored text. A FAIL is a fact; fix the draft and call again. Include the passing result in your package as the `PRECHECK` section.
+- **You author and verify; you do not grade yourself.** An independent `question-reviewer` attacks the draft afterwards and an independent `question-judge` rules on what it finds. Emit no verdict, argue no case, and record any doubt you still hold in HISTORY rather than suppressing it.
+- The orchestrator runs `python -m src.cli validate-record` on your RECORD the moment you return it, so the JSON must be schema-clean (`pooling_evidence.accepted` must equal `gold_project_ids` exactly); a validator error comes straight back to you.
 - The candidate block is the subject and the batch order fixes level/subtype/term_style - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="vector")` and `frontier`): the candidate block IS your profile slice, and the frontier only matters when choosing a subject. Still call `get_bank_questions("vector")` and run the retrieval-server probe.
 - **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (executed SQL + counts) and `sample_ids` are proven-by-execution and merge-pass spot-checked: trust and confirm them - re-run the candidate's SQL once as a drift check and `get_project_text` the `sample_ids` directly, rather than hunting seeds with a fresh `run_sql`. Everything else it asserts - route/level/subtype, term_style, and above all gold/cluster membership - is ADVISORY and re-verified in full: euroSciVoc leaf tags are noisy, so confirm the theme by READING text, the gold set by pooled verification + the completeness sweep, and recompute the level from |gold|. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
-- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the pure-judgment polish items the independent `question-reviewer` owns.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the pure-judgment polish items the independent `question-reviewer` owns (nothing on this route's list is covered by `precheck_record`).
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Level disagreements that would normally go to the user (|gold| contradicting the requested level) go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -40,6 +44,7 @@ All data access goes through the `horizon-draft` MCP server:
 - `get_schema_docs()` - schema reference when composing seed-selection SQL.
 - `get_bank_questions("vector")` - existing entries: id, text, level, subtype only.
 - `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics (euroscivoc clusters pre-sized to levels, term_style flags) plus the `frontier` coverage table. An `{"error": ...}` result means the profile is not built yet - proceed without it.
+- `precheck_record(record)` - re-executes the finished record's mechanical claims (here: every gold project exists and carries stored text; plus the SQL/filter checks when those fields are present) and returns PASS/FAIL/N-A per check. Free to call as often as you like; a FAIL is a result, not an error.
 
 There are no write tools. The append at the end is a confirmation-gated file edit, done by this skill directly.
 
@@ -106,7 +111,9 @@ Written from the gold projects' texts only - never from rejected candidates, nev
 
 Re-read question, gold set, adjudications, sweep results, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence.
 
-**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NEAR-DUPLICATE, GENERIC-FACT, and the general-shape check of NO-TELEGRAPH as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste), so skip those here - but the identify acronym/title leak stays a FAIL gate you run - and run every other item in full.
+**Interactive mode:** run every item below, skip nothing.
+
+**Orchestrated mode:** the independent `question-reviewer` owns `NEAR-DUPLICATE`, `GENERIC-FACT`, and the general-shape check of `NO-TELEGRAPH`, reporting them as LOW findings for the judge to note; `NATURAL-PHRASING` is dropped entirely (pure phrasing taste). Skip those - but the identify acronym/title leak stays a FAIL gate you run yourself - and run every other item in full. Nothing on this route's list is covered by `precheck_record` (it checks that gold projects exist and have text, which is upstream of every item here), so the list is otherwise unchanged. Report each item as a fact with PASS/WARN/N-A - no verdict.
 
 ```
 POOLED-VERIFIED      All four conditions ran this session at the recorded k; every pooled
@@ -135,9 +142,9 @@ NEAR-DUPLICATE       Not a near-duplicate of an existing bank question. WARN, na
                      colliding id.
 ```
 
-**Verdict:** APPROVE / REVISE / REJECT
+**Verdict (interactive mode only):** APPROVE / REVISE / REJECT
 
-Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions.
+Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions. In orchestrated mode there is no verdict and no `reviewer_override`: you report the checklist as facts, pass `precheck_record`, and return the package - a critic attacks it and a judge decides.
 
 ## On confirmation - append
 

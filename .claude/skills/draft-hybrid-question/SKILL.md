@@ -17,11 +17,15 @@ This skill authors `route=hybrid` questions at levels L1-L3 only. SQL questions 
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
+- **Read `src/eval/bank_brief.md` first.** It is the shared standard the drafter, the critic, and the judge all work from - what the bank is for, what "good" means, the route/level/subtype reference, and the role boundaries. The most useful thing in it for you: a defective question does not produce a wrong answer, it produces a wrong finding in a study.
+- **The precheck gate.** Before you may emit a package, call `precheck_record(<your finished RECORD>)` and get `ok: true`. On this route it re-executes `filter_sql` and requires the live survivor set to match `survivor_ids` exactly, gold to sit inside it, every gold project to carry text, and the recorded `filter_evidence.schema_docs_hash` to be the live one. A FAIL is a fact; fix the draft and call again. Include the passing result in your package as the `PRECHECK` section.
+- **You author and verify; you do not grade yourself.** An independent `question-reviewer` attacks the draft afterwards and an independent `question-judge` rules on what it finds. Emit no verdict, argue no case, and record any doubt you still hold in HISTORY rather than suppressing it.
+- The orchestrator runs `python -m src.cli validate-record` on your RECORD the moment you return it, so the JSON must be schema-clean (subtype gold bounds, `survivor_count == len(survivor_ids)`, gold a subset of survivors); a validator error comes straight back to you.
 - The candidate block is the subject and the batch order fixes subtype (=> level) and term_style - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="hybrid")` and `frontier`): the candidate block IS your profile slice, and the frontier only matters when choosing a subject. Still call `get_bank_questions("hybrid")`, run the retrieval-server probe, and call `get_schema_docs()` (the filter needs its value notes).
 - **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (the executed filter SQL + its survivor/total counts) and sample ids are proven-by-execution and merge-pass spot-checked: trust and confirm them - start from the candidate's filter SQL and re-execute it once to confirm the survivor count has not drifted, rather than re-sampling the filter's value space from scratch. Everything else it asserts - route/level/subtype, term_style, filter load-bearingness, and gold membership - is ADVISORY and re-verified in full: read the survivors' text (euroSciVoc leaf tags are noisy), run the discrimination check, adjudicate to gold, and check |gold| against the subtype's bound. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
-- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the pure-judgment polish items the independent `question-reviewer` owns.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate and diagnostic except the items `precheck_record` and `validate-record` already settle, and the pure-judgment polish items the independent `question-reviewer` owns.
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Bound disagreements that would normally go to the user (|gold| contradicting the subtype) go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -45,6 +49,7 @@ All data access goes through the `horizon-draft` MCP server:
 - `get_schema_docs()` - schema + value notes for designing the filter; its `content_hash` is recorded as `filter_evidence.schema_docs_hash`.
 - `get_bank_questions("hybrid")` - existing entries: id, text, level, subtype only.
 - `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics (topic x filter combos with survivor counts already in the drafting windows) plus the `frontier` coverage table. An `{"error": ...}` result means the profile is not built yet - proceed without it.
+- `precheck_record(record)` - re-executes the finished record's mechanical claims (here: `filter_sql` produces exactly `survivor_ids`, the set is enumerable, gold sits inside it, every gold project has text, the recorded schema_docs hash is live) and returns PASS/FAIL/N-A per check. Free to call as often as you like; a FAIL is a result, not an error.
 
 There are no write tools. The append at the end is a confirmation-gated file edit, done by this skill directly.
 
@@ -109,7 +114,9 @@ Written from the gold survivors' texts plus the filter facts (the filter is part
 
 Re-read question, filter, survivor list, adjudications, discrimination counter-examples, reference. Every item gets an explicit PASS / FAIL / WARN plus one sentence.
 
-**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NO-TELEGRAPH, NEAR-DUPLICATE, and GENERIC-FACT as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste), so skip all four here - run every other item (including the FILTER-LOAD-BEARING and TEXT-LOAD-BEARING gates) in full.
+**Interactive mode:** run every item below, skip nothing.
+
+**Orchestrated mode:** two items are already settled by machine and re-running them by hand is pure duplication - skip `FILTER-EXECUTED` and `GOLD-WITHIN-SURVIVORS` (the `precheck_record` gate owns them, as FILTER-SURVIVORS and GOLD-SUBSET, and it is stricter: it demands the live survivor set match `survivor_ids` exactly). Four more belong to the independent `question-reviewer`, which reports them as LOW findings for the judge to note: `NO-TELEGRAPH`, `NEAR-DUPLICATE`, `GENERIC-FACT`, and `NATURAL-PHRASING` (dropped entirely - pure phrasing taste). Run every remaining item - including the `FILTER-LOAD-BEARING` and `TEXT-LOAD-BEARING` gates, which are exactly the judgement no machine can make - and report each as a fact with PASS/WARN/N-A, no verdict.
 
 ```
 FILTER-EXECUTED       filter_sql ran this session; survivor_ids and true count recorded; count <= 200.
@@ -137,9 +144,9 @@ GENERIC-FACT          Answer requires this corpus, not general knowledge. WARN o
 NEAR-DUPLICATE        Not a near-duplicate of an existing bank question. WARN, naming the colliding id.
 ```
 
-**Verdict:** APPROVE / REVISE / REJECT
+**Verdict (interactive mode only):** APPROVE / REVISE / REJECT
 
-Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions.
+Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions. In orchestrated mode there is no verdict and no `reviewer_override`: you report the checklist as facts, pass `precheck_record`, and return the package - a critic attacks it and a judge decides.
 
 ## On confirmation - append
 

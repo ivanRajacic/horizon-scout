@@ -17,11 +17,15 @@ This skill authors `route=sql` questions at levels L1-L3 only. ADV, vector, hybr
 
 When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
+- **Read `src/eval/bank_brief.md` first.** It is the shared standard the drafter, the critic, and the judge all work from - what the bank is for, what "good" means, the route/level/subtype reference, and the role boundaries. The most useful thing in it for you: a defective question does not produce a wrong answer, it produces a wrong finding in a study.
+- **The precheck gate.** Before you may emit a package, call `precheck_record(<your finished RECORD>)` and get `ok: true`. It re-executes the mechanical claims - gold SQL runs and is non-empty, every `answer_column` is really in the result, the recorded `schema_docs_hash` is the live one. A FAIL is a fact; fix the draft and call again. Include the passing result in your package as the `PRECHECK` section.
+- **You author and verify; you do not grade yourself.** An independent `question-reviewer` attacks the draft afterwards and an independent `question-judge` rules on what it finds. Emit no verdict, argue no case, and record any doubt you still hold in HISTORY rather than suppressing it.
+- The orchestrator runs `python -m src.cli validate-record` on your RECORD the moment you return it, so the JSON must be schema-clean; a validator error comes straight back to you.
 - The candidate block is the subject and the batch order fixes level/subtype - skip every propose-and-wait step, and skip the startup profile calls (`get_corpus_profile(section="sql")` and `frontier`): the candidate block IS your profile slice, and the frontier only matters when choosing a subject. Still call `get_schema_docs()` (record the hash) and `get_bank_questions("sql")`.
 - **Two-tier grounding - the candidate is part proven, part advisory.** Its `evidence` (executed SQL + its result) is proven-by-execution and merge-pass spot-checked: trust and confirm it - start from that SQL and re-execute once as a drift check, rather than re-sampling the value space from scratch. Everything else it asserts - route/level/subtype - is ADVISORY and re-verified in full: recompute level_evidence from the executed gold SQL and recompute the level from it, never from the candidate's recommendation. Reject-at-birth and born-verified-this-pass are unchanged - the confirming re-execution happens in-pass.
 - Use the pre-assigned `question_id`, never "next free".
 - There is no user in the loop: skip the confirmation prompt, never append, never write any file, and skip the `validate-bank` shell step (promotion validates). Instead return the complete entry - every field from the append table - plus evidence and history, in the output contract of `.claude/agents/question-drafter.md`.
-- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate except the pure-judgment polish items the independent `question-reviewer` owns.
+- Run Step 5 as the **orchestrated-mode checklist** (see Step 5): every gate except the items `precheck_record` and `validate-record` already settle, and the pure-judgment polish items the independent `question-reviewer` owns.
 - Everything else applies unchanged, including "reject at birth": a dead candidate is reported as `DRAFT-FAILED`, never worked around by wandering to a new topic. Level disagreements that would normally go to the user go into the returned package instead - as a `DRAFT-FAILED` if the requested cell cannot be met honestly.
 
 Interactive invocations are unaffected: the per-question confirm gate stands.
@@ -34,6 +38,7 @@ All data access goes through the `horizon-draft` MCP server:
 - `get_schema_docs()` - schema_docs.md verbatim plus `{version, content_hash}`.
 - `get_bank_questions(route)` - existing entries for a route: id, text, level, subtype only.
 - `get_corpus_profile(section=None)` - the exploration agent's corpus_profile.md (whole, or one section by key). Query-verified candidate topics plus the `frontier` coverage table. An `{"error": ...}` result means the profile is not built yet - proceed without it.
+- `precheck_record(record)` - re-executes the finished record's mechanical claims (gold SQL runs and is non-empty, `answer_columns` present in the result, gold projects have text, filter survivors still match, `schema_docs_hash` is live) and returns PASS/FAIL/N-A per check. Free to call as often as you like; a FAIL is a result, not an error.
 
 There are no write tools. The append at the end is a confirmation-gated file edit, done by this skill directly.
 
@@ -110,7 +115,9 @@ Written from the executed result, nothing else.
 
 Re-read question, gold SQL, executed result, level_evidence, reference answer. Every item gets an explicit PASS / FAIL / WARN plus one sentence; items marked with a subtype apply only to that subtype, and must be answered N/A for others.
 
-**Interactive mode:** run every item below, skip nothing. **Orchestrated mode:** an independent `question-reviewer` attacks the draft afterward. It owns NO-TELEGRAPH, NEAR-DUPLICATE, and GENERIC-FACT as MINOR flags, and NATURAL-PHRASING is dropped entirely (pure phrasing taste - no one runs it), so skip all four here - run every other item (including all subtype obligations) in full.
+**Interactive mode:** run every item below, skip nothing.
+
+**Orchestrated mode:** three items are already settled by machines and re-running them by hand is pure duplication - skip `EXECUTED-GOLD` and `PINNED-COLUMNS` (the `precheck_record` gate owns them, as GOLD-SQL and ANSWER-COLUMNS) and `SUBTYPE-LEGAL` (the orchestrator's `validate-record` owns it). Four more belong to the independent `question-reviewer`, which reports them as LOW findings for the judge to note: `NO-TELEGRAPH`, `NEAR-DUPLICATE`, `GENERIC-FACT`, and `NATURAL-PHRASING` (dropped entirely - pure phrasing taste). Run every remaining item, including all subtype obligations, in full, and report each as a fact with PASS/WARN/N-A - no verdict.
 
 ```
 EXECUTED-GOLD        Gold SQL executed this session; result recorded; non-empty. FAIL otherwise.
@@ -133,9 +140,9 @@ GENERIC-FACT         Answer requires the database - not answerable from general 
 NEAR-DUPLICATE       Not a near-duplicate of an existing bank question. WARN, naming the colliding id.
 ```
 
-**Verdict:** APPROVE / REVISE / REJECT
+**Verdict (interactive mode only):** APPROVE / REVISE / REJECT
 
-Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions.
+Then wait for the user. "confirm" appends; "confirm anyway" overrides a non-APPROVE verdict (recorded as `reviewer_override: true`); anything else is treated as revision instructions. In orchestrated mode there is no verdict and no `reviewer_override`: you report the checklist as facts, pass `precheck_record`, and return the package - a critic attacks it and a judge decides.
 
 ## On confirmation - append
 
