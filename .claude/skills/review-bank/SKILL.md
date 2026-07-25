@@ -1,10 +1,26 @@
 ---
 name: review-bank
-description: Sweep the entire Horizon Scout M5 bank through the /review-question adversarial reviewer - one question-reviewer subagent per question, max 3 concurrent - and write the collected verdicts and self-contained fix recommendations to a report file the user reviews by hand, approving or rejecting each finding. Writes exactly one file (the report); never touches eval/bank.jsonl.
+description: "STALE (2026-07-25) - do not run before updating: its report format still expects the deleted SOUND/FLAWED/BROKEN verdicts and MAJOR/NOTE severities that the reframed critic no longer emits. Intended behaviour: sweep the entire Horizon Scout M5 bank through the /review-question adversarial reviewer - one question-reviewer subagent per question, max 3 concurrent - and write the collected verdicts and self-contained fix recommendations to a report file the user reviews by hand, approving or rejecting each finding. Writes exactly one file (the report); never touches eval/bank.jsonl."
 argument-hint: [output_path]
 ---
 
 # /review-bank
+
+> **STALE - do not run without fixing this file first (noted 2026-07-25).** The
+> `question-reviewer` node was reframed as a pure critic by the /draft-batch
+> re-architecture: it no longer emits a `VERDICT` line and no longer uses
+> `SOUND` / `FATAL-RECOVERABLE` / `FATAL-DEAD`, nor the older `FLAWED` /
+> `BROKEN` and `MAJOR` / `NOTE` vocabularies this file's report format still
+> references. It now returns typed findings (`class`, `HIGH|MID|LOW`,
+> evidence, advisory fix direction) plus a channel `STATUS` of
+> `REPORTED | SKIPPED | REVIEW-FAILED`. This orchestrator's collection and
+> report format have NOT been updated - `/review-bank` is a separate,
+> post-promotion audit on a separate trigger, and rewriting it was
+> deliberately deferred rather than bundled into the batch change. Bringing it
+> up to date means: tally `STATUS` values instead of verdicts, group detail
+> sections by HIGH/MID instead of FATAL/MAJOR, and decide whether a
+> post-promotion sweep wants a judge in the loop at all (it has no drafter to
+> fix anything, so probably not - the user is the judge there).
 
 Run the adversarial reviewer over every question in `eval/bank.jsonl` and write the results to one report file for manual approve/reject review.
 
