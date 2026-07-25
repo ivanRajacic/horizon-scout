@@ -11,6 +11,12 @@
   python -m src.cli explore [--mode sql|vector|scoped] [-k 10]
   python -m src.cli smoke-router [--eval-file eval/smoke_router.jsonl]
   python -m src.cli validate-bank [--bank eval/bank.jsonl]
+  python -m src.cli validate-record <record.json | ->
+  python -m src.cli gap-report [--bank ...] [--drafts-dir ...] [--plan ...]
+  python -m src.cli next-ids [--sql N] [--vector N] [--hybrid N]
+  python -m src.cli batch-crosscheck <journal.jsonl | draft-bank.jsonl>
+  python -m src.cli write-batch <journal.jsonl> [--output-dir ...]
+                                [--date YYYY-MM-DD] [--suffix -2] [--force]
   python -m src.cli promote-drafts <draft-report.md> [--bank eval/bank.jsonl]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
                                [--model haiku|sonnet]
@@ -449,6 +455,139 @@ def cmd_validate_bank(args):
     print(bank_summary(questions))
 
 
+def cmd_validate_record(args):
+    """Schema-validate ONE drafted record - the /draft-batch slot-close gate.
+
+    Reads one JSON object from a file (or stdin with `-`); prints every
+    violation and exits 1, or prints OK and exits 0."""
+    from src.eval.bank import validate_record
+
+    try:
+        raw = (sys.stdin.read() if args.record == "-"
+               else Path(args.record).read_text(encoding="utf-8"))
+    except OSError as e:
+        print(f"INVALID: cannot read the record ({e})")
+        sys.exit(1)
+    raw = raw.strip()
+    if not raw:
+        print("INVALID: empty input - expected one JSON record")
+        sys.exit(1)
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"INVALID: not valid JSON ({e})")
+        sys.exit(1)
+    where = "record" if args.record == "-" else Path(args.record).name
+    errors = validate_record(obj, where)
+    if errors:
+        print(f"INVALID: {where}")
+        for err in errors:
+            print(f"  {err}")
+        sys.exit(1)
+    qid = obj.get("question_id")
+    print(f"OK: {qid} - {obj.get('expected_route')}/{obj.get('level')}"
+          f"/{obj.get('subtype')} passes the bank schema")
+
+
+def cmd_gap_report(args):
+    from src.eval.batch import BatchError, gap_report
+
+    try:
+        print(gap_report(Path(args.bank), Path(args.drafts_dir),
+                         Path(args.plan)))
+    except BatchError as e:
+        print(f"GAP REPORT FAILED:\n  {e}")
+        sys.exit(1)
+
+
+def cmd_next_ids(args):
+    from src.eval.batch import BatchError, next_ids
+
+    counts = {"sql": args.sql, "vector": args.vector, "hybrid": args.hybrid}
+    if not any(counts.values()):
+        counts = {route: 1 for route in counts}
+        preview = True
+    else:
+        preview = False
+    try:
+        assigned = next_ids(counts, Path(args.bank), Path(args.drafts_dir))
+    except BatchError as e:
+        print(f"ID ASSIGNMENT FAILED:\n  {e}")
+        sys.exit(1)
+    for route, ids in assigned.items():
+        if ids:
+            label = "next free" if preview else f"{len(ids)} assigned"
+            print(f"{route:7s} {label}: {', '.join(ids)}")
+
+
+def _crosscheck_records(path: Path):
+    """Accept either a working journal (accepted slots) or a staged draft
+    jsonl (every line a record)."""
+    from src.eval.batch import BatchError, load_journal, read_records
+
+    lines = read_records(path)
+    if any("kind" in line for line in lines):
+        journal = load_journal(path)
+        return [slot["record"] for slot in journal.slots.values()
+                if slot.get("status") == "ACCEPTED"
+                and isinstance(slot.get("record"), dict)]
+    stray = [i for i, line in enumerate(lines, 1)
+             if not isinstance(line.get("question_id"), str)]
+    if stray:
+        raise BatchError(
+            f"{path.name} line(s) {stray} have no question_id and the file "
+            "carries no `kind` field - this is neither a staged draft jsonl "
+            "nor a typed working journal (a pre-2026-07-25 journal would look "
+            "like this; there is nothing to cross-check in one)")
+    return lines
+
+
+def cmd_batch_crosscheck(args):
+    """Collision + spread flags across a batch's accepted records and the
+    promoted bank. Flags only - never a gate, never a redraft."""
+    from src.eval.batch import BatchError, crosscheck, read_records, render_flags
+
+    try:
+        records = _crosscheck_records(Path(args.source))
+        flags = crosscheck(records, read_records(Path(args.bank)))
+    except BatchError as e:
+        print(f"CROSSCHECK FAILED:\n  {e}")
+        sys.exit(1)
+    print(f"{len(records)} record(s) from {Path(args.source).name} vs "
+          f"{Path(args.bank).name}\n")
+    print(render_flags(flags))
+
+
+def cmd_write_batch(args):
+    """Render the two canonical /draft-batch outputs from the journal."""
+    from src.eval.batch import BatchError, write_batch
+
+    try:
+        res = write_batch(Path(args.journal),
+                          Path(args.output_dir) if args.output_dir else None,
+                          date=args.date, suffix=args.suffix,
+                          bank_path=Path(args.bank), force=args.force)
+    except BatchError as e:
+        print("WRITE REFUSED - nothing written:")
+        for line in str(e).splitlines():
+            print(f"  {line}")
+        sys.exit(1)
+    print(f"draft bank: {res.draft_file}")
+    print(f"report:     {res.report_file}")
+    print(f"accepted ({len(res.accepted)}): "
+          f"{', '.join(res.accepted) if res.accepted else '-'}")
+    print(f"failed ({len(res.failed)}): "
+          f"{', '.join(res.failed) if res.failed else '-'}")
+    print(f"blocked ({len(res.blocked)}): "
+          f"{', '.join(res.blocked) if res.blocked else '-'}")
+    hard = [f for f in res.flags if f.level == "FLAG"]
+    print(f"cross-check flags: {len(hard)} (see the report's Cross-check "
+          "section)")
+    print(f"\nreview the report, tick the boxes, then:\n"
+          f"  ./.venv/Scripts/python.exe -m src.cli promote-drafts "
+          f"{res.report_file}")
+
+
 def cmd_promote_drafts(args):
     """Append the APPROVE-ticked questions of a /draft-batch report to the
     bank. Deterministic: parses the report's decision boxes, validates the
@@ -589,6 +728,54 @@ def main():
                         help="validate a question-bank jsonl (M5 schema)")
     vb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     vb.set_defaults(fn=cmd_validate_bank)
+
+    vr = sub.add_parser("validate-record",
+                        help="schema-validate ONE drafted record (JSON file "
+                             "or '-' for stdin)")
+    vr.add_argument("record")
+    vr.set_defaults(fn=cmd_validate_record)
+
+    gr = sub.add_parser("gap-report",
+                        help="filled / staged / target per bank cell against "
+                             "the plan doc's allocation table")
+    gr.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    gr.add_argument("--drafts-dir", default=str(ROOT / "eval" / "drafts"))
+    gr.add_argument("--plan", default=str(ROOT / "horizon-scout.md"))
+    gr.set_defaults(fn=cmd_gap_report)
+
+    ni = sub.add_parser("next-ids",
+                        help="next free question ids, counting the bank AND "
+                             "every staged draft file")
+    ni.add_argument("--sql", type=int, default=0)
+    ni.add_argument("--vector", type=int, default=0)
+    ni.add_argument("--hybrid", type=int, default=0)
+    ni.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    ni.add_argument("--drafts-dir", default=str(ROOT / "eval" / "drafts"))
+    ni.set_defaults(fn=cmd_next_ids)
+
+    bc = sub.add_parser("batch-crosscheck",
+                        help="near-duplicate / entity / axis collisions "
+                             "across a batch and the bank")
+    bc.add_argument("source", help="working journal or staged draft jsonl")
+    bc.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    bc.set_defaults(fn=cmd_batch_crosscheck)
+
+    wb = sub.add_parser("write-batch",
+                        help="render the staged draft jsonl + review report "
+                             "from a /draft-batch working journal")
+    wb.add_argument("journal")
+    wb.add_argument("--output-dir", default=None,
+                    help="default: the journal's own directory")
+    wb.add_argument("--date", default=None,
+                    help="default: the journal's batch header, else its "
+                         "filename")
+    wb.add_argument("--suffix", default="",
+                    help="paired name suffix, e.g. -2, when today's files "
+                         "already exist")
+    wb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    wb.add_argument("--force", action="store_true",
+                    help="overwrite existing output files")
+    wb.set_defaults(fn=cmd_write_batch)
 
     pd = sub.add_parser("promote-drafts",
                         help="append APPROVE-ticked /draft-batch drafts "

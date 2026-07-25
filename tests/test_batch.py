@@ -1,0 +1,370 @@
+"""/draft-batch's deterministic nodes: allocation parsing, id assignment, the
+gap report, the batch cross-check, and the writer.
+
+The load-bearing test here is the round-trip: a report the writer produced,
+with its boxes ticked, must promote cleanly through `promote-drafts`. The two
+formats are a contract between a generator and a parser, and nothing else
+checks that they still agree.
+"""
+
+import json
+
+import pytest
+
+from src.config import ROOT
+from src.eval.batch import (BatchError, crosscheck, gap_report, load_journal,
+                            next_ids, parse_allocation, write_batch)
+from src.eval.promote import promote
+
+PLAN = """
+# Plan doc
+
+### Allocation (~100 questions, RQ-weighted, not uniform)
+
+| | L1 | L2 | L3 | route total |
+|---|---|---|---|---|
+| SQL | 7 | 11 | 5* | 23 |
+| Vector | 7 | 10 | 7 | 24 |
+| Hybrid | 6 | 10 | 7 | 23 |
+| Ambiguous-route | - spread - | | | 10 |
+| Adversarial (zero-match, false-presup., data-absent) | | | | 14 |
+| Compositional | | | | 3 |
+| **Total** | | | | **~97** |
+
+\\* conditional on the pilot smoke test.
+
+Prose after the table.
+"""
+
+SQL_A = {
+    "question_id": "sql-01", "text": "How many projects were terminated?",
+    "expected_route": "sql", "level": "L1", "subtype": "aggregate",
+    "gold_sql": "SELECT COUNT(*) FROM project WHERE status = 'TERMINATED'",
+    "answer_columns": ["count"],
+    "level_evidence": {"join_count": 0, "non_trivial_where_count": 1,
+                       "has_group_by": False, "has_order_by_limit": False,
+                       "value_note_dependencies": [], "trap_documented": False},
+    "reference_answer": "1,204 projects were terminated.",
+    "schema_docs_hash": "c3435815b331",
+}
+
+HYB_A = {
+    "question_id": "hyb-04", "text": "Among the Swedish graphene projects, "
+                                     "which one targets antibiotic resistance?",
+    "expected_route": "hybrid", "level": "L1", "subtype": "filter-read",
+    "specification": "well-specified", "term_style": "exact-term",
+    "gold_project_ids": [733297],
+    "filter_evidence": {
+        "filter_sql": "SELECT p.id FROM project p JOIN organization o "
+                      "ON o.projectID = p.id WHERE o.country = 'SE'",
+        "survivor_count": 2, "survivor_ids": [733297, 814316],
+        "schema_docs_hash": "f8c001e8cc8f"},
+    "pooling_evidence": {
+        "conditions_run": ["lexical", "dense", "hybrid", "hybrid_rerank"],
+        "k": 10, "pooled_candidate_count": 2, "accepted": [733297],
+        "rejected_count": 1, "index_fingerprint": "be84cbad9182"},
+    "reference_answer": "GRAPHENE-AMR uses graphene oxide coatings.",
+}
+
+
+def plan_file(tmp_path, text=PLAN):
+    p = tmp_path / "plan.md"
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def write_jsonl(path, records):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(r) + "\n" for r in records),
+                    encoding="utf-8")
+    return path
+
+
+# --- allocation table ------------------------------------------------------
+
+def test_parse_allocation_reads_ladder_rows_and_totals(tmp_path):
+    targets = parse_allocation(plan_file(tmp_path))
+    assert targets["sql"] == {"L1": 7, "L2": 11, "L3": 5, "total": 23}
+    assert targets["vector"]["L3"] == 7 and targets["hybrid"]["total"] == 23
+    # Non-ladder rows state a total only; the "- spread -" cell is not a count.
+    assert targets["ambiguous"] == {"total": 10}
+    assert targets["adversarial"] == {"total": 14}
+    assert targets["compositional"] == {"total": 3}
+    assert "total" not in targets          # the **Total** row is not a route
+
+
+def test_parse_allocation_refuses_to_guess(tmp_path):
+    with pytest.raises(BatchError, match="Allocation"):
+        parse_allocation(plan_file(tmp_path, "# Plan\n\nno table here\n"))
+
+
+def test_parse_allocation_against_the_live_plan_doc():
+    # Guards the real table's shape: the gap report reads it LIVE, so a
+    # reformat that silently breaks parsing must fail here, not in a batch.
+    targets = parse_allocation(ROOT / "horizon-scout.md")
+    for route in ("sql", "vector", "hybrid"):
+        assert set(targets[route]) == {"L1", "L2", "L3", "total"}
+        assert all(isinstance(v, int) for v in targets[route].values())
+    assert targets["adversarial"]["total"] > 0
+
+
+# --- id assignment ---------------------------------------------------------
+
+def test_next_ids_counts_bank_and_every_staged_file(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl",
+                       [{**SQL_A, "question_id": "sql-03"},
+                        {**HYB_A, "question_id": "hyb-01"}])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{"question_id": "sql-07"}])
+    write_jsonl(drafts / "draft-bank-2026-07-25.jsonl",
+                [{"question_id": "hyb-04"}, {"question_id": "vec-02"}])
+    assigned = next_ids({"sql": 2, "vector": 1, "hybrid": 1}, bank, drafts)
+    assert assigned == {"sql": ["sql-08", "sql-09"], "vector": ["vec-03"],
+                        "hybrid": ["hyb-05"]}
+
+
+def test_next_ids_starts_at_01_on_an_empty_bank(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    assert next_ids({"sql": 1}, bank, tmp_path / "none")["sql"] == ["sql-01"]
+
+
+def test_next_ids_rejects_a_route_it_cannot_name(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    with pytest.raises(BatchError, match="ambiguous"):
+        next_ids({"ambiguous": 1}, bank, tmp_path)
+
+
+# --- gap report ------------------------------------------------------------
+
+def test_gap_report_counts_filled_staged_and_target(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A, HYB_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{**SQL_A, "question_id": "sql-02"}])
+    text = gap_report(bank, drafts, plan_file(tmp_path))
+    assert "| sql | 1+1/7 |" in text
+    assert "1+0/6" in text            # hybrid L1
+    assert "0+0/24" in text           # vector route total, nothing authored
+    assert "compositional  0+0/3" in text
+    assert "term_style hybrid  exact-term=1+0 paraphrase=0+0" in text
+    assert "next free id per route: sql=sql-03" in text
+
+
+def test_gap_report_ignores_already_promoted_staged_records(tmp_path):
+    # A promoted batch's draft file stays on disk for the record. Counting its
+    # records as "staged" would show a filled cell as half pending.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl", [SQL_A])   # promoted
+    text = gap_report(bank, drafts, plan_file(tmp_path))
+    assert "Staged (unpromoted): 0 record(s)" in text
+    assert "| sql | 1+0/7 |" in text
+
+
+def test_gap_report_refuses_a_half_parsed_bank(tmp_path):
+    bank = tmp_path / "bank.jsonl"
+    bank.write_text('{"question_id": "sql-01"}\nnot json\n', encoding="utf-8")
+    with pytest.raises(BatchError, match="invalid JSON"):
+        gap_report(bank, tmp_path / "none", plan_file(tmp_path))
+
+
+# --- cross-check -----------------------------------------------------------
+
+def kinds(flags, level="FLAG"):
+    return [f.kind for f in flags if f.level == level]
+
+
+def test_crosscheck_flags_a_near_duplicate_within_the_batch():
+    twin = {**SQL_A, "question_id": "sql-02",
+            "text": "How many projects have been terminated?"}
+    flags = crosscheck([SQL_A, twin], [])
+    dupes = [f for f in flags if f.kind == "NEAR-DUPLICATE"]
+    assert len(dupes) == 1
+    assert "sql-01 vs sql-02 (batch)" in dupes[0].detail
+
+
+def test_crosscheck_flags_a_near_duplicate_of_the_promoted_bank():
+    # The critic's own NEAR-DUPLICATE check reads the PROMOTED bank, so this
+    # is the only place a batch-vs-bank collision can surface.
+    banked = {**SQL_A, "question_id": "sql-77"}
+    flags = crosscheck([{**SQL_A, "question_id": "sql-01"}], [banked])
+    assert any("sql-77 (bank)" in f.detail for f in flags
+               if f.kind == "NEAR-DUPLICATE")
+
+
+def test_crosscheck_flags_shared_gold_and_entities_and_axes():
+    other = {**HYB_A, "question_id": "hyb-05",
+             "text": "Which project applied GRAPHENE-AMR coatings in Sweden?",
+             "reference_answer": "GRAPHENE-AMR again."}
+    flags = crosscheck([HYB_A, other], [])
+    assert "GOLD-OVERLAP" in kinds(flags)
+    assert any("GRAPHENE-AMR" in f.detail for f in flags
+               if f.kind == "ENTITY-COLLISION")
+    assert any("country" in f.detail for f in flags
+               if f.kind == "AXIS-COLLISION")
+
+
+def test_crosscheck_is_quiet_on_a_well_spread_batch():
+    flags = crosscheck([SQL_A, HYB_A], [])
+    assert kinds(flags) == []
+    assert "SPREAD" in kinds(flags, level="INFO")
+
+
+# --- the journal and the writer -------------------------------------------
+
+HEADER = {
+    "kind": "batch", "date": "2026-07-25",
+    "order": "2 sql slots (L1 aggregate, L2 join-lookup)",
+    "budgets": {"candidates_per_slot": 3, "passes_budget": 6},
+    "versions": {
+        "corpus_profile": {"version": "cp3", "content_hash": "f33f150ff077"},
+        "schema_docs": {"version": "sd2", "content_hash": "f8c001e8cc8f"},
+        "bank_brief": {"version": "bb1", "content_hash": "aaaabbbbcccc"},
+        "index": {"fingerprint": "be84cbad9182"}},
+}
+
+
+def slot(qid, status, record=None, **extra):
+    line = {"kind": "slot", "question_id": qid, "status": status,
+            "terminal_reason": None,
+            "cell": {"route": "sql", "level": "L1", "subtype": "aggregate",
+                     "term_style": None},
+            "candidates": [{"id": "sql-cand-1", "topic": "terminated status"}],
+            "candidate_index": 0,
+            "budget": {"passes_spent": 1, "passes_budget": 6,
+                       "fix_rounds_this_candidate": 0},
+            "record": record, "evidence": "executed: 1,204 rows",
+            "why_good": "clean-route L1 baseline, one scoreable reading",
+            "checklist": "EXECUTED-GOLD PASS ...", "findings": [],
+            "defect_classes_seen": [], "judge_decisions": [], "history": []}
+    line.update(extra)
+    return line
+
+
+def journal_file(tmp_path, lines, name="draft-batch-journal-2026-07-25.jsonl"):
+    return write_jsonl(tmp_path / name, lines)
+
+
+def test_load_journal_keeps_the_latest_line_per_slot(tmp_path):
+    path = journal_file(tmp_path, [
+        HEADER,
+        slot("sql-01", "DRAFTING"),
+        slot("sql-02", "DRAFTING"),
+        slot("sql-01", "ACCEPTED", record=SQL_A)])
+    journal = load_journal(path)
+    assert journal.order == ["sql-01", "sql-02"]        # first-seen order
+    assert journal.slots["sql-01"]["status"] == "ACCEPTED"
+    assert journal.header["order"].startswith("2 sql slots")
+
+
+def test_load_journal_validates_the_envelope_not_the_record(tmp_path):
+    # A record that the bank validator would reject is FINE mid-run.
+    path = journal_file(tmp_path, [HEADER,
+                                   slot("sql-01", "DRAFTING",
+                                        record={"half": "finished"})])
+    assert load_journal(path).slots["sql-01"]["record"] == {"half": "finished"}
+
+    bad = journal_file(tmp_path, [HEADER, {"kind": "slot", "status": "NOPE"}],
+                       name="bad.jsonl")
+    with pytest.raises(BatchError) as ei:
+        load_journal(bad)
+    assert "question_id" in str(ei.value) and "status" in str(ei.value)
+
+
+def test_load_journal_requires_a_batch_header(tmp_path):
+    path = journal_file(tmp_path, [slot("sql-01", "ACCEPTED", record=SQL_A)],
+                        name="headerless.jsonl")
+    with pytest.raises(BatchError, match="batch header"):
+        load_journal(path)
+
+
+def test_write_batch_stages_accepted_records_and_accounts_for_every_slot(
+        tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    path = journal_file(tmp_path, [
+        HEADER,
+        slot("sql-01", "ACCEPTED", record=SQL_A),
+        slot("sql-02", "FAILED", terminal_reason="cross-candidate stop rule "
+             "(MISSED-GOLD killed both candidates)",
+             history=["candidate 1 abandoned", "candidate 2 abandoned"],
+             findings=[{"round": 1, "class": "MISSED-GOLD", "severity": "HIGH",
+                        "claim": "two projects outside gold satisfy it",
+                        "evidence": "run_sql LIKE sweep, ids 42 and 77",
+                        "ruling": "UPHELD", "ruling_why": "evidence stands"}]),
+        slot("hyb-09", "BLOCKED", terminal_reason="retrieval servers down"),
+    ])
+    res = write_batch(path, bank_path=bank)
+
+    assert res.accepted == ["sql-01"] and res.failed == ["sql-02"]
+    assert res.blocked == ["hyb-09"]
+    staged = [json.loads(l) for l in
+              res.draft_file.read_text(encoding="utf-8").splitlines()]
+    assert staged == [SQL_A]                       # byte-identical record
+    report = res.report_file.read_text(encoding="utf-8")
+    assert res.draft_file.name in report
+    assert "Tally: 1 accepted / 1 failed" in report and "1 blocked" in report
+    assert "cp3 f33f150ff077" in report and "bank_brief: bb1" in report
+    # Every slot accounted for, and only the accepted one gets a decision box.
+    for qid in ("sql-01", "sql-02", "hyb-09"):
+        assert f"| {qid} |" in report
+    assert report.count("Decision: [ ] APPROVE  [ ] REJECT") == 1
+    assert "MISSED-GOLD" in report and "UPHELD" in report
+    assert "cross-candidate stop rule" in report
+
+
+def test_write_batch_refuses_to_overwrite_and_honours_a_suffix(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    path = journal_file(tmp_path, [HEADER,
+                                   slot("sql-01", "ACCEPTED", record=SQL_A)])
+    first = write_batch(path, bank_path=bank)
+    with pytest.raises(BatchError, match="refusing to overwrite"):
+        write_batch(path, bank_path=bank)
+    second = write_batch(path, bank_path=bank, suffix="-2")
+    assert second.draft_file.name.endswith("-2.jsonl")
+    assert second.report_file.name.endswith("-2.md")
+    assert first.draft_file.exists()
+
+
+def test_write_batch_refuses_an_accepted_slot_with_no_evidence(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    path = journal_file(tmp_path, [
+        HEADER, slot("sql-01", "ACCEPTED", record=SQL_A, evidence="")])
+    with pytest.raises(BatchError, match="no evidence"):
+        write_batch(path, bank_path=bank)
+    assert not list(tmp_path.glob("draft-bank-*.jsonl"))
+
+
+def test_write_batch_refuses_a_slot_whose_record_id_disagrees(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    path = journal_file(tmp_path, [
+        HEADER, slot("sql-01", "ACCEPTED",
+                     record={**SQL_A, "question_id": "sql-99"})])
+    with pytest.raises(BatchError, match="must agree"):
+        write_batch(path, bank_path=bank)
+
+
+def test_written_report_round_trips_through_promote_drafts(tmp_path):
+    """The contract test: writer output -> ticked by hand -> promote-drafts."""
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    path = journal_file(tmp_path, [
+        HEADER,
+        slot("sql-01", "ACCEPTED", record=SQL_A),
+        slot("hyb-04", "ACCEPTED", record=HYB_A,
+             cell={"route": "hybrid", "level": "L1",
+                   "subtype": "filter-read", "term_style": "exact-term"}),
+        slot("sql-02", "FAILED", terminal_reason="budget exhausted")])
+    res = write_batch(path, bank_path=bank)
+
+    # The human gate: tick APPROVE on one, REJECT on the other.
+    report = res.report_file.read_text(encoding="utf-8")
+    head, _, tail = report.partition("Decision: [ ] APPROVE  [ ] REJECT")
+    report = (head + "Decision: [x] APPROVE  [ ] REJECT"
+              + tail.replace("Decision: [ ] APPROVE  [ ] REJECT",
+                             "Decision: [ ] APPROVE  [x] REJECT", 1))
+    res.report_file.write_text(report, encoding="utf-8")
+
+    result = promote(res.report_file, bank)
+    assert result.promoted == ["sql-01"] and result.rejected == ["hyb-04"]
+    assert [json.loads(l)["question_id"] for l in
+            bank.read_text(encoding="utf-8").splitlines()] == ["sql-01"]
