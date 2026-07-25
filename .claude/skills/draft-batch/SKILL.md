@@ -11,7 +11,18 @@ Fill user-chosen quota cells of the M5 bank with drafted, adversarially attacked
 **Arguments:** $ARGUMENTS
 Format: `[output_dir]` - optional directory for the working journal and the two canonical outputs. Default: `eval/drafts/`.
 
-**Run this orchestrator session at medium reasoning effort.** Never high. You route, you pick candidates, you relay messages; none of that needs high-effort reasoning, and the pilot's biggest cost leak was a high session effort amplifying re-reads of held evidence.
+**Run this orchestrator session at medium reasoning effort.** Never high. You route, you pick candidates, you relay messages; none of that needs high-effort reasoning, and the pilot's biggest cost leak was a high session effort amplifying re-reads of held evidence. Effort is set at LAUNCH (`claude --effort medium "<prompt>"`); a session cannot change its own.
+
+**Permissions this skill depends on.** Unlike its prompt-only predecessor, this pipeline calls the shell and relays messages, so a batch stalls on a permission prompt without these in `.claude/settings.local.json`. If a run hangs with no MCP activity, check for a prompt before you check anything else:
+
+```
+mcp__horizon-draft                              the seven read-only tools
+Task                                            spawning drafters, critics, judges
+SendMessage                                     relaying to the warm drafter and judge
+Read, Glob, Grep                                skills, brief, staged files
+Edit(eval/drafts/**), Write(eval/drafts/**)     the journal (Write creates it, Edit appends)
+Bash(./.venv/Scripts/python.exe -m src.cli:*)   the five deterministic nodes
+```
 
 ## What this skill is
 
@@ -162,9 +173,11 @@ Per slot, per candidate:
 1. **DRAFTER.** Spawn a `question-drafter`. Prompt: the pre-assigned `question_id`, the cell (route/level/subtype, term_style if topical), the candidate block verbatim plus its bucket map lines, and the instruction to follow the route's drafting skill in orchestrated mode. Journal `DRAFTING`.
    - `DRAFT-FAILED - retrieval servers down` -> the outage path (below). Do NOT consume a candidate.
    - Any other `DRAFT-FAILED` -> journal it into `history`, advance `candidate_index`, go to the next candidate.
-2. **validate-record.** Write the returned RECORD to a scratchpad file and run:
+2. **validate-record.** Pipe the returned RECORD straight in on stdin - no temp file, and a quoted heredoc means a record containing quotes or `$` cannot break the shell:
    ```
-   ./.venv/Scripts/python.exe -m src.cli validate-record <scratchpad>/record.json
+   ./.venv/Scripts/python.exe -m src.cli validate-record - <<'RECORD'
+   {...the drafter's RECORD line, verbatim...}
+   RECORD
    ```
    - Valid -> continue.
    - Invalid -> send the exact validator output to the SAME warm drafter (SendMessage) and re-validate its correction. A schema round costs a pass but is NOT the candidate's fix round - it is a contract failure, not a quality one. One schema round only; still invalid -> abandon the candidate.
