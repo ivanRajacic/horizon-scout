@@ -193,11 +193,58 @@ def _norm_value(v):
     return str(v)
 
 
+def _canon_row(row) -> tuple:
+    """One row, values normalized and sorted - column ORDER never matters, so
+    `SELECT a, b` and `SELECT b, a` compare equal."""
+    return tuple(sorted(repr(_norm_value(v)) for v in row))
+
+
 def results_match(rows_a: list[tuple], rows_b: list[tuple]) -> bool:
     """Unordered row-set comparison, column order-insensitive, numeric
     tolerance 1e-6 (via rounding). Column NAMES are ignored - only values
     count, so aliasing differences never fail a case."""
-    def canon(rows):
-        return sorted(tuple(sorted((repr(_norm_value(v)) for v in row)))
-                      for row in rows)
-    return canon(rows_a) == canon(rows_b)
+    return sorted(_canon_row(r) for r in rows_a) == \
+        sorted(_canon_row(r) for r in rows_b)
+
+
+def results_match_ordered(rows_a: list[tuple], rows_b: list[tuple]) -> bool:
+    """Row-by-row in the order returned, same value normalization.
+
+    For `rank` questions the order IS the answer - "the three largest grants,
+    largest first" is wrong if it comes back smallest first, and results_match
+    would call it right.
+    """
+    if len(rows_a) != len(rows_b):
+        return False
+    return all(_canon_row(a) == _canon_row(b) for a, b in zip(rows_a, rows_b))
+
+
+def rows_match(want: list[tuple], got: list[tuple],
+               comparison: str = "set") -> bool:
+    """Execution-accuracy comparison honouring the bank's `sql_comparison`.
+
+    "set" is BIRD's default and the bank's; "ordered" is required (and enforced
+    by bank.py) exactly when subtype = rank.
+    """
+    if comparison == "ordered":
+        return results_match_ordered(want, got)
+    if comparison != "set":
+        raise ValueError(f"unknown sql_comparison {comparison!r}; "
+                         "expected 'set' or 'ordered'")
+    return results_match(want, got)
+
+
+def columns_match(answer_columns, got_columns) -> bool | None:
+    """Does the generated query return the shape the bank pinned?
+
+    Reported BESIDE pass/fail, never folded into it. A right answer carrying an
+    extra column is a different failure from a wrong answer, and collapsing the
+    two would hide which one happened. Compares COUNT, not names: the bank pins
+    what the answer is made of, while the generator is free to alias, and
+    results_match already ignores names for the same reason.
+
+    None when the bank pinned nothing to check against.
+    """
+    if not answer_columns:
+        return None
+    return len(answer_columns) == len(got_columns or [])

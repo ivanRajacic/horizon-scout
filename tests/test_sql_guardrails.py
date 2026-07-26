@@ -6,7 +6,9 @@ import pytest
 
 from src.config import DB_PATH
 from src.retrieval.sql_path import (SqlGuardrailError, SqlPath, ensure_limit,
-                                    results_match, strip_fences, validate_sql)
+                                    columns_match, results_match,
+                                    results_match_ordered, rows_match,
+                                    strip_fences, validate_sql)
 
 
 class FakeLlm:
@@ -135,3 +137,42 @@ def test_results_match_semantics():
     assert results_match([(1.0000001,)], [(1.0,)])                    # tolerance
     assert not results_match([(1,)], [(2,)])
     assert not results_match([(1,)], [(1,), (1,)])
+
+
+# --- rows_match / columns_match (the bank's sql_comparison + answer_columns) ---
+
+def test_ordered_comparison_cares_about_row_order():
+    """For a rank question the order IS the answer, and results_match - which
+    the smoke eval uses - would call a reversed list correct."""
+    want, got = [(1,), (2,)], [(2,), (1,)]
+    assert results_match(want, got)
+    assert not results_match_ordered(want, got)
+    assert results_match_ordered(want, [(1,), (2,)])
+
+
+def test_ordered_comparison_keeps_the_other_leniencies():
+    # column order and numeric tolerance still forgiven, row order is not
+    assert results_match_ordered([("a", 1)], [(1, "a")])
+    assert results_match_ordered([(1.0000001,)], [(1.0,)])
+    assert not results_match_ordered([(1,)], [(1,), (1,)])   # length differs
+
+
+def test_rows_match_dispatches_on_the_banks_comparison():
+    want, got = [(1,), (2,)], [(2,), (1,)]
+    assert rows_match(want, got, "set")
+    assert not rows_match(want, got, "ordered")
+    assert rows_match(want, got)                             # default is set
+
+
+def test_rows_match_rejects_an_unknown_comparison():
+    with pytest.raises(ValueError, match="unknown sql_comparison"):
+        rows_match([(1,)], [(1,)], "vibes")
+
+
+def test_columns_match_counts_not_names():
+    # the generator may alias freely; the bank pins what the answer is made of
+    assert columns_match(["count"], ["n"]) is True
+    assert columns_match(["a", "b"], ["x", "y"]) is True
+    assert columns_match(["count"], ["n", "spare"]) is False
+    assert columns_match(None, ["n"]) is None                # nothing pinned
+    assert columns_match([], ["n"]) is None
