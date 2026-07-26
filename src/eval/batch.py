@@ -316,11 +316,21 @@ def _jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b)
 
 
-def _entities(record: dict) -> set[str]:
-    blob = " ".join(str(record.get(k) or "")
-                    for k in ("text", "reference_answer"))
-    return {t for t in _ACRONYM_RE.findall(blob)
+def entities_in(blob: str) -> set[str]:
+    """Acronym-shaped names, minus the corpus-wide furniture."""
+    return {t for t in _ACRONYM_RE.findall(blob or "")
             if t not in _GENERIC_ACRONYMS}
+
+
+def _entities(record: dict) -> set[str]:
+    return entities_in(" ".join(str(record.get(k) or "")
+                                for k in ("text", "reference_answer")))
+
+
+# Public aliases. src/eval/explore.py reuses these for the explorer's width and
+# near-duplicate checks, so "too similar" and "a named entity" mean the same
+# thing at both ends of the pipeline instead of drifting apart in two copies.
+words, trigrams, jaccard = _words, _trigrams, _jaccard
 
 
 def _sql_of(record: dict) -> str:
