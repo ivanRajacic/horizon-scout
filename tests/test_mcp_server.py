@@ -13,8 +13,8 @@ from src.config import CORPUS_PROFILE_VERSION, SCHEMA_DOCS_VERSION
 from src.eval import mcp_server
 from src.eval.mcp_server import (ServerConfig, get_bank_questions,
                                  get_corpus_profile, get_project_text,
-                                 get_schema_docs, precheck_record, run_sql,
-                                 search_corpus)
+                                 get_schema_docs, precheck_candidate,
+                                 precheck_record, run_sql, search_corpus)
 from src.llm import fingerprint
 from src.retrieval.base import SearchResult
 
@@ -68,6 +68,15 @@ def server(tmp_path, monkeypatch):
         "INSERT INTO report_text VALUES "
         "(1, 'Alpha report', 'Alpha teaser', 'Alpha summary', "
         "'Alpha work', 'Alpha results')")
+    # precheck_candidate places a map entry's read projects in their bucket.
+    con.execute(
+        "CREATE TABLE euroscivoc (projectID BIGINT, euroSciVocPath VARCHAR, "
+        "euroSciVocTitle VARCHAR)")
+    con.execute(
+        "INSERT INTO euroscivoc VALUES "
+        "(1, 'natural sciences/biological sciences/ecology', 'ecology'), "
+        "(2, 'natural sciences/biological sciences/genetics', 'genetics'), "
+        "(3, 'humanities/arts/music', 'music')")
     con.close()
     docs = tmp_path / "schema_docs.md"
     docs.write_text(DOCS_TEXT, encoding="utf-8")
@@ -582,6 +591,104 @@ def test_precheck_is_logged(server):
             if e["tool"] == "precheck_record"] == [
         ("precheck_record", True), ("precheck_record", False),
         ("precheck_record", False)]
+
+
+# --- precheck_candidate: the explorer's deterministic self-gate -----------
+
+BIO = "natural sciences / biological sciences"
+
+
+def candidate(**overrides):
+    block = {
+        "id": "vector-07",
+        "topic": "Two projects reading DNA out of field samples.",
+        "recommend": "route=vector level=L2 subtype=comparison",
+        "bucket": BIO,
+        "satisfying_count": 2,
+        "evidence": [{"sql": "SELECT COUNT(*) AS n FROM project WHERE id < 3",
+                      "key_result": "2 projects"}],
+        "axes": "branch=biological-sciences satisfying=2",
+        "why": "Two members, distinct methods."}
+    block.update(overrides)
+    return block
+
+
+def map_entry(**overrides):
+    entry = {
+        "bucket": BIO,
+        "about": "Two fellowships on lake fungi and on genome assembly, both "
+                 "field-collection work rather than theory.",
+        "texture": "Report text present for one of the two.",
+        "read": [1, 2],
+        "evidence": {"sql": "SELECT COUNT(*) AS n FROM project WHERE id < 3",
+                     "key_result": "2 projects"}}
+    entry.update(overrides)
+    return entry
+
+
+def test_precheck_candidate_passes_a_clean_block(server):
+    result = precheck_candidate(candidate(), bucket=BIO)
+    assert result["ok"] and result["failures"] == []
+    assert status_of(result, "LEVEL vector-07") == "PASS"
+
+
+def test_precheck_candidate_accepts_a_json_string(server):
+    assert precheck_candidate(json.dumps(candidate()))["ok"]
+    assert "error" in precheck_candidate("{not json")
+    assert "error" in precheck_candidate(["nope"])
+
+
+def test_precheck_candidate_catches_a_number_that_does_not_reproduce(server):
+    result = precheck_candidate(candidate(evidence=[{
+        "sql": "SELECT COUNT(*) AS n FROM project WHERE id < 3",
+        "key_result": "11 projects"}]))
+    assert not result["ok"]
+    assert "11" in status_detail(result, "EVIDENCE vector-07")
+
+
+def test_precheck_candidate_catches_a_level_that_contradicts_its_count(server):
+    result = precheck_candidate(candidate(satisfying_count=7))
+    assert result["failures"] == ["LEVEL vector-07"]
+    assert "L2" in status_detail(result, "LEVEL vector-07")
+
+
+def test_precheck_candidate_catches_a_survivor_count_outside_its_window(server):
+    """The hyb-02 birth-failure, refused before the candidate is emitted."""
+    result = precheck_candidate(candidate(
+        id="hybrid-11",
+        recommend="route=hybrid level=L1 subtype=filter-read",
+        survivor_count=40))
+    assert "WINDOW hybrid-11" in result["failures"]
+    assert "2-10" in status_detail(result, "WINDOW hybrid-11")
+
+
+def test_precheck_candidate_catches_a_stray_bucket(server):
+    result = precheck_candidate(candidate(), bucket="humanities / arts")
+    assert "SLICE vector-07" in result["failures"]
+
+
+def test_precheck_candidate_checks_a_map_entry(server):
+    assert precheck_candidate(map_entry(), bucket=BIO)["ok"]
+
+    strayed = precheck_candidate(map_entry(read=[1, 3]), bucket=BIO)
+    assert "MAP-MEMBER" in strayed["failures"]
+
+    echo = precheck_candidate(
+        map_entry(about="Natural sciences: biological sciences.",
+                  texture="Biological sciences, naturally."), bucket=BIO)
+    assert "MAP-ORIGINAL" in echo["failures"]
+
+    thin = precheck_candidate(map_entry(read=[1]), bucket=BIO)
+    assert "MAP-READ" in thin["failures"]
+
+
+def test_precheck_candidate_is_logged(server):
+    precheck_candidate(candidate())
+    precheck_candidate(candidate(satisfying_count=7))
+    lines = [json.loads(l) for l in
+             server.log_path.read_text(encoding="utf-8").splitlines()]
+    assert [(e["tool"], e["ok"]) for e in lines] == [
+        ("precheck_candidate", True), ("precheck_candidate", False)]
 
 
 def test_new_tools_are_logged(fakes, server):

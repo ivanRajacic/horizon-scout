@@ -1,20 +1,26 @@
 """Read-only MCP server for question-bank drafting (M5).
 
-Exposes exactly seven tools to the drafting agents (/draft-sql-question, the
+Exposes exactly eight tools to the drafting agents (/draft-sql-question, the
 vector/hybrid skills) and the exploration agent (/explore-corpus): run_sql,
 get_schema_docs, get_bank_questions, search_corpus, get_project_text,
-get_corpus_profile, precheck_record. Deliberately minimal - the agent must be
-able to ground questions in real data, verify gold labels by execution (SQL
-routes) or pooled retrieval (vector/hybrid routes), and re-check the finished
-record's factual claims before emitting it, and nothing more. No write tools:
+get_corpus_profile, precheck_record, precheck_candidate. Deliberately minimal -
+the agent must be able to ground questions in real data, verify gold labels by
+execution (SQL routes) or pooled retrieval (vector/hybrid routes), and re-check
+its own factual claims before emitting them, and nothing more. No write tools:
 bank appends are confirmation-gated in the skill layer, outside the MCP.
 
-precheck_record is the drafter's deterministic self-gate: everything a drafted
-record asserts that a machine can settle by re-execution (gold SQL runs and is
-non-empty, gold projects have text, filter survivors still match, schema_docs
-hash is the live one). It lives here rather than in the CLI because it runs
-inside the drafter's own loop, and the drafter has no shell. Schema validation
-is deliberately elsewhere (`python -m src.cli validate-record`).
+The two prechecks are the deterministic self-gates, one per authoring node.
+precheck_record is the drafter's: everything a drafted record asserts that a
+machine can settle by re-execution (gold SQL runs and is non-empty, gold
+projects have text, filter survivors still match, schema_docs hash is the live
+one). precheck_candidate is the explorer's, one rung upstream: an exploration
+candidate's evidence re-executes to the numbers it recorded, its level agrees
+with its own count, its survivor count is inside the subtype's drafting window,
+and a map entry was written from projects that exist and were read. Both live
+here rather than in the CLI because they run inside an agent's own loop, and
+those agents have no shell. Schema validation is deliberately elsewhere
+(`python -m src.cli validate-record`), as is close-out verification of a whole
+exploration journal (`python -m src.cli verify-evidence`, the same code).
 
 search_corpus runs the real retrieval stack (lexical | dense | hybrid |
 hybrid_rerank, or "pooled" = all four) and returns PROJECT-level rankings -
@@ -58,6 +64,8 @@ from src.config import (BANK_PATH, CORPUS_PROFILE_PATH,
                         INDEX_META_PATH, SCHEMA_DOCS_PATH,
                         SCHEMA_DOCS_VERSION, SQL_TIMEOUT_S)
 from src.eval.bank import ROUTES
+from src.eval.explore import (profile_sections as _profile_sections,
+                              verify_map_entry, verify_payload)
 from src.llm import fingerprint
 from src.retrieval.sql_path import SqlGuardrailError, validate_sql
 
@@ -245,26 +253,6 @@ def get_bank_questions(route: str) -> dict:
         })
     _log("get_bank_questions", route=route, ok=True, n=len(questions))
     return {"route": route, "questions": questions}
-
-
-def _profile_sections(text: str) -> dict[str, str]:
-    """Split corpus_profile.md on H2 headings. Section key = the heading
-    text kebab-cased ("## Coverage ledger" -> "coverage-ledger"), so the
-    file stays human-readable while keys stay stable to call."""
-    sections: dict[str, str] = {}
-    key: str | None = None
-    buf: list[str] = []
-    for line in text.splitlines(keepends=True):
-        if line.startswith("## "):
-            if key is not None:
-                sections[key] = "".join(buf)
-            key = "-".join(line[3:].strip().lower().split())
-            buf = []
-        if key is not None:
-            buf.append(line)
-    if key is not None:
-        sections[key] = "".join(buf)
-    return sections
 
 
 def get_corpus_profile(section: str | None = None) -> dict:
@@ -868,6 +856,68 @@ def precheck_record(record: dict | str) -> dict:
     return result
 
 
+def precheck_candidate(candidate: dict | str,
+                       bucket: str | None = None) -> dict:
+    """Re-execute one exploration candidate's claims. Read-only.
+
+    The corpus-explorer's deterministic self-gate, and the exact same code the
+    close-out `verify-evidence` runs over the whole journal - so a candidate
+    that passes here cannot fail there. Checks, each PASS | FAIL | N/A:
+
+      EVIDENCE     every evidence.sql executes, is non-empty (unless
+                   expect_empty), and every number in key_result reproduces
+      LEVEL        satisfying_count agrees with the recommended level
+                   (level is DEFINED by the count, so they cannot disagree)
+      WINDOW       survivor_count is inside the recommended hybrid subtype's
+                   drafting window and under the 200 enumerability ceiling
+      SLICE        the candidate's bucket is the one this slice was assigned
+      MAP-*        map entries only: `read:` ids exist, carry text, belong to
+                   the bucket, and the prose is not the taxonomy label back
+
+    Pass a candidate block or a map entry; `bucket` is the slice's assigned
+    bucket, which turns SLICE and the map checks on. A failing check is a
+    RESULT, not an error - the explorer reads it and fixes or drops the
+    candidate. Malformed input comes back as {"error": ...}, matching run_sql.
+
+    This is a gate against BIRTH-FAILURES: `hyb-02` (musicology x MSCA-IF)
+    burned a full drafter pass on a combo whose numbers already said it was
+    unviable. Nothing upstream was checking them.
+    """
+    def fail(error: str) -> dict:
+        _log("precheck_candidate", ok=False, error=error)
+        return {"error": error}
+
+    if isinstance(candidate, str):
+        try:
+            candidate = json.loads(candidate)
+        except json.JSONDecodeError as e:
+            return fail(f"candidate is not valid JSON ({e})")
+    if not isinstance(candidate, dict):
+        return fail("candidate must be a JSON object (the candidate block or "
+                    "map entry)")
+
+    label = str(candidate.get("id") or candidate.get("bucket") or "candidate")
+    buckets = [bucket] if isinstance(bucket, str) and bucket.strip() else []
+    is_map_entry = "about" in candidate or "read" in candidate
+
+    con = _connect()
+    try:
+        checks = verify_payload(con, "candidate", label, candidate, buckets)
+        if is_map_entry:
+            checks += verify_map_entry(con, "candidate", candidate, buckets)
+    finally:
+        con.close()
+
+    rendered = [{"name": c.name, "status": c.status, "detail": c.detail}
+                for c in checks]
+    failures = [c["name"] for c in rendered if c["status"] == "FAIL"]
+    result = {"candidate": label, "ok": not failures, "checks": rendered,
+              "failures": failures}
+    _log("precheck_candidate", candidate=label, ok=not failures,
+         failures=failures)
+    return result
+
+
 def main() -> None:
     # SDK import stays local so tests of the tool functions above never
     # depend on it.
@@ -876,7 +926,7 @@ def main() -> None:
     server = FastMCP("horizon-scout-draft")
     for fn in (run_sql, get_schema_docs, get_bank_questions,
                search_corpus, get_project_text, get_corpus_profile,
-               precheck_record):
+               precheck_record, precheck_candidate):
         server.tool()(fn)
     server.run()  # stdio
 
