@@ -83,8 +83,52 @@ Two properties beyond bookkeeping: **slice assignment now comes from the frontie
 - **The concurrency cap of 4.** A serialization knob on one DuckDB connection, not a token knob.
 - **The merge spot-check** (2 re-executions per section, ~220 tok each). The only correctness net on the artifact; kept.
 
+## Decisions taken (2026-07-25) - deterministic nodes + typed state, IMPLEMENTED
+
+Second pass, opened after the same lens that produced the `/draft-batch` four-node re-architecture was turned on the explorer. The cp3 pass fixed **efficiency**; it did not touch **who does what**, so all three defects that re-architecture diagnosed on the drafting side were still here:
+
+1. **Expensive nodes doing work that has a right answer.** The Opus orchestrator recomputed the frontier, built the orientation block, assigned ids, dedupped, checked the width rule, sampled two queries per section as its only correctness net, counted telemetry out of a log file, and hand-wrote the insertions.
+2. **Untyped state.** Subagents returned markdown; the orchestrator held every block through merge, spot-check *and* write, then re-emitted it - the context-bloat leak, and the failure mode the 2026 orchestrator-worker literature names (payload re-reads, ~15x a chat turn).
+3. **The node that authors also certifies.** Nothing independent checked a candidate. Downstream the drafter paid: `hyb-02` burned a full grounding pass on a combo that was never viable - **P5**, open since the drafting audit.
+
+**Five deterministic nodes, one typed journal, one topology change, one shared standard, and exactly one new model node.** Deliberately NOT added: a per-slice adversarial critic. It would roughly double explorer spend to duplicate checks code now performs exhaustively for free, and the explorer's output is advisory by contract (V5 has the drafter re-verify every advisory claim). The over-splitting anti-pattern applies squarely.
+
+| Node | Where | Does |
+|---|---|---|
+| `frontier-report` | `src/cli.py` + `src/eval/explore.py` | the whole old startup in one call: 46-bucket frontier recomputed (status / seeds / bank, traced `gold_project_ids` -> `euroscivoc`), slice partition largest-first, orientation block, next free ids, and the seed standard |
+| `precheck_candidate` | tool on `src/eval/mcp_server.py` | the explorer's in-loop self-gate - the same code close-out runs, so nothing can pass one and fail the other |
+| `verify-evidence` | `src/cli.py` | re-executes EVERY claim in the journal and checks every recorded number reproduces |
+| `explore-crosscheck` | `src/cli.py` | width, entity spread, near-duplicates vs run and profile, supply vs targets |
+| `write-profile` | `src/cli.py` | journal -> insertions, frontier update, both version labels, telemetry line from `draft_mcp.jsonl` |
+
+**`verify-evidence` is the capability win.** The old net was "re-execute at least two embedded queries per produced section", performed by the most expensive node at a sampling rate that would miss most defects. Every claim already carried its SQL and its key result by contract, which made the whole set machine-checkable - so it is now all checked, in a subprocess, at zero model cost. It also settles the map's own failure mode: entries carry a `read:` line of the project ids the `about:` was written from, and the checker confirms they exist, carry text and sit in the bucket, and flags an `about:` that is mostly the bucket label back. The honour rule became a gate.
+
+**Typed journal** (`eval/exploration/journal-<date>.jsonl`), same discipline as the batch journal - envelope always valid, payload opaque, latest line per `slice_id` wins. `evidence` is `{sql, key_result}` (plus `expect_empty` when the absence IS the claim), and candidates carry `satisfying_count` / `survivor_count`: those two numbers are what let a level that contradicts its own count, or a survivor set outside its subtype's drafting window, fail before a drafter is ever spawned. **That closes P5.**
+
+**Topology:** waves -> sliding window (dispatch on completion, 4 still in flight - the cap is a DuckDB-connection knob, not a token knob), with per-slice close-out. That delivers for the explorer the incremental checkpointing still deferred on the drafting side: a killed run keeps every verified slice.
+
+**Shared standard:** `bank_brief.md` gained section 7 (Seeds) - `BANK_BRIEF_VERSION` `bb1` -> `bb2` - and `frontier-report` pastes it into every spawn prompt. The explorer decides which seeds the drafter, critic and judge ever see, and had never read the standard they are held to.
+
+**One new model node:** `explore-critic` (opus/low, `.claude/agents/explore-critic.md`), once per run, reading only the journal's typed summaries - never payloads. It answers what no deterministic node can: what is *missing* - a region unread, a modality not run, a thin axis, an unserved cell. It authors `## Coverage notes`, reports, and has no gate and no re-spawn power. ~2-3k tokens, which the write phase alone more than pays for.
+
+**Orchestrator effort medium -> low.** With partition, merge and write in code, what remains is parse, spawn, relay, present.
+
+### Found by running it, not by reading it
+
+- **The frontier was wrong at cp3: `mined 18/46` should have been 19.** `vec-03`'s gold project has no euroSciVoc row, so it sits in the `(unclassified)` bucket; the hand-tracing missed it. The recompute is now the authority and the hand-maintained column is gone.
+- **A `GROUP BY fundingScheme` reports 57 values where schema_docs says 56** - the NULL row reads as a scheme. The orientation block now excludes and counts it separately, because a value count that disagrees with the schema docs is exactly what a subagent would waste a turn re-deriving.
+- **Rehearsing `write-profile` into a scratch copy bumped the REAL `CORPUS_PROFILE_VERSION`.** The label describes the canonical profile, so the writer now refuses to move it when writing anywhere else. Caught by doing it.
+- **The cross-check saw this run's own insertions**, so every new candidate was a near-duplicate of itself. Flags are now computed against the profile as it stood before insertion.
+- **Verification fetched only 201 rows**, so a claim quoting a larger row count would have failed wrongly. Raised to 5,000 with an explicit truncation rule.
+
+All five are regression-tested.
+
+**Files:** `src/eval/explore.py` (new), `tests/test_explore.py` (new, 51 tests), `.claude/agents/explore-critic.md` (new), `src/cli.py` (4 subcommands), `src/eval/mcp_server.py` + `tests/test_mcp_server.py` (`precheck_candidate`; its private `_profile_sections` deleted in favour of the one in `explore.py`, so the splitter the MCP serves and the one the writer inserts by are one parser), `src/eval/batch.py` (`entities_in` extracted + public lexical aliases, so "too similar" means the same thing at both ends), `src/eval/bank_brief.md` + `src/config.py`, `.claude/skills/explore-corpus/SKILL.md`, `.claude/agents/corpus-explorer.md`, `src/retrieval/corpus_profile.md` (format only - `read:` and the typed evidence shape; no existing content rewritten).
+
+**Not run:** a live `/explore-corpus`. `pytest` = **283 passed, 6 errors** - the 6 are `tests/test_lexical.py` (session fixture needs a read-write DuckDB handle, blocked by another session's MCP server holding a cached `LexicalRetriever` connection); confirmed not a regression by re-testing with this change stashed out. 289 tests total; re-run when the file is free. **The remaining work is tracked in `working-plan.md` optimization-track item 7** - that is the resume point.
+
 ## Next actions
 
-- [ ] Run a scoped `/explore-corpus` (e.g. `map=6`) and measure it against the baseline table above, using the new telemetry line as the record. Confirm: no orientation re-derivation, no leading-slash zero-row queries in `draft_mcp.jsonl`, frontier counter advances, map entries carry real read-from-text `about:` lines.
+- [ ] Run `/explore-corpus map=6` - the first run of the new design, and the new baseline. Confirm: no orientation re-derivation in `draft_mcp.jsonl`, frontier advances `mapped 0/46 -> 6/46`, every map entry carries real `read:` ids, `## Coverage notes` written by the critic, telemetry line present, and a deliberate mid-run kill leaves completed slices intact in the journal.
 - [ ] Decide whether `## Distributions` should be filled in the same run (it serves Study 0.5 and would make the orientation block free thereafter).
-- [ ] Still deferred from the drafting pass: **P2** incremental checkpointing in `/draft-batch`.
+- [ ] Still deferred from the drafting pass: **P2** incremental checkpointing in `/draft-batch` - now demonstrated on the explorer side, so the pattern to copy exists.
