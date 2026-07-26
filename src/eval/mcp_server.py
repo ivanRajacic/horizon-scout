@@ -64,8 +64,10 @@ from src.config import (BANK_PATH, CORPUS_PROFILE_PATH,
                         CORPUS_PROFILE_VERSION, DB_PATH, DRAFT_MCP_LOG_PATH,
                         INDEX_META_PATH, SCHEMA_DOCS_PATH,
                         SCHEMA_DOCS_VERSION, SQL_TIMEOUT_S)
-from src.eval.bank import ROUTES
-from src.eval.explore import (profile_sections as _profile_sections,
+from src.eval.bank import HYBRID_SUBTYPE_GOLD_BOUNDS, ROUTES
+from src.eval.explore import (LEVEL_WINDOWS, SURVIVOR_CEILING,
+                              SURVIVOR_WINDOWS,
+                              profile_sections as _profile_sections,
                               verify_map_entry, verify_payload)
 from src.llm import fingerprint
 from src.retrieval.sql_path import SqlGuardrailError, validate_sql
@@ -366,7 +368,8 @@ def _first_k_projects(hits, k: int) -> list:
 @traced
 def search_corpus(query: str, condition: str = "pooled",
                   k: int = SEARCH_K_DEFAULT,
-                  scope_project_ids: list[int] | None = None) -> dict:
+                  scope_project_ids: list[int] | None = None,
+                  snippet_chars: int | None = None) -> dict:
     """Run retrieval over the chunk corpus, returning PROJECT-level rankings.
 
     condition is one of lexical|dense|hybrid|hybrid_rerank, or "pooled"
@@ -374,9 +377,17 @@ def search_corpus(query: str, condition: str = "pooled",
     gold_project_ids ("label the union of all retrieval conditions' top-k").
     k (capped at 50) counts distinct projects per condition. Each project
     carries its per-condition ranks (null = outside that condition's top-k)
-    and the full text of its best-ranked chunk. scope_project_ids restricts
+    and the text of its best-ranked chunk. scope_project_ids restricts
     the search to those projects (hybrid-route authoring). Results include
     index_meta so authored questions can record the index identity.
+
+    snippet_chars (optional) caps each best_chunk's text. A full chunk
+    averages ~1,437 chars and rankings rarely need it: pass 0 for a liveness
+    probe (ranks only, no text at all), ~400 for a discrimination sweep over
+    rankings, ~600 for triage where borderline candidates get a full
+    get_project_text read anyway. Omit it only when you will actually read
+    the chunks. `truncated` reports what was cut, in get_project_text's
+    shape. Omitted = full text, unchanged behaviour.
 
     Failures - embed/rerank server down, missing FTS or FAISS index - come
     back as {"error": ...}, never a tool failure. In pooled mode ANY
@@ -403,6 +414,10 @@ def search_corpus(query: str, condition: str = "pooled",
             return fail(f"scope_project_ids exceeds the {SCOPE_CEILING}-id "
                         f"ceiling ({len(scope_project_ids)} given) - tighten "
                         "the filter; survivor sets must stay enumerable")
+    if snippet_chars is not None and (isinstance(snippet_chars, bool)
+                                      or not isinstance(snippet_chars, int)
+                                      or snippet_chars < 0):
+        return fail("snippet_chars must be a non-negative integer when given")
     k = max(1, min(int(k), SEARCH_K_CEILING))
     try:
         index_meta = _index_meta()
@@ -447,14 +462,42 @@ def search_corpus(query: str, condition: str = "pooled",
         -sum(r is not None for r in p["ranks"].values()),
         p["project_id"]))
     counts = {c: len(per_condition[c]) for c in conditions}
+
+    # snippet_chars=None keeps the historical output byte-identical (no
+    # `truncated` key at all); 0 drops the text key entirely; N truncates.
+    truncated = None
+    if snippet_chars is not None:
+        cut = chunks_cut = 0
+        for entry in ordered:
+            chunk = entry["best_chunk"]
+            text = chunk.get("text")
+            if not isinstance(text, str):
+                continue
+            if snippet_chars == 0:
+                cut += len(text)
+                chunks_cut += 1
+                del chunk["text"]
+            elif len(text) > snippet_chars:
+                cut += len(text) - snippet_chars
+                chunks_cut += 1
+                chunk["text"] = text[:snippet_chars]
+        if chunks_cut:
+            truncated = {"snippet_chars": snippet_chars,
+                         "chars_dropped": cut,
+                         "chunks_truncated": chunks_cut}
+
     _log("search_corpus", query=query, condition=condition, k=k, ok=True,
          scope_size=len(scope) if scope is not None else None,
+         snippet_chars=snippet_chars,
          per_condition_project_counts=counts, pooled_count=len(ordered))
-    return {"query": query, "condition": condition, "k": k,
-            "scope_size": len(scope) if scope is not None else None,
-            "index_meta": index_meta,
-            "per_condition_project_counts": counts,
-            "projects": ordered}
+    result = {"query": query, "condition": condition, "k": k,
+              "scope_size": len(scope) if scope is not None else None,
+              "index_meta": index_meta,
+              "per_condition_project_counts": counts,
+              "projects": ordered}
+    if snippet_chars is not None:
+        result["truncated"] = truncated
+    return result
 
 
 def _waterfill_cap(lengths: list[int], budget: int) -> int:
@@ -612,9 +655,9 @@ def get_project_text(project_ids: list[int],
 # construction. Schema validation is deliberately NOT here - that is
 # `python -m src.cli validate-record`, run by the orchestrator at slot close.
 
-# The hybrid skill's hard authoring limit: a survivor set that cannot be
-# enumerated cannot be adjudicated.
-SURVIVOR_CEILING = 200
+# The survivor ceiling (a set that cannot be enumerated cannot be
+# adjudicated) is SURVIVOR_CEILING, imported from src.eval.explore so the
+# drafter's gate and the explorer's gate can never disagree on the number.
 # Accepted spellings of the project-id column in a filter_sql result; the
 # first matching column wins, else column 0.
 _ID_COLUMN_NAMES = ("id", "project_id", "projectid")
@@ -653,10 +696,18 @@ def precheck_record(record: dict | str) -> dict:
       GOLD-TEXT        every gold_project_id exists and has stored text
       FILTER-SURVIVORS filter_sql re-executes to exactly the recorded
                        survivor_ids, and the set is enumerable (<= 200)
+      SURVIVOR-WINDOW  the LIVE survivor count sits inside the hybrid
+                       subtype's drafting window (WARN, never FAIL: the
+                       windows are guidance with a tilde, not law - but a
+                       count outside them is worth the critic's and the
+                       judge's attention)
       GOLD-SUBSET      gold_project_ids is a subset of the live survivors
+      GOLD-BOUNDS      |gold_project_ids| against the route's bound - the
+                       hybrid subtype's gold bound, or the vector level
+                       window (vector level is DEFINED by the count)
       SCHEMA-DOCS      recorded schema_docs hashes match the live document
 
-    `ok` is true iff nothing FAILed. A drafter must not emit a package until
+    `ok` is true iff nothing FAILed (a WARN never gates). A drafter must not emit a package until
     it does. Malformed input comes back as {"error": ...}, matching run_sql's
     contract; a failing check is a RESULT, not an error - the whole point is
     for the drafter to read it and fix the draft.
@@ -833,6 +884,29 @@ def precheck_record(record: dict | str) -> dict:
                               f"{len(live_survivors)} survivor(s), identical "
                               "to survivor_ids")
 
+        # --- SURVIVOR-WINDOW (WARN, never FAIL - the skill writes the
+        # windows with a tilde, so a count outside one is a flag for the
+        # critic and judge, not a forbidden state) ---
+        subtype = record.get("subtype")
+        if live_survivors is None:
+            check("SURVIVOR-WINDOW", "N/A",
+                  "no live survivor set to measure")
+        elif subtype not in SURVIVOR_WINDOWS:
+            check("SURVIVOR-WINDOW", "N/A",
+                  f"subtype {subtype!r} has no survivor window")
+        else:
+            low, high = SURVIVOR_WINDOWS[subtype]
+            n_live = len(live_survivors)
+            if low <= n_live <= high:
+                check("SURVIVOR-WINDOW", "PASS",
+                      f"{n_live} live survivor(s), inside {subtype}'s "
+                      f"{low}-{high} window")
+            else:
+                check("SURVIVOR-WINDOW", "WARN",
+                      f"{n_live} live survivor(s) but {subtype} drafts at "
+                      f"{low}-{high} - not a gate, but the cell may no "
+                      "longer fit its own filter; say why it still does")
+
         if live_survivors is None:
             check("GOLD-SUBSET", "N/A",
                   "no live survivor set to compare gold against")
@@ -847,6 +921,47 @@ def precheck_record(record: dict | str) -> dict:
             else:
                 check("GOLD-SUBSET", "PASS",
                       f"all {len(gold_ids)} gold id(s) are survivors")
+
+        # --- GOLD-BOUNDS ---
+        # Hybrid bounds hang off the SUBTYPE (bank.py's rule: filter-compare
+        # is L3 with |gold| in [2,4], so a level-based bound would fail the
+        # live hyb-03). The vector LEVEL_WINDOWS apply to vector ONLY, where
+        # level is DEFINED by |gold_project_ids|. validate-record enforces
+        # the same rule at slot close; checking it here moves the failure
+        # inside the drafter's own loop, where it is cheap.
+        gold_countable = (isinstance(gold_ids, list) and gold_ids
+                          and not any(isinstance(i, bool)
+                                      or not isinstance(i, int)
+                                      for i in gold_ids))
+        if not gold_countable:
+            check("GOLD-BOUNDS", "N/A", "no gold_project_ids to bound")
+        elif hybrid_ladder and subtype in HYBRID_SUBTYPE_GOLD_BOUNDS:
+            lo, hi = HYBRID_SUBTYPE_GOLD_BOUNDS[subtype]
+            n = len(gold_ids)
+            if n < lo or (hi is not None and n > hi):
+                want = f"== {lo}" if lo == hi else (
+                    f">= {lo}" if hi is None else f"in [{lo},{hi}]")
+                check("GOLD-BOUNDS", "FAIL",
+                      f"hybrid subtype {subtype!r} requires "
+                      f"|gold_project_ids| {want}, got {n}")
+            else:
+                check("GOLD-BOUNDS", "PASS",
+                      f"|gold| {n} fits {subtype}'s bound")
+        elif route == "vector" and level in LEVEL_WINDOWS:
+            lo, hi = LEVEL_WINDOWS[level]
+            n = len(gold_ids)
+            if n < lo or (hi is not None and n > hi):
+                want = f"== {lo}" if lo == hi else (
+                    f">= {lo}" if hi is None else f"in [{lo},{hi}]")
+                check("GOLD-BOUNDS", "FAIL",
+                      f"vector {level} requires |gold_project_ids| {want}, "
+                      f"got {n} - vector level is DEFINED by the count")
+            else:
+                check("GOLD-BOUNDS", "PASS",
+                      f"|gold| {n} fits vector {level}")
+        else:
+            check("GOLD-BOUNDS", "N/A",
+                  "no bound applies to this route/subtype")
     finally:
         con.close()
 

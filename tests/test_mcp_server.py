@@ -343,6 +343,50 @@ def test_search_scope_ceiling(fakes):
     assert "ceiling" in result["error"]
 
 
+def test_search_snippet_chars_omitted_keeps_the_historical_shape(fakes):
+    # No `truncated` key and full chunk text when the parameter is absent -
+    # existing callers see byte-identical output.
+    fakes["lexical"].results = [sr("c1", 1, text="x" * 500)]
+    result = search_corpus("widgets", condition="lexical")
+    assert "truncated" not in result
+    assert result["projects"][0]["best_chunk"]["text"] == "x" * 500
+
+
+def test_search_snippet_chars_zero_omits_text_keeps_ranks(fakes):
+    # A liveness probe needs ranks, not payload.
+    fakes["lexical"].results = [sr("c1", 1, text="x" * 500), sr("c2", 2)]
+    result = search_corpus("widgets", condition="lexical", snippet_chars=0)
+    for project in result["projects"]:
+        assert "text" not in project["best_chunk"]
+        assert project["best_chunk"]["chunk_id"]    # the rest survives
+    assert [p["project_id"] for p in result["projects"]] == [1, 2]
+    assert result["truncated"]["chunks_truncated"] == 2
+    assert result["truncated"]["chars_dropped"] == 500 + len("text of c2")
+
+
+def test_search_snippet_chars_truncates_and_reports(fakes):
+    fakes["lexical"].results = [sr("c1", 1, text="x" * 500),
+                                sr("c2", 2, text="short")]
+    result = search_corpus("widgets", condition="lexical", snippet_chars=400)
+    long_chunk, short_chunk = [p["best_chunk"] for p in result["projects"]]
+    assert long_chunk["text"] == "x" * 400
+    assert short_chunk["text"] == "short"       # under the cap: untouched
+    assert result["truncated"] == {"snippet_chars": 400, "chars_dropped": 100,
+                                   "chunks_truncated": 1}
+
+
+def test_search_snippet_chars_under_cap_reports_no_truncation(fakes):
+    fakes["lexical"].results = [sr("c1", 1, text="short")]
+    result = search_corpus("widgets", condition="lexical", snippet_chars=400)
+    assert result["truncated"] is None
+    assert result["projects"][0]["best_chunk"]["text"] == "short"
+
+
+def test_search_snippet_chars_validation(fakes):
+    assert "error" in search_corpus("widgets", snippet_chars=-1)
+    assert "error" in search_corpus("widgets", snippet_chars=True)
+
+
 def test_search_missing_index_meta_is_error(fakes, server):
     server.index_meta_path.unlink()
     result = search_corpus("widgets", condition="lexical")
@@ -574,6 +618,58 @@ def test_precheck_requires_filter_evidence_on_the_hybrid_ladder(server):
     assert status_of(result, "GOLD-SUBSET") == "N/A"
 
 
+def test_precheck_survivor_window_pass_and_warn_never_gate(server):
+    # filter-read window is 2-10; the fixture filter has 2 live survivors.
+    inside = precheck_record(hybrid_record())
+    assert status_of(inside, "SURVIVOR-WINDOW") == "PASS"
+    # filter-synthesize wants 5-20 - 2 survivors is outside, but a WARN,
+    # never a FAIL: the windows are drafting guidance, not law.
+    outside = precheck_record(hybrid_record(
+        level="L2", subtype="filter-synthesize", gold_project_ids=[1, 2]))
+    assert status_of(outside, "SURVIVOR-WINDOW") == "WARN"
+    assert "5-20" in status_detail(outside, "SURVIVOR-WINDOW")
+    assert outside["ok"] and "SURVIVOR-WINDOW" not in outside["failures"]
+
+
+def test_precheck_survivor_window_na_without_a_live_set(server):
+    result = precheck_record(hybrid_record(filter_evidence=None))
+    assert status_of(result, "SURVIVOR-WINDOW") == "N/A"
+    sql = precheck_record(sql_record())
+    assert status_of(sql, "SURVIVOR-WINDOW") == "N/A"
+
+
+def test_precheck_gold_bounds_hybrid_hangs_off_the_subtype(server):
+    # filter-read wants exactly 1 gold: the fixture passes.
+    assert status_of(precheck_record(hybrid_record()), "GOLD-BOUNDS") == "PASS"
+    # filter-synthesize wants 2-4 gold; 1 is a FAIL - and it fires inside
+    # the drafter's loop instead of at slot close.
+    result = precheck_record(hybrid_record(
+        level="L2", subtype="filter-synthesize"))
+    assert "GOLD-BOUNDS" in result["failures"]
+    assert "[2,4]" in status_detail(result, "GOLD-BOUNDS")
+    # filter-compare is L3 with |gold| in [2,4] - the hyb-03 shape. The
+    # VECTOR level windows (L3 >= 5) must NOT apply to hybrid.
+    compare = precheck_record(hybrid_record(
+        level="L3", subtype="filter-compare", gold_project_ids=[1, 2]))
+    assert status_of(compare, "GOLD-BOUNDS") == "PASS"
+
+
+def test_precheck_gold_bounds_vector_uses_the_level_windows(server):
+    def vector_record(level, gold):
+        return {"question_id": "vec-90", "text": "Find the fungi projects.",
+                "expected_route": "vector", "level": level,
+                "subtype": "single-project", "gold_project_ids": gold}
+    assert status_of(precheck_record(vector_record("L1", [1])),
+                     "GOLD-BOUNDS") == "PASS"
+    result = precheck_record(vector_record("L2", [1]))
+    assert "GOLD-BOUNDS" in result["failures"]
+    assert "DEFINED by the count" in status_detail(result, "GOLD-BOUNDS")
+
+
+def test_precheck_gold_bounds_na_without_gold(server):
+    assert status_of(precheck_record(sql_record()), "GOLD-BOUNDS") == "N/A"
+
+
 def test_precheck_catches_a_stale_schema_docs_hash(server):
     result = precheck_record(sql_record(schema_docs_hash="deadbeef0000"))
     assert result["failures"] == ["SCHEMA-DOCS"]
@@ -695,6 +791,49 @@ def test_precheck_candidate_checks_a_map_entry(server):
 
     thin = precheck_candidate(map_entry(read=[1]), bucket=BIO)
     assert "MAP-READ" in thin["failures"]
+
+
+def test_precheck_candidate_one_reading_leaf_passes(server):
+    # 'ecology' has exactly one (path, title) row: the title reading and the
+    # subtree reading select the identical set, so the scope is unambiguous.
+    result = precheck_candidate(candidate(
+        satisfying_count=1, evidence=[{
+            "sql": "SELECT COUNT(DISTINCT projectID) AS n FROM euroscivoc "
+                   "WHERE euroSciVocTitle = 'ecology'",
+            "key_result": "1 project"}]))
+    assert result["ok"]
+    assert status_of(result, "ONE-READING vector-07") == "PASS"
+    assert "leaf" in status_detail(result, "ONE-READING vector-07")
+
+
+def test_precheck_candidate_one_reading_branch_warns_never_gates(server):
+    # 'biological sciences' sits above ecology and genetics: the narrow and
+    # wide readings diverge - the musicology defect class. WARN with the
+    # sibling rows attached, and `ok` stays true (the explorer is told what
+    # it is proposing, not blocked).
+    result = precheck_candidate(candidate(evidence=[{
+        "sql": "SELECT COUNT(DISTINCT projectID) AS n FROM euroscivoc "
+               "WHERE euroSciVocPath LIKE '%/biological sciences%'",
+        "key_result": "2 projects"}]))
+    assert result["ok"] and result["failures"] == []
+    assert status_of(result, "ONE-READING vector-07") == "WARN"
+    detail = status_detail(result, "ONE-READING vector-07")
+    assert "ecology" in detail and "genetics" in detail
+
+
+def test_precheck_candidate_one_reading_unrecognised_shape_is_na(server):
+    # Touches euroscivoc but with no recognisable title/path predicate: the
+    # check must say so rather than guess a term.
+    result = precheck_candidate(candidate(evidence=[{
+        "sql": "SELECT COUNT(DISTINCT projectID) AS n FROM euroscivoc",
+        "key_result": "3 projects"}]))
+    assert status_of(result, "ONE-READING vector-07") == "N/A"
+
+
+def test_precheck_candidate_one_reading_absent_without_euroscivoc(server):
+    result = precheck_candidate(candidate())
+    assert not any(c["name"].startswith("ONE-READING")
+                   for c in result["checks"])
 
 
 def test_precheck_candidate_is_logged(server):
