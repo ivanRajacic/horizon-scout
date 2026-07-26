@@ -105,7 +105,13 @@ _CANDIDATE_ID_RE = re.compile(
     re.MULTILINE)
 _BUCKET_LINE_RE = re.compile(r"^\s*bucket:\s*(.+?)\s*$", re.MULTILINE)
 _NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
-_STUB_RE = re.compile(r"^Not yet explored \(.*\)\.\s*$", re.MULTILINE)
+# Placeholder lines a section carries until it has real content. Both shapes
+# exist in the profile: the scoped-run stub and the italic "nothing here yet"
+# note. A stub left standing above six real entries reads as a contradiction,
+# which is exactly what the first live run produced.
+_STUB_RE = re.compile(
+    r"^(?:Not yet explored \(.*\)\.|\*No entries yet[^\n]*\*)\s*$",
+    re.MULTILINE)
 
 
 class ExploreError(Exception):
@@ -631,6 +637,7 @@ class ExplorationJournal:
     header: dict = field(default_factory=dict)
     slices: dict[str, dict] = field(default_factory=dict)   # latest line wins
     order: list[str] = field(default_factory=list)
+    critic: dict = field(default_factory=dict)
 
 
 def read_journal_lines(path: Path) -> list[dict]:
@@ -669,8 +676,15 @@ def load_journal(path: Path) -> ExplorationJournal:
         if kind == "run":
             journal.header = line
             continue
+        if kind == "critic":
+            # The completeness critic's one output. It travels through the
+            # journal like everything else so the writer inserts it: the first
+            # live run proved that "the orchestrator pastes it afterwards"
+            # means it gets dropped.
+            journal.critic = line
+            continue
         if kind != "slice":
-            errors.append(f"{where}: kind must be 'slice' or 'run', "
+            errors.append(f"{where}: kind must be 'slice', 'critic' or 'run', "
                           f"got {kind!r}")
             continue
         slice_id = line.get("slice_id")
@@ -1312,7 +1326,12 @@ def _replace_frontier(text: str, buckets: list[Bucket]) -> str:
 
 @dataclass
 class Telemetry:
-    subagents: int
+    # Journal SLICES, not agents: one subagent may carry several buckets and
+    # journals a line per bucket, so the two numbers differ (the first live run
+    # reported "6 subagents" for 2 explorers + 1 critic). The journal cannot
+    # know how many agents ran; `python -m src.cli agent-trace` can, and the
+    # run header records it when the orchestrator states it.
+    slices: int
     run_sql: int
     project_text_calls: int
     projects_read: int
@@ -1328,7 +1347,7 @@ class Telemetry:
 
     def line(self, version: str, date: str, scope: str,
              maps: int, candidates: int, findings: int,
-             counters: str) -> str:
+             counters: str, agents: int | None = None) -> str:
         """One run-log line. The frontier is quoted with the same counter
         vocabulary the Frontier section uses, so the two can never read as
         different numbers; the deltas say what this run actually added."""
@@ -1336,14 +1355,16 @@ class Telemetry:
             f"+{n} {label}" for n, label in
             ((maps, "map entries"), (candidates, "candidates"),
              (findings, "structural findings")) if n)
+        who = (f"{agents} subagents over {self.slices} slices"
+               if agents else f"{self.slices} slices")
         return (f"- {version} ({date}) scope `\"{scope}\"`: {self._duration()}"
-                f"{self.subagents} subagents, {self.run_sql} `run_sql`, "
+                f"{who}, {self.run_sql} `run_sql`, "
                 f"{self.projects_read} projects read across "
                 f"{self.project_text_calls} `get_project_text` calls; "
                 f"{added or 'nothing added'}; frontier {counters}.")
 
 
-def telemetry_since(started: str | None, subagents: int,
+def telemetry_since(started: str | None, slices: int,
                     log_path: Path = DRAFT_MCP_LOG_PATH) -> Telemetry:
     """Count this run's MCP traffic from the server's own log.
 
@@ -1383,7 +1404,7 @@ def telemetry_since(started: str | None, subagents: int,
                                 ).total_seconds())
         except ValueError:
             seconds = None
-    return Telemetry(subagents, run_sql, calls, projects, seconds, mcp_ms)
+    return Telemetry(slices, run_sql, calls, projects, seconds, mcp_ms)
 
 
 @dataclass
@@ -1481,6 +1502,10 @@ def write_profile(journal_path: Path, version: str,
         for section, blocks in section_blocks.items():
             text = _insert_into(text, SECTION_HEADINGS[section],
                                 "\n\n".join(blocks))
+        notes = str(journal.critic.get("coverage_notes") or "").strip()
+        if notes:
+            text = _insert_into(text, "Coverage notes",
+                                f"**{version} ({date})**\n\n{notes}")
         after_buckets = build_frontier(con, text, read_records(bank_path))
     finally:
         con.close()
@@ -1492,7 +1517,8 @@ def write_profile(journal_path: Path, version: str,
                                 len(journal.order), log_path)
     text = _bump_header(text, version, date, telemetry.line(
         version, date, scope, len(written_maps), len(written_candidates),
-        len(written_findings), frontier_counters(after_buckets)))
+        len(written_findings), frontier_counters(after_buckets),
+        agents=journal.header.get("subagents")))
 
     # The version label describes the CANONICAL profile. Writing a copy
     # somewhere else (a rehearsal, a test) must never move it - that would

@@ -79,6 +79,20 @@ def test_since_separates_one_run_from_an_earlier_one(tmp_path):
     assert trace_session(session, since="2026-07-27T00:00:00.000Z") == []
 
 
+def test_since_accepts_local_time_against_utc_transcripts(tmp_path):
+    """Transcripts are UTC; a --since typed from `date` is local. Comparing
+    them as strings drops every agent on a machine ahead of UTC, which is how
+    the first live run traced empty."""
+    session = make_session(tmp_path)          # agent ends 10:02:00Z
+    from datetime import datetime, timezone
+    local_before = (datetime(2026, 7, 26, 9, 0, tzinfo=timezone.utc)
+                    .astimezone().replace(tzinfo=None).isoformat())
+    local_after = (datetime(2026, 7, 26, 23, 0, tzinfo=timezone.utc)
+                   .astimezone().replace(tzinfo=None).isoformat())
+    assert trace_session(session, since=local_before)
+    assert trace_session(session, since=local_after) == []
+
+
 def test_a_missing_meta_file_degrades_to_a_row(tmp_path):
     session = make_session(tmp_path, meta=False)
     (trace,) = trace_session(session)

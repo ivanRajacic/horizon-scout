@@ -151,10 +151,13 @@ Adversarial candidates add `claim:` (the precise absence or false premise) and `
    ```jsonc
    {"kind": "run", "date": "2026-07-25", "scope": "map=6",
     "started": "2026-07-25T14:03:00",          // used to window the telemetry
+    "subagents": 3,                             // explorers + critic, as spawned
     "targets": {"vector": 9},                   // per-section supply, if scoped
     "versions": {"corpus_profile": "cp3", "schema_docs": "sd2",
                  "bank_brief": "bb2"}}
    ```
+
+   Update `subagents` at close-out if a slice was re-spawned. The journal counts *slices*, and one subagent may carry three buckets and journal three lines - so without this the telemetry line can only honestly say "N slices".
 
    `started` must be an ISO timestamp in the MCP log's format (`date +%Y-%m-%dT%H:%M:%S`); `write-profile` counts this run's `run_sql` and `get_project_text` traffic from it.
 
@@ -219,6 +222,15 @@ Do not read the payload for quality. You have no judgement to add that `verify-e
    Width (no axis value on more than a third of a section), entity spread (no named entity in more than two candidates), near-duplicates against both the run and the existing profile, and supply against this run's targets. These are FLAGS, not gates. A section that fails width or falls short gets **one** top-up slice aimed at the thin axis - that decision is yours, and it is the only judgement call in the loop. A subagent's `SHORT:` note counts toward it.
 
 2. **Spawn the completeness critic** (`subagent_type: explore-critic`) once, with the journal path and the crosscheck output. It reads the typed summaries - never the payloads - and returns the `## Coverage notes` prose plus a list of what is missing. It reports; it does not gate and it does not re-spawn.
+
+   **Journal its output** - do not hold it to paste later:
+
+   ```jsonc
+   {"kind": "critic", "coverage_notes": "<the COVERAGE-NOTES block verbatim>",
+    "gaps": ["<the GAPS lines>"]}
+   ```
+
+   `write-profile` inserts it into `## Coverage notes` under a version heading. The first live run (cp4) proved why this is a journal line and not a manual step: the critic ran, and its notes were silently dropped because nothing deterministic carried them.
 
 3. **Write:**
 

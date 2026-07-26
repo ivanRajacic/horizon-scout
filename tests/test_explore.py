@@ -662,11 +662,60 @@ def test_write_appends_telemetry_counted_from_the_mcp_log(corpus):
     write(corpus, a_slice())
     text = corpus["profile"].read_text(encoding="utf-8")
     line = next(ln for ln in text.splitlines() if ln.startswith("- cp4 ("))
-    assert "1 subagents" in line
+    # Slices, not agents: the journal cannot know how many subagents ran, and
+    # the first live run reported "6 subagents" for 2 explorers + 1 critic.
+    assert "1 slices" in line
     assert "2 `run_sql`" in line          # the pre-window call is excluded
     assert "3 projects read across 1 `get_project_text` calls" in line
     assert "+1 map entries, +1 candidates" in line
     assert "- cp3 (2026-07-24)" in text   # the earlier run log survives
+
+
+def test_telemetry_names_the_agent_count_only_when_the_header_states_it(corpus):
+    path = journal_file(corpus["dir"], a_slice(),
+                        header={"kind": "run", "date": "2026-07-25",
+                                "scope": "map=2", "subagents": 2,
+                                "started": "2026-07-25T09:00:00"})
+    write_profile(path, "cp4", profile_path=corpus["profile"],
+                  db_path=corpus["db"], bank_path=corpus["bank"],
+                  config_path=corpus["config"], log_path=corpus["log"],
+                  date="2026-07-25")
+    line = next(ln for ln in
+                corpus["profile"].read_text(encoding="utf-8").splitlines()
+                if ln.startswith("- cp4 ("))
+    assert "2 subagents over 1 slices" in line
+
+
+def test_the_critics_coverage_notes_reach_the_profile(corpus):
+    """The one model-authored output. It goes through the journal because the
+    first live run proved that leaving it to the orchestrator to paste
+    afterwards means it is silently dropped."""
+    path = journal_file(corpus["dir"], a_slice(),
+                        {"kind": "critic",
+                         "coverage_notes": "Sociology is unread; law is thin."})
+    write_profile(path, "cp4", profile_path=corpus["profile"],
+                  db_path=corpus["db"], bank_path=corpus["bank"],
+                  config_path=corpus["config"], log_path=corpus["log"],
+                  date="2026-07-25")
+    text = corpus["profile"].read_text(encoding="utf-8")
+    assert "Sociology is unread; law is thin." in text
+    assert "**cp4 (2026-07-25)**" in text
+    # ...inside Coverage notes, not appended to whatever section came last.
+    tail = text.split("## Coverage notes")[1]
+    assert "Sociology is unread" in tail
+
+
+def test_a_stale_no_entries_stub_is_cleared_by_the_first_real_entry(corpus):
+    """A stub left standing above six real map entries reads as a
+    contradiction - which is what the first live run produced."""
+    profile = corpus["profile"]
+    profile.write_text(
+        profile.read_text(encoding="utf-8").replace(
+            "Format notes here.",
+            "Format notes here.\n\n*No entries yet - the map is new at cp3.*"),
+        encoding="utf-8")
+    write(corpus, a_slice())
+    assert "*No entries yet" not in profile.read_text(encoding="utf-8")
 
 
 def test_telemetry_records_the_run_duration(corpus):

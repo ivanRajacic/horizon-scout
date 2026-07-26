@@ -2,8 +2,8 @@
 
 ## Header
 
-- **Version:** cp3
-- **Generated:** 2026-07-24
+- **Version:** cp4
+- **Generated:** 2026-07-26
 - **Corpus fingerprint:** 35,389 projects (`SELECT COUNT(*) FROM project`). Dense index `data/processed/index_meta.json`: 190,248 vectors, embedder `bge-base-en-v1.5-f16.gguf`, dim 768, built 2026-07-22T08:53:52Z. euroscivoc classification covers 32,236 of 35,389 projects across 111,614 rows (`SELECT COUNT(DISTINCT projectID), COUNT(*) FROM euroscivoc`).
 - **Grounded against schema_docs:** version `sd2`, content_hash `e2696e0f80f5`.
 
@@ -12,6 +12,7 @@
 - cp1 (2026-07-23) scope `"find 15 vector topics"`: Vector only, 15 candidates. 2 subagents.
 - cp2 (2026-07-23) scope `"pilot hybrid 10"`: Hybrid only, 10 candidates (10 found). 2 subagents, 54 `run_sql`, 6 `get_project_text` calls (~15 projects). Frontier not yet in existence.
 - cp3 (2026-07-24) scope `"structural: add the frontier"`: no exploration subagents. Introduced `## Frontier`, `## Corpus map` and `## Structural findings`, built the 46-bucket frontier from the data and back-filled `seeds`/`bank` from the existing candidates and `eval/bank.jsonl`. Frontier established at `mapped 0/46 | mined 18/46`.
+- cp4 (2026-07-26) scope `"map=6"`: 12m wall (32s in MCP calls), 3 subagents (2 explorers + 1 critic) over 6 slices, 14 `run_sql`, 18 projects read across 6 `get_project_text` calls; +6 map entries, +18 candidates; frontier `mapped 6/46 | mined 19/46 | unexplored 21/46`.
 
 **Reading order for a run:** `## Frontier` alone is enough to plan one (it says where we have not been). Read a section's candidates only when you are drafting from them. The whole file is never needed at once.
 
@@ -37,21 +38,21 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | social sciences / economics and business | 4,711 | mined | - | vector-10 | vec-05 |
 | medical and health sciences / clinical medicine | 4,661 | mined | - | vector-06, vector-13 | vec-02 |
 | natural sciences / chemical sciences | 4,331 | mined | - | - | hyb-03, vec-05 |
-| medical and health sciences / basic medicine | 4,252 | unexplored | - | vector-15 | - |
-| social sciences / sociology | 3,802 | unexplored | - | - | - |
+| medical and health sciences / basic medicine | 4,252 | mapped | m01 | vector-15, vector-16, vector-17, vector-18 | - |
+| social sciences / sociology | 3,802 | mapped | m02 | vector-19, vector-20, vector-21 | - |
 | engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05 |
-| (unclassified - no euroSciVoc row) | 3,153 | unexplored | - | - | - |
+| (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03 |
 | natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, vec-05 |
 | medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05 |
 | engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, vec-05 |
 | natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05 |
 | agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | vec-05 |
-| social sciences / political sciences | 1,795 | unexplored | - | - | - |
-| humanities / history and archaeology | 1,669 | unexplored | - | vector-08 | - |
+| social sciences / political sciences | 1,795 | mapped | m03 | vector-22, vector-23, vector-24 | - |
+| humanities / history and archaeology | 1,669 | mapped | m04 | vector-08, vector-25, vector-26, vector-27 | - |
 | engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03 |
 | medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02 |
-| social sciences / social geography | 870 | unexplored | - | - | - |
-| social sciences / law | 866 | unexplored | - | - | - |
+| social sciences / social geography | 870 | mapped | m06 | vector-31, vector-32, vector-33 | - |
+| social sciences / law | 866 | mapped | m05 | vector-28, vector-29, vector-30 | - |
 | engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05 |
 | social sciences / psychology | 636 | unexplored | - | - | - |
 | engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05 |
@@ -76,7 +77,7 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | medical and health sciences / (top-level only) | 13 | unexplored | - | - | - |
 | engineering and technology / (top-level only) | 2 | unexplored | - | - | - |
 
-`mapped 0/46 | mined 18/46 | unexplored 28/46`
+`mapped 6/46 | mined 19/46 | unexplored 21/46`
 
 No bucket is `mapped` yet: the map is new at cp3 and no region has a `## Corpus map` entry. 18 buckets are `mined` (a bank question was drawn from them, traced through `gold_project_ids`), and a further 4 carry cp1/cp2 candidate seeds with no bank question yet - the `seeds` column keeps that history, but seeds are not a map, so those buckets still read `unexplored`.
 
@@ -101,7 +102,71 @@ Append-only: entries are added as buckets are explored, never rewritten. Format:
 
 `read:` (added cp4) makes "written from text, not from the tag" checkable rather than promised: `python -m src.cli verify-evidence` confirms those ids exist, carry text and sit in the bucket, and flags an `about:` whose wording is mostly the bucket label back.
 
-*No entries yet - the map is new at cp3. The 18 buckets carrying `seeds` in the frontier have candidate blocks in the Vector and Hybrid sections below, but no region description; mapping them is the first job of the next `/explore-corpus` run.*
+- region: m01
+  bucket: medical and health sciences / basic medicine
+  slice: split_part(euroSciVocPath,'/',1)='medical and health sciences' AND split_part(euroSciVocPath,'/',2)='basic medicine'
+  size: 4252 projects
+  about: Mechanism- and molecule-level biomedicine rather than clinical care: drug discovery and pharmacology dominate (1,817 projects under pharmacology and pharmacy), followed by neurology (964), immunology (959) and physiology (818). Read members range from engineered-cell cancer immunotherapy running phase I/II trials (CARAMBA, SLAMF7 CAR-T cells for multiple myeloma; EURE-CART, centralised EU CAR-T manufacturing) to venom-toxin pharmacology mining cone-snail insulin mimetics as drug leads (ToxMim). Text is heavy on molecular targets, receptors, cell types and trial phases, with an explicit translational framing (orphan designation, market authorisation, SME partners).
+  texture: 4,178 of 4,252 members carry a report row (98.3%). Taxonomy labels are rarely echoed verbatim - no member says the tag words; the theme must be reached through technical vocabulary (chimeric antigen receptor, SLAMF7, toxin mimetic). 3,329 members (78%) also carry a euroSciVoc tag under another top-level branch, mostly natural sciences, so bucket membership is not exclusive and a question must be phrased topically, not by tag.
+  read: 754658, 949830, 733297
+  good for: Vector route at all three levels: technical phrases like 'chimeric antigen receptor' (12) or 'organ-on-chip' (15) give clean L3 survey sets, rarer phrases like 'venom' (4) give L2. Also good for hybrid filters on funding scheme, since translational IA/RIA and ERC projects coexist here.
+  thin for: Single-project L1 seeds - the common technical terms all return double digits (CRISPR alone matches 113 members), so uniqueness has to come from an unusual disease/organism pairing rather than a method word. Also thin for lay-vocabulary questions; the text is uniformly specialist.
+  mapped: cp4
+
+- region: m02
+  bucket: social sciences / sociology
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='sociology'
+  size: 3802 projects
+  about: Empirical social research on how people are governed, counted, housed and employed: the third level splits into governance (1,251), demography (1,094), industrial relations (619), social issues (588) and anthropology (389). Read members are urban and labour ethnographies - Ethno-gentrification maps middle-class Latinx-led gentrification in Barrio Logan, San Diego; NEIGHBOURCHANGE studies area-based revitalisation programmes in hyperdiverse deprived neighbourhoods across Canada and Italy; MAJORdom compares white working-class paid domestic and care workers in Italy and the USA. Method language (qualitative case study, ethnographic fieldwork, participant observation, mixed methods) and intersectional framing of class, ethnicity and gender recur throughout.
+  texture: 3,725 of 3,802 members have a report row (98.0%). Labels are paraphrased, not echoed - members write 'neighbourhood revitalisation' or 'socio-spatial inequality' rather than the tag words. Tag noise is high: 2,940 of 3,802 members also carry a tag under a different top-level branch, and MSCA-IF fellowships bring in projects whose tag reflects one work package only. Many objectives are non-EU field sites (US, Canada, Colombia), so a question assuming a European setting will mis-scope.
+  read: 101025665, 799195, 707726
+  good for: Vector route across all levels: lay-vocabulary themes give small clean sets ('domestic worker'=1, 'loneliness'=3, 'gentrification'=7), exactly the L1/L2/L3 ladder. Good for term_style=lay questions.
+  thin for: Numeric or comparative SQL questions - almost nothing here is quantified in a column - and tag-based filters, because the sociology tag is shared with another branch on three quarters of members.
+  mapped: cp4
+
+- region: m03
+  bucket: social sciences / political sciences
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='political sciences'
+  size: 1795 projects
+  about: Studies of how political authority is contested, exercised and held to account: political policies (818) and political transitions (682) dominate, with government systems (257), public administration (178) and political communication (44) behind them. Read members span EU interest-group politics (LOBFRAM, lobbying and framing by non-state actors in EU foreign policy on the Israeli-Palestinian conflict), fiscal-transparency infrastructure (DIGIWHIST, tender-level public-procurement data across 35 jurisdictions linked to accountability indicators), and direct-democracy contestation in the global south (VOTEF, community referendums halting extractive projects in Colombia). Multi-level governance, framing, accountability and legitimacy are the recurring analytic vocabulary.
+  texture: 1,775 of 1,795 members have a report row (98.9%) - best-covered bucket in this slice. Labels are paraphrased; members write 'multi-level governance' or 'public procurement' rather than the tag words. 1,260 of 1,795 also sit under another top-level branch. Substring traps are real: ILIKE '%coup%' matches 35 members, almost all via 'couple'/'coupling', so lexical evidence needs whole-word or phrase patterns.
+  read: 657949, 645852, 838371
+  good for: Vector L2/L3 topical sets on politically named concepts - 'lobbying' (5), 'referendum' (6), 'corruption' (9) - exactly the words a lay user would type. Consortium projects like DIGIWHIST also support results-oriented questions from workPerformed.
+  thin for: L1 uniqueness - the well-known political concepts all return 5+ members, so single-project seeds need an unusual country/case pairing. Thin for the political-communication third level (only 44 projects).
+  mapped: cp4
+
+- region: m04
+  bucket: humanities / history and archaeology
+  slice: split_part(euroSciVocPath,'/',1)='humanities' AND split_part(euroSciVocPath,'/',2)='history and archaeology'
+  size: 1669 projects
+  about: Almost entirely ERC and MSCA single-investigator scholarship: period history (ancient 143, medieval 95, modern 129, contemporary 32 tagged projects) plus a smaller science-of-the-past wing (archaeometry 36, bioarchaeology 31, ethnoarchaeology 91). Read members show two recognisable styles - laboratory-driven reconstruction of the past (802349 SILVER combines archaeometric, numismatic and archaeological analysis of ninth-century Viking silver to date the start of the Viking Age; 843337 ModernShip Project compares Mediterranean and Atlantic 16th-century shipbuilding traditions from wreck evidence) and digital/heritage engineering (727153 iMARECULTURE builds VR, AR and serious-game access to submerged shipwrecks and underwater cultural heritage). Manuscript, epigraphic and papyrological source work is a large recurring substrate (35 objectives mention manuscripts in a medieval context, 31 epigraphy, 12 papyri).
+  texture: Objectives are long, discursive, first-person MSCA/ERC prose and rarely echo the euroSciVoc label verbatim - 'archaeometry' or 'ethnoarchaeology' appear as tags while the text says 'isotope analysis', 'radiocarbon', 'coin identification'. Tags are noisy in the science direction (ancient-DNA and radiocarbon projects are shared with biological sciences). Naive LIKE probes misfire: '%cycling%' matches 'recycling', '%slum%' matches the acronym 'Sislum' - topic filters need distinctive multi-word phrases. report_text coverage is high, so teasers are usable gold evidence.
+  read: 802349, 843337, 727153
+  good for: vector L2/L3 thematic questions - period- or method-defined clusters of 2-6 projects are easy to find (maritime archaeology 6, Viking Age 5, dendrochronology 2), so single-topic multi-project synthesis and small-set comparison are well supported; objectives state a research question explicitly, giving clean reference answers.
+  thin for: SQL-route questions (no numeric/structural distinctiveness beyond funding scheme) and hybrid filters, which mostly reduce to 'MSCA-IF humanities' - a filter no user would state. Also thin for results-oriented questions on 2021-2023 grants with first-period-only reports.
+  mapped: cp4
+
+- region: m05
+  bucket: social sciences / law
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='law'
+  size: 866 projects
+  about: A rights-and-enforcement bucket rather than a doctrinal one: 455 projects sit at the bare top node, then human rights (217 at level 3), law enforcement (97), criminology (51), international law (43). Read members span critical socio-legal scholarship and security innovation - 756672 HumanTrafficking argues for shifting anti-trafficking work from criminal justice and border control to labour-market regulation; 679362 PRILA documents how accountability, rule of law and rights are experienced inside European prisons; 101038097 P-ADMIRAL analyses whether the contemporary law of the sea can accommodate autonomous and unmanned vessels. Asylum/refugee cases form a distinct sub-cluster (15 projects), as does imprisonment (17).
+  texture: Two registers coexist and must not be conflated - ERC/MSCA legal-theory objectives (dense, argumentative, doctrinal) and H2020 security-call projects (CONNEXIONs, CRiTERIA) whose text is about platforms and tools with the tag attached only to the ethics/LEA dimension. A tag-only filter therefore pulls in technology projects; the theme must be confirmed in the objective, and 'law enforcement' in particular is mostly technology. report_text coverage is high and teasers restate the legal problem plainly.
+  read: 756672, 679362, 101038097
+  good for: vector L2/L3 on well-named legal topics - human trafficking (5), law of the sea (4), the International Criminal Court (4), prisons (17) - each an ordinary phrase a user would type. Also good for ambiguous-route seeds, since enforcement technology and doctrinal scholarship answer different readings of the same question.
+  thin for: L1 single-project questions on generic themes - 'human rights' is shared by 117 projects, so no one project is uniquely identified. Also thin for SQL/aggregate questions: nothing in the columns marks a project as legal, the classification lives only in euroscivoc.
+  mapped: cp4
+
+- region: m06
+  bucket: social sciences / social geography
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='social geography'
+  size: 870 projects
+  about: Despite the label, this bucket is overwhelmingly transport engineering and mobility technology: 805 of 870 projects sit under the level-3 node 'transport', against 42 urban studies and 30 cultural and economic geography. Dominant leaves are electric vehicles (209), public transport (132), air traffic management (129), GNSS (112). Read members bear this out - 682337 NICENAV is an SME building an ITAR-free fibre-optic-gyroscope inertial navigation system for manned and unmanned aircraft (avionics hardware), while 769819 HiReach targets transport poverty and mobility exclusion for vulnerable groups via small-scale shared services. A drone/UAS traffic-management cluster (14 objectives mention 'U-space') is a further distinct region.
+  texture: The noisiest bucket in this run - the label is almost never echoed in member text, and most members read as transport, aerospace or energy projects. A question phrased in the taxonomy's own words would retrieve the wrong things; questions must use the transport/mobility vocabulary the text actually uses. Register splits between SME-instrument market-facing prose (NICENAV, Sislum) and RIA/CSA consortium prose (HiReach, INCLUSION). Substring probes are dangerous: a '%cycling%' probe returns 29 projects but many are recycling, and '%slum%' matches the acronym 'Sislum'.
+  read: 682337, 769819
+  good for: vector L1 seeds, unusually - narrow engineering topics are uniquely instantiated (inertial navigation 1), so single-project lookups are reliable. Also L2/L3 on named technology clusters (U-space 14, rural mobility 3), and adversarial seeds exploiting the label-vs-content mismatch.
+  thin for: anything treating this as a humanities-style geography region - urban studies (42) and cultural and economic geography (30) are too small and heterogeneous for a survey, and there is no critical-geography corpus. Thin for hybrid filters stating the taxonomy label as a user filter, since no user describes an avionics INS project that way.
+  mapped: cp4
 
 ## Structural findings
 
@@ -238,6 +303,150 @@ Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
   axes: branch=basic-medicine leaf=duchenne-muscular-dystrophy satisfying=9 report_coverage=8/9 term_style=exact-term sample_ids=659338,658560,667078 sample_acr=Subpopulations,DYS_FUNCTION,e-walk
   why: A disease-name leaf is reliably on-theme; 9 projects give a rich, coherent L3 survey in the untouched basic-medicine branch.
 
+- id: vector-16
+  topic: Projects developing animal-venom toxins as drug leads or studying venom immunotherapy
+  recommend: route=vector level=L2 subtype=topical-multi
+  bucket: medical and health sciences / basic medicine
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%venom%' OR p.title ILIKE '%venom%')` -> n=4 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%venom%' OR p.title ILIKE '%venom%') ORDER BY p.id` -> 4 rows: 655153 IgEPath, 714366 GUTPEPTIDES, 891733 MITafterVIT, 949830 ToxMim
+  axes: domain=basic-medicine term_style=technical theme=venom-toxins satisfying=4
+  why: Exactly four basic-medicine projects mention venom, spanning toxin-derived drug discovery (ToxMim) and venom immunotherapy - a clean L2 set.
+
+- id: vector-17
+  topic: CAR-T / chimeric antigen receptor engineered cell immunotherapy projects
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: medical and health sciences / basic medicine
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%chimeric antigen receptor%' OR p.title ILIKE '%chimeric antigen receptor%')` -> n=12 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%chimeric antigen receptor%' OR p.title ILIKE '%chimeric antigen receptor%') ORDER BY p.id` -> 12 rows including CARAMBA, EURE-CART, CARsen, SweetCAR, GENESHUTTLE ; `SELECT id, acronym FROM project WHERE id IN (754658,733297)` -> 754658 CARAMBA, 733297 EURE-CART - both objectives describe CAR-T clinical trials
+  axes: domain=basic-medicine term_style=technical-acronym theme=CAR-T satisfying=12
+  why: Twelve members whose objectives literally describe CAR-T cell therapy, enough for an L3 topical survey with unambiguous gold.
+
+- id: vector-18
+  topic: Organ-on-chip / microphysiological human tissue models
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: medical and health sciences / basic medicine
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%organ-on-chip%' OR p.title ILIKE '%organ-on-chip%')` -> n=15
+  axes: domain=basic-medicine term_style=technical theme=organ-on-chip satisfying=15
+  why: Fifteen basic-medicine projects use the literal phrase organ-on-chip in title or objective, a well-bounded L3 topical set.
+
+- id: vector-19
+  topic: Paid domestic and care workers belonging to the ethnic majority (non-migrant) workforce
+  recommend: route=vector level=L1 subtype=topical-single
+  bucket: social sciences / sociology
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%domestic worker%' OR p.title ILIKE '%domestic worker%')` -> n=1 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%domestic worker%' OR p.title ILIKE '%domestic worker%') ORDER BY p.id` -> 1 row: 799195 MAJORdom
+  axes: domain=sociology term_style=lay theme=paid-domestic-care-work satisfying=1
+  why: MAJORdom is the single sociology project on ethnic-majority paid domestic/care workers, comparing Italy and the USA - a clean L1 target.
+
+- id: vector-20
+  topic: Loneliness and social isolation of older adults addressed with companion technology
+  recommend: route=vector level=L2 subtype=topical-multi
+  bucket: social sciences / sociology
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%')` -> n=3 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') ORDER BY p.id` -> 3 rows: 643808 MARIO, 769872 EMPATHIC, 868008 ADOPT GRANDPARENTS
+  axes: domain=sociology term_style=lay theme=loneliness-ageing satisfying=3
+  why: Three sociology-tagged projects name loneliness, all on older-adult isolation and assistive/companion technology - a tight L2 set.
+
+- id: vector-21
+  topic: Gentrification and neighbourhood change in diverse urban neighbourhoods
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: social sciences / sociology
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%gentrification%' OR p.title ILIKE '%gentrification%')` -> n=7 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%gentrification%' OR p.title ILIKE '%gentrification%') ORDER BY p.id` -> 7 rows: 658875 GGG, 678034 GREENLULUS, 707726 NEIGHBOURCHANGE, 752547 SDD, 837749 SUSTEUS, 950641 HIPPO, 101025665 Ethno-gentrification
+  axes: domain=sociology term_style=lay theme=gentrification satisfying=7
+  why: Seven sociology projects discuss gentrification in their objectives, from green gentrification to ethnic-led gentrification, supporting an L3 survey.
+
+- id: vector-22
+  topic: Lobbying by non-state actors and interest groups in EU policymaking
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: social sciences / political sciences
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%lobbying%' OR p.title ILIKE '%lobbying%')` -> n=5 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%lobbying%' OR p.title ILIKE '%lobbying%') ORDER BY p.id` -> 5 rows: 637662 PEMP, 657949 LOBFRAM, 702134 DemocInChange, 740447 FEDCIT, 842868 PROSPER
+  axes: domain=political-sciences term_style=lay theme=lobbying satisfying=5
+  why: Five political-science projects name lobbying, e.g. LOBFRAM on non-state-actor lobbying in EU foreign policy, exactly at the L3 threshold.
+
+- id: vector-23
+  topic: Corruption, public-procurement transparency and accountability of public spending
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: social sciences / political sciences
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%corruption%' OR p.title ILIKE '%corruption%')` -> n=9 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%corruption%' OR p.title ILIKE '%corruption%') ORDER BY p.id` -> 9 rows: 645833 OpenBudgets.eu, 645852 DIGIWHIST, 645886 YDS, 693537 INFORM, 694632 PROTEGO, 823815 EventRights, 838371 VOTEF, 840978 BIZPOL, 945501 DEPART
+  axes: domain=political-sciences term_style=lay theme=corruption-transparency satisfying=9
+  why: Nine political-science projects address corruption, several (DIGIWHIST, OpenBudgets.eu) building open procurement data tools - a solid L3 survey set.
+
+- id: vector-24
+  topic: Referendums and direct-democracy votes as instruments of political contestation
+  recommend: route=vector level=L3 subtype=topical-survey
+  bucket: social sciences / political sciences
+  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%referendum%' OR p.title ILIKE '%referendum%')` -> n=6 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='political sciences' AND (p.objective ILIKE '%referendum%' OR p.title ILIKE '%referendum%') ORDER BY p.id` -> 6 rows: 638115, 788304, 817582, 838371 VOTEF, 838418, 894303
+  axes: domain=political-sciences term_style=lay theme=referendums satisfying=6
+  why: Six political-science projects study referendums, including VOTEF on Colombian anti-extractivism referendums, giving an L3 set with distinct national cases.
+
+- id: vector-25
+  topic: Projects studying shipwrecks and underwater/maritime archaeology in European waters
+  recommend: route=vector level=L3 subtype=thematic-survey
+  bucket: humanities / history and archaeology
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND (lower(p.objective) LIKE '%shipwreck%' OR lower(p.objective) LIKE '%underwater archae%' OR lower(p.objective) LIKE '%maritime archae%')` -> n = 6 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND (lower(p.objective) LIKE '%shipwreck%' OR lower(p.objective) LIKE '%underwater archae%' OR lower(p.objective) LIKE '%maritime archae%') GROUP BY 1,2 ORDER BY 1` -> 727153 iMARECULTURE, 833143 TRANSPACIFIC, 863393 AISLES, 892446 STAMPEDE, 101022386 WATERISKULT, 101025204 NDTD
+  axes: domain=history-archaeology term_style=domain-phrase theme=underwater-archaeology satisfying=6
+  why: Six projects, all confirmed in objective text, form a natural survey of EU-funded underwater archaeology with distinct angles (VR access, wreck-based shipbuilding history, heritage risk).
+
+- id: vector-26
+  topic: Research on the Viking Age - its origins, names, poetry and silver economy
+  recommend: route=vector level=L3 subtype=thematic-survey
+  bucket: humanities / history and archaeology
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND lower(p.objective) LIKE '%viking%'` -> n = 5 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND lower(p.objective) LIKE '%viking%' GROUP BY 1,2 ORDER BY 1` -> 657128 LEXICON POETICUM, 792006 GENTES, 797386 ArcNames, 802349 SILVER, 949886 BODY-POLITICS
+  axes: domain=history-archaeology term_style=named-period theme=viking-age satisfying=5
+  why: Five text-confirmed projects on one named historical period, spanning philology, onomastics and materials analysis - a clean L3 synthesis with genuinely different sub-answers.
+
+- id: vector-27
+  topic: Use of dendrochronology (tree-ring dating) in historical and archaeological projects
+  recommend: route=vector level=L2 subtype=small-set-synthesis
+  bucket: humanities / history and archaeology
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND lower(p.objective) LIKE '%dendrochronolog%'` -> n = 2 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'humanities/history and archaeology%' AND lower(p.objective) LIKE '%dendrochronolog%' GROUP BY 1,2 ORDER BY 1` -> 800204 VEILA, 101029581 WoodTiMe
+  axes: domain=history-archaeology term_style=method-term theme=dendrochronology satisfying=2
+  why: A precisely named dating method with exactly two carriers in the bucket, giving an unambiguous two-project answer set.
+
+- id: vector-28
+  topic: Projects addressing human trafficking - from labour-market regulation to detection tools for law enforcement
+  recommend: route=vector level=L3 subtype=thematic-survey
+  bucket: social sciences / law
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%human trafficking%'` -> n = 5 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%human trafficking%' GROUP BY 1,2 ORDER BY 1` -> 756672 HumanTrafficking, 786731 CONNEXIONs, 790798 PMT4NIIS, 101021866 CRiTERIA, 101027924 SIGNAL-LANDSCAPE
+  axes: domain=law term_style=policy-phrase theme=human-trafficking satisfying=5
+  why: Five text-confirmed projects on a phrase any user would type, and the set deliberately mixes socio-legal critique with LEA technology, which makes the reference answer non-trivial.
+
+- id: vector-29
+  topic: Law of the sea research - ocean governance, marine biodiversity treaties and autonomous vessels
+  recommend: route=vector level=L2 subtype=small-set-synthesis
+  bucket: social sciences / law
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%law of the sea%'` -> n = 4 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%law of the sea%' GROUP BY 1,2 ORDER BY 1` -> 639070 SUSTAINABLEOCEAN, 804599 MARIPOLDATA, 101018998 LOSFARE, 101038097 P-ADMIRAL
+  axes: domain=law term_style=doctrinal-phrase theme=law-of-the-sea satisfying=4
+  why: Exactly four projects share one named legal regime, spanning ocean governance and the unmanned-vessel gap that P-ADMIRAL's objective states explicitly.
+
+- id: vector-30
+  topic: Research on the International Criminal Court and international criminal justice
+  recommend: route=vector level=L2 subtype=small-set-synthesis
+  bucket: social sciences / law
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%international criminal court%'` -> n = 4 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%international criminal court%' GROUP BY 1,2 ORDER BY 1` -> 654261 ToEfDeCo, 746768 INCRICO, 748114 EaRL, 802053 JustSites
+  axes: domain=law term_style=named-institution theme=international-criminal-justice satisfying=4
+  why: A named institution stated in four objectives gives a crisply bounded L2 set with no tag-only members.
+
+- id: vector-31
+  topic: An SME project building an ITAR-free fibre-optic-gyroscope inertial navigation system for manned and unmanned aircraft
+  recommend: route=vector level=L1 subtype=single-project-lookup
+  bucket: social sciences / social geography
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%inertial navigation%'` -> n = 1 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%inertial navigation%' GROUP BY 1,2 ORDER BY 1` -> 682337 NICENAV
+  axes: domain=social-geography term_style=technical-term theme=inertial-navigation satisfying=1
+  why: One project only, and its objective names the distinguishing features (FOG technology, ITAR-free, DO-178C certification) that a reference answer can be checked against.
+
+- id: vector-32
+  topic: Mobility solutions for rural and low-density areas
+  recommend: route=vector level=L2 subtype=small-set-synthesis
+  bucket: social sciences / social geography
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%rural%' AND lower(p.objective) LIKE '%mobility%'` -> n = 3 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%rural%' AND lower(p.objective) LIKE '%mobility%' GROUP BY 1,2 ORDER BY 1` -> 770115 INCLUSION, 881825 RIDE2RAIL, 101034449 CLOE
+  axes: domain=social-geography term_style=plain-language theme=rural-mobility satisfying=3
+  why: Three projects whose objectives state rural/low-density mobility explicitly, an ordinary user phrasing in a bucket otherwise dominated by urban and aviation work.
+
+- id: vector-33
+  topic: U-space: traffic management for drones and unmanned aircraft in low-level airspace
+  recommend: route=vector level=L3 subtype=thematic-survey
+  bucket: social sciences / social geography
+  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%u-space%'` -> n = 14 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/social geography%' AND lower(p.objective) LIKE '%u-space%' GROUP BY 1,2 ORDER BY 1` -> 14 rows incl. 783211 SAFEDRONE, 783230 PODIUM, 861696 LABYRINTH, 890378 USEPE, 893864 DACUS, 101017682 CORUS-XUAM, 101017702 AMU-LED
+  axes: domain=social-geography term_style=programme-term theme=u-space satisfying=14
+  why: A named European airspace concept with 14 text-confirmed carriers - large enough for a real synthesis question and tightly bounded by a term only this cluster uses.
+
 ## Hybrid
 
 10 candidate seeds for `/draft-hybrid-question` (cp2 run), each a **topic x filter** combo whose TRUE survivor count - a real `COUNT(DISTINCT project.id)` re-executed in the merge pass - lands in a drafting window. Subtypes follow the bank's bounds: `filter-read` (L1, |gold|=1, 2-10 survivors), `filter-synthesize` (L2, ~5-20), `filter-compare` (L3, 2-4 contrastable), `filter-survey` (L3, >=5). Spread: all four filter dimensions used (country x3, date-range x2, fundingScheme x4, funding-percentile x1); level mix 3 L1 / 3 L2 / 4 L3; all four subtypes present. Every `evidence` line shows BOTH the topic's unfiltered total and the filtered survivor count, so the filter's pruning power (the structural bar for a hybrid question - projects must exist that satisfy the text but fail the filter) is visible; the textual answer (what the survivors do / found / how) lives only in free text, never in a stored column.
@@ -366,3 +575,25 @@ Regenerated at cp2. Covers the Vector candidates (cp1, vector-01..15), the Hybri
 - Hybrid filter dimensions: **funding-percentile x topic** (only hybrid-10) and **date-range x topic** (only 2, both `startDate>=2021` - no end-date or mid-window bands yet); no scheme-family contrasts, no NUTS/region country groupings. These are the first top-up targets for the next hybrid run.
 - Topic branches with NO candidate and NO bank question (carried from cp1, still open for both vector and hybrid): chemical sciences (4,331 projects), sociology (3,802), political sciences (1,795), psychology (636), languages and literature (490), law (866). cp1's flagged materials engineering, nanotechnology, arts, and agriculture are now touched by cp2 hybrid candidates.
 - SQL, Adversarial, Ambiguous, and Distributions sections remain unexplored (stubs) - the SQL trap inventory and the adversarial absence set are entirely open.
+
+### cp4 (2026-07-26, scope `map=6`)
+
+**What this run covered.** Six euroSciVoc second-level buckets were mapped topically in a single `map=6` pass: medical and health sciences / basic medicine (4,252), social sciences / sociology (3,802), political sciences (1,795), humanities / history and archaeology (1,669), social geography (870), law (866). All six slices returned VERIFIED, `verify-evidence` re-executed 98/98 claims PASS, and `explore-crosscheck` raised no width, entity, near-duplicate or supply flag. The frontier moves from mapped 0/46 to mapped 6/46; 21 buckets remain unexplored.
+
+**Route and level shape of what was produced.** All 18 candidates (vector-16 .. vector-33) are `route=vector`. Level split is L1 2 / L2 6 / L3 10. There are **zero** sql, hybrid, adversarial and ambiguous seeds in this run - by scope, not by finding - so the bank cannot be drawn from this run for any non-vector cell. Two map entries explicitly flag material for kinds nobody was sent to mine: social geography for adversarial seeds (label-vs-content mismatch, 805/870 of a "social geography" bucket sitting under `transport`) and law for ambiguous seeds (doctrinal scholarship vs LEA technology answering the same question differently). Those are the highest-value follow-ups and they need no new region.
+
+**The scoping caveat a drafting session must not skip.** Every `satisfying_count` here is computed *inside its bucket*. Corpus-wide the same string matches more: chimeric antigen receptor 12 -> 20, organ-on-chip 15 -> 24, U-space 14 -> 20, gentrification 7 -> 9, human trafficking 5 -> 6, dendrochronology 2 -> 7, and both L1 seeds lose their uniqueness (`domestic worker` 1 -> 2, `inertial navigation` 1 -> 2) [`SELECT count(DISTINCT id) FROM project WHERE objective ILIKE '%<term>%' OR title ILIKE '%<term>%'`]. The recorded numbers are correct and reproduced; they are simply bucket-scoped, while a vector question carries no tag filter. A drafter must re-derive `|gold|` corpus-wide before fixing a level - vector-19 and vector-31 are the two seeds most likely to change cell, and vector-27 would move L2 -> L3.
+
+**Axis coverage.** The `axes` fields span domain (6 values), theme (18 distinct, no repeats) and a loose `term_style` vocabulary. They touch **no** country, coordinator, funding scheme, funding band, date range or activity type - every seed is a pure topical string match on `title`/`objective`. Nothing here supports a scheme- or date-conditioned question, and nothing draws on `report_text` even though the run measured 98-99% report coverage in five of six buckets.
+
+**Genuinely well covered:** vector L3 thematic-survey seeds in the social-science and humanities buckets. Ten of them, spread over six themes and six buckets, all text-confirmed. That cell does not need another run.
+
+**Gaps this run leaves open:**
+
+- *Cell unserved (route).* 0 of 18 candidates are sql, hybrid, adversarial or ambiguous - `map=6` produced vector-only supply, so every non-vector cell of the allocation is unfed and `## Distributions` remains a stub.
+- *Bucket-scoped counts.* All 18 `satisfying_count` values are tag-filtered, but a vector question has no tag filter; corpus-wide the same terms match up to 60% more projects. Downstream cost is incomplete gold - the defect class that punishes the systems that did best. Drafters must re-derive `|gold|` unscoped.
+- *Cell unserved (level).* Only 2 L1 seeds, both fragile under unscoped re-derivation, so this run may in practice supply zero usable vector-L1 cells.
+- *Material found but not mined.* Social geography's label-vs-content mismatch and law's two-register split were both identified as adversarial/ambiguous seed material inside map entries and neither was mined. Cheapest next yield in the run - no new bucket needed.
+- *Axis thin (non-topical).* No candidate uses country, scheme, funding band, date range or activity type; drafting hybrid `filter-*` cells from this run's material is impossible.
+- *Evidence source.* No seed uses `report_text` or retrieval pooling; all satisfying sets are lexical ILIKE proxies, so no seed carries evidence bearing on `term_style=paraphrase` - supply is biased toward `exact-term`.
+- *Frontier shape.* 21/46 buckets still unexplored, and largest-first remains defensible for width, but the marginal value of a seventh mapped bucket is now below an `adversarial`/`ambiguous` pass over the six already mapped, and below a hybrid pass anywhere - the bottleneck has moved from region coverage to route coverage.

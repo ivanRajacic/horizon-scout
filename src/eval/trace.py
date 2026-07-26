@@ -157,17 +157,33 @@ def session_dirs(path: Path = ROOT,
                   reverse=True)
 
 
+def _as_utc(stamp: str) -> datetime | None:
+    """Transcript timestamps are UTC ("...Z"); a `--since` typed from `date`
+    is local. Comparing them as strings silently drops every agent when the
+    machine is ahead of UTC - which is how the first live run traced empty."""
+    try:
+        parsed = datetime.fromisoformat(stamp.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()          # naive input means local time
+    return parsed
+
+
 def trace_session(session: Path, since: str | None = None) -> list[AgentTrace]:
-    """Every subagent of one session, oldest first. `since` (an ISO timestamp)
-    keeps only agents that ended after it - how one run is separated from an
-    earlier run in the same session."""
+    """Every subagent of one session, oldest first. `since` (an ISO timestamp,
+    local time unless it carries an offset) keeps only agents that ended after
+    it - how one run is separated from an earlier run in the same session."""
+    floor = _as_utc(since) if since else None
     traces = []
     for transcript in sorted((session / "subagents").glob("agent-*.jsonl")):
         trace = read_agent(transcript)
         if trace.turns == 0:
             continue
-        if since and (trace.ended or "") < since:
-            continue
+        if floor is not None:
+            ended = _as_utc(trace.ended or "")
+            if ended is None or ended < floor:
+                continue
         traces.append(trace)
     traces.sort(key=lambda t: t.started or "")
     return traces
