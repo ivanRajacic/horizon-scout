@@ -3,7 +3,7 @@
 **Kind:** prompt assets only. `.claude/agents/question-reviewer.md`,
 `.claude/agents/question-judge.md`, `.claude/skills/{review,judge}-question/SKILL.md`,
 `.claude/skills/draft-batch/SKILL.md`.
-**Status:** approved.
+**Status:** IMPLEMENTED 2026-07-26 (commits `048d777`, `1db32de`). Verified by the measured re-run: pending.
 **Depends on:** nothing.
 
 ## Context

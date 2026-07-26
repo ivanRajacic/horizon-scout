@@ -2,7 +2,7 @@
 
 **Kind:** prompt assets only. `.claude/skills/draft-{hybrid,vector,sql}-question/SKILL.md`,
 `.claude/agents/question-drafter.md`.
-**Status:** approved.
+**Status:** IMPLEMENTED 2026-07-26 (commit `048d777`). Verified by the measured re-run: pending.
 **Depends on:** plan 01 (items 5 and 7 below reference checks it adds). Everything else here
 is independent and can be done first if 01 is not ready.
 

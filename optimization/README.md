@@ -48,10 +48,10 @@ Three measured facts drive everything here:
 
 | # | Plan | Kind | Status | Depends on |
 |---|---|---|---|---|
-| 01 | [Deterministic gates](01-deterministic-gates.md) | code (`mcp_server.py`, `cli.py`) | approved | - |
-| 02 | [Drafter early exit](02-drafter-early-exit.md) | prompt assets | approved | 01 |
-| 03 | [Critic & judge economics](03-critic-judge-economics.md) | prompt assets | approved | - |
-| 04 | [Orchestrator throughput](04-orchestrator-throughput.md) | code + prompt assets | approved | - |
+| 01 | [Deterministic gates](01-deterministic-gates.md) | code (`mcp_server.py`, `cli.py`) | implemented 2026-07-26 | - |
+| 02 | [Drafter early exit](02-drafter-early-exit.md) | prompt assets | implemented 2026-07-26 | 01 |
+| 03 | [Critic & judge economics](03-critic-judge-economics.md) | prompt assets | implemented 2026-07-26 | - |
+| 04 | [Orchestrator throughput](04-orchestrator-throughput.md) | code + prompt assets | implemented 2026-07-26 | - |
 | 05 | [Per-question workspace store](05-workspace-store.md) | code (architecture) | **proposal - decide before starting** | supersedes part of 04 |
 
 **Recommended order: 01, then 02 and 03 and 04 in any order.** 01 first because 02's

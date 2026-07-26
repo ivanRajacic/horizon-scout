@@ -2,7 +2,7 @@
 
 **Kind:** code (`src/eval/batch.py`, `src/cli.py`) + prompt assets
 (`.claude/skills/draft-batch/SKILL.md`).
-**Status:** approved.
+**Status:** IMPLEMENTED 2026-07-26 (commits `0e3472e`, `1db32de`). Verified by the measured re-run: pending.
 **Depends on:** nothing.
 **Note:** plan 05 (workspace store) would supersede **item 1 only**. Items 2-4 survive it
 unchanged. If plan 05 is going ahead, skip item 1 and do the rest.

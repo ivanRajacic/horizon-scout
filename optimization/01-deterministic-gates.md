@@ -1,7 +1,7 @@
 # Plan 01 - Deterministic gates
 
 **Kind:** code. `src/eval/mcp_server.py`, `src/cli.py`, tests.
-**Status:** approved.
+**Status:** IMPLEMENTED 2026-07-26 (entity guard in `43c5dd5`; `snippet_chars`, `SURVIVOR-WINDOW`/`GOLD-BOUNDS`, one-reading check in the working tree, uncommitted as of this note). Verified by the measured re-run: pending.
 **Depends on:** nothing. Do this first - plan 02's skill edits reference the checks added here.
 
 ## Context
