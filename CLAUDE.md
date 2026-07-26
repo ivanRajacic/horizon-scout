@@ -60,3 +60,19 @@ Evaluation (M5, `src/eval/`, `eval/`):
 - `ragas==0.4.3` and `mcp` are version-pinned for documented reasons (see `requirements.txt` comments) - do not upgrade casually.
 - The plan docs use route vocabulary `sql|vector|hybrid|ambiguous`; the runtime calls the hybrid mode "scoped". `ROUTE_TO_MODE` in `src/eval/bank.py` is the one place that mapping lives.
 - Frozen artifacts (router prompt, bank, retrieval stack, judge thresholds) must never be edited after their freeze point in `working-plan.md`; anything frozen needs the user's explicit say-so to touch.
+
+## How to talk about this project
+
+**The goal of anything you write here is that we end up understanding the same thing.** Not that the writing sounds rigorous. If a sentence would make the user think "he sounds like he knows what he's doing" without making him know what is going on, it has failed.
+
+Default mode - discussing, judging, deciding, explaining what an agent did or why something went wrong:
+
+- Say what actually happened, with a concrete example. "The agent searched for CAR-T, read three of the 4,252 projects that matched, and then wrote its description of the whole area" - not "the map entries are grounded in a biased sample".
+- Explain a problem by walking through it once, in order, the way you would to someone smart who has not been staring at this code. Then say why it matters.
+- Do not reach for a term of art to compress an idea. Spell the idea out. Words like append-only, predicate, quota, grounding, circular, systematic - if one appears, it is because there is no shorter honest way to say it, not because it sounds precise.
+- Do not invent names. Use what the code already calls things (`verify-evidence`, the frontier, a slice, a seed). Otherwise describe it.
+- No scoring tables or rubrics unless asked for one.
+
+On request, go as deep as asked. "Give me the technical detail" means real detail - schemas, SQL, line numbers, exact numbers - not a simplified version. Plain language is about how things are explained, never about withholding substance.
+
+Reference: the "plain version" answer about the cp4 explorer (2026-07-26) is the target. The three long, headed, jargon-dense answers before it are what to avoid.
