@@ -97,3 +97,31 @@ def test_parallel_generation_respects_global_cap(monkeypatch):
 
 def test_hard_ceiling_is_sixteen():
     assert CLAUDE_MAX_CONCURRENCY == 16
+
+
+# --- the command line itself ---
+
+def test_the_transport_gives_claude_no_tools(monkeypatch):
+    """A generator writes an answer and a judge scores one. Neither needs to
+    run Bash, and leaving the tools on is not harmless: on 2026-07-26 the judge
+    model answered two large cases by reaching for a tool, which with
+    --max-turns 1 ended the session on stop_reason "tool_use" and exited 1 -
+    two verdicts lost and $1.51 spent for nothing. Pinned here because the
+    failure is invisible until a prompt happens to be big enough to provoke it.
+    """
+    seen = {}
+
+    class Done:
+        returncode = 0
+        stdout = '{"type": "result", "result": "ok", "is_error": false}'
+        stderr = ""
+
+    monkeypatch.setattr(claude_cli.shutil, "which", lambda _: "/fake/claude")
+    monkeypatch.setattr(claude_cli.subprocess, "run",
+                        lambda cmd, **kw: seen.update(cmd=cmd) or Done())
+
+    claude_cli.call_claude("q", "sonnet")
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--tools") + 1] == ""      # every built-in tool off
+    assert cmd[cmd.index("--max-turns") + 1] == "1"
+    assert cmd[cmd.index("--model") + 1] == "sonnet"

@@ -55,8 +55,20 @@ def call_claude(prompt: str, model: str,
         raise ClaudeCliError(
             "`claude` CLI not found on PATH - generation and judging run on "
             "the Claude Code subscription via `claude -p`.")
+    # --tools "" disables the built-in tool set. Every caller here wants text
+    # in, text out: a generator writing an answer from evidence it was handed,
+    # or a judge scoring one. None of them has any business running Bash.
+    #
+    # Left on, this is not a theoretical risk - it broke the 2026-07-26 pilot.
+    # `claude -p` is a whole Claude Code session, so the judge model could see
+    # tools, and on the two largest questions (vec-04, hyb-09; ~50k tokens of
+    # context each) it answered by reaching for one instead of writing text.
+    # With --max-turns 1 that tool-use turn spent the whole budget, so the
+    # session ended on stop_reason "tool_use" with is_error true and the CLI
+    # exited 1 - two judge calls dead, $1.51 spent, no verdict. Removing the
+    # tools makes stopping on a tool call impossible rather than unlikely.
     cmd = [exe, "-p", "--model", model, "--output-format", "json",
-           "--max-turns", "1"]
+           "--max-turns", "1", "--tools", ""]
     try:
         proc = subprocess.run(cmd, input=prompt, capture_output=True,
                               text=True, encoding="utf-8", timeout=timeout_s)
