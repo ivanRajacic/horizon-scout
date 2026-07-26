@@ -588,6 +588,85 @@ def cmd_write_batch(args):
           f"{res.report_file}")
 
 
+def cmd_frontier_report(args):
+    """The /explore-corpus startup, in one call: where exploration has and has
+    not been, this run's slice partition, the orientation block, next ids."""
+    from src.eval.explore import (ExploreError, frontier_report,
+                                  render_frontier_report)
+
+    try:
+        report = frontier_report(map_count=args.map,
+                                 profile_path=Path(args.profile),
+                                 bank_path=Path(args.bank))
+    except ExploreError as e:
+        print(f"FRONTIER REPORT FAILED:\n  {e}")
+        sys.exit(1)
+    print(render_frontier_report(report, args.map))
+
+
+def cmd_verify_evidence(args):
+    """Re-execute EVERY claim in an exploration journal - not a sample."""
+    from src.eval.explore import (ExploreError, connect, load_journal,
+                                  render_checks, verify_evidence)
+
+    try:
+        journal = load_journal(Path(args.journal))
+    except ExploreError as e:
+        print(f"VERIFY FAILED - journal unreadable:\n  {e}")
+        sys.exit(1)
+    con = connect()
+    try:
+        checks = verify_evidence(journal, con)
+    finally:
+        con.close()
+    print(render_checks(checks))
+    if any(c.status == "FAIL" for c in checks):
+        sys.exit(1)
+
+
+def cmd_explore_crosscheck(args):
+    """Width, entity spread, near-duplicates and supply across a whole run."""
+    from src.eval.explore import (ExploreError, crosscheck, load_journal,
+                                  read_profile, render_flags)
+
+    try:
+        journal = load_journal(Path(args.journal))
+    except ExploreError as e:
+        print(f"CROSSCHECK FAILED:\n  {e}")
+        sys.exit(1)
+    flags = crosscheck(journal, read_profile(Path(args.profile)),
+                       journal.header.get("targets"))
+    print(f"{len(journal.order)} slice(s) from {Path(args.journal).name} vs "
+          f"{Path(args.profile).name}\n")
+    print(render_flags(flags))
+
+
+def cmd_write_profile(args):
+    """Grow corpus_profile.md from an exploration journal, by insertion."""
+    from src.eval.explore import (ExploreError, render_write_result,
+                                  write_profile)
+
+    try:
+        result = write_profile(Path(args.journal), args.version,
+                               profile_path=Path(args.profile),
+                               bank_path=Path(args.bank),
+                               date=args.date, dry_run=args.dry_run)
+    except ExploreError as e:
+        print("WRITE REFUSED - nothing written:")
+        for line in str(e).splitlines():
+            print(f"  {line}")
+        sys.exit(1)
+    print(render_write_result(result))
+    if args.dry_run:
+        print("\n(dry run - the profile and src/config.py are untouched)")
+    elif result.version_bumped:
+        print(f"\nCORPUS_PROFILE_VERSION bumped to {result.version}. "
+              "Review the profile, then present the summary to the user.")
+    else:
+        print("\n(wrote a non-canonical profile copy - "
+              "CORPUS_PROFILE_VERSION left alone)")
+
+
 def cmd_promote_drafts(args):
     """Append the APPROVE-ticked questions of a /draft-batch report to the
     bank. Deterministic: parses the report's decision boxes, validates the
@@ -776,6 +855,48 @@ def main():
     wb.add_argument("--force", action="store_true",
                     help="overwrite existing output files")
     wb.set_defaults(fn=cmd_write_batch)
+
+    fr = sub.add_parser("frontier-report",
+                        help="/explore-corpus startup: frontier, slice "
+                             "partition, orientation block, next ids")
+    fr.add_argument("--map", type=int, default=0,
+                    help="buckets to map this run; also emits the slice "
+                         "partition and the seed standard")
+    fr.add_argument("--profile",
+                    default=str(ROOT / "src" / "retrieval" /
+                                "corpus_profile.md"))
+    fr.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    fr.set_defaults(fn=cmd_frontier_report)
+
+    ve = sub.add_parser("verify-evidence",
+                        help="re-execute every claim in an exploration "
+                             "journal (exhaustive, not sampled)")
+    ve.add_argument("journal")
+    ve.set_defaults(fn=cmd_verify_evidence)
+
+    ec = sub.add_parser("explore-crosscheck",
+                        help="width / entity / near-duplicate / supply flags "
+                             "across an exploration run")
+    ec.add_argument("journal")
+    ec.add_argument("--profile",
+                    default=str(ROOT / "src" / "retrieval" /
+                                "corpus_profile.md"))
+    ec.set_defaults(fn=cmd_explore_crosscheck)
+
+    wp = sub.add_parser("write-profile",
+                        help="grow corpus_profile.md from an exploration "
+                             "journal, by insertion")
+    wp.add_argument("journal")
+    wp.add_argument("version", help="the new profile version, e.g. cp4")
+    wp.add_argument("--profile",
+                    default=str(ROOT / "src" / "retrieval" /
+                                "corpus_profile.md"))
+    wp.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    wp.add_argument("--date", default=None,
+                    help="default: the journal's run header, else today")
+    wp.add_argument("--dry-run", action="store_true",
+                    help="render and report, write nothing")
+    wp.set_defaults(fn=cmd_write_profile)
 
     pd = sub.add_parser("promote-drafts",
                         help="append APPROVE-ticked /draft-batch drafts "
