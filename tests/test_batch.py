@@ -80,6 +80,28 @@ def write_jsonl(path, records):
     return path
 
 
+# --- the transcription-boundary entity guard -------------------------------
+
+def test_html_entity_hits_finds_entities_with_context():
+    from src.cli import html_entity_hits
+
+    raw = json.dumps({"text": "Projects with cost &lt; 1M &amp; ERC funding"})
+    hits = html_entity_hits(raw)
+    assert len(hits) == 2
+    assert hits[0].startswith("&lt; in:") and "cost &lt; 1M" in hits[0]
+    assert hits[1].startswith("&amp; in:")
+    # Numeric and hex references are entities too.
+    assert html_entity_hits("a &#8211; b") and html_entity_hits("a &#x2013; b")
+
+
+def test_html_entity_hits_is_quiet_on_legitimate_ampersands():
+    from src.cli import html_entity_hits
+
+    # A CORDIS title carrying a literal & (or an &-word) must never trip it.
+    assert html_entity_hits('{"text": "R&D in health & food"}') == []
+    assert html_entity_hits(json.dumps(SQL_A)) == []
+
+
 # --- allocation table ------------------------------------------------------
 
 def test_parse_allocation_reads_ladder_rows_and_totals(tmp_path):

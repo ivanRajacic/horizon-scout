@@ -24,12 +24,35 @@
 
 import argparse
 import json
+import re
 import sys
 import textwrap
 from pathlib import Path
 
 from src.config import (CHUNK_TARGET, CLAUDE_CONCURRENCY, JUDGE_DEFAULT,
                         ROOT, SPLIT_OVERLAP)
+
+# Transcription-boundary guard: agent-returned packages have arrived with
+# HTML entities (&lt; &gt; &amp;) where the source text had < > &. Unnoticed,
+# corrupted text goes into the bank permanently - so the CLI commands that
+# accept an agent's raw returned text refuse it loudly. This lives HERE, not
+# in bank.py's schema validator: a CORDIS title legitimately carrying an
+# entity-looking substring must never make the promoted bank unloadable; the
+# hazard is transcription, and this is the transcription boundary.
+_HTML_ENTITY_RE = re.compile(r"&(?:lt|gt|amp|quot|apos|nbsp|#\d+"
+                             r"|#x[0-9a-fA-F]+);")
+
+
+def html_entity_hits(raw: str, context: int = 40) -> list[str]:
+    """Each entity found in `raw`, with surrounding context - "an entity is
+    present" is useless without "where"."""
+    hits = []
+    for match in _HTML_ENTITY_RE.finditer(raw):
+        start, end = match.span()
+        snippet = raw[max(0, start - context):min(len(raw), end + context)]
+        snippet = " ".join(snippet.split())
+        hits.append(f"{match.group(0)} in: ...{snippet}...")
+    return hits
 
 
 def cmd_build_index(args):
@@ -476,6 +499,16 @@ def cmd_validate_record(args):
         obj = json.loads(raw)
     except json.JSONDecodeError as e:
         print(f"INVALID: not valid JSON ({e})")
+        sys.exit(1)
+    # Checked on the RAW string, not the parsed dict, so entities in keys
+    # and nested values are both caught.
+    entities = html_entity_hits(raw)
+    if entities:
+        print("INVALID: HTML entities in the record - the source text almost "
+              "certainly had the literal character; unescape before "
+              "validating:")
+        for hit in entities:
+            print(f"  {hit}")
         sys.exit(1)
     where = "record" if args.record == "-" else Path(args.record).name
     errors = validate_record(obj, where)
