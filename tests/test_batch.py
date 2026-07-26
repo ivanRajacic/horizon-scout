@@ -12,8 +12,9 @@ import json
 import pytest
 
 from src.config import ROOT
-from src.eval.batch import (BatchError, crosscheck, gap_report, load_journal,
-                            next_ids, parse_allocation, write_batch)
+from src.eval.batch import (BatchError, crosscheck, gap_report,
+                            journal_append, load_journal, next_ids,
+                            parse_allocation, write_batch)
 from src.eval.promote import promote
 
 PLAN = """
@@ -299,6 +300,88 @@ def test_load_journal_requires_a_batch_header(tmp_path):
                         name="headerless.jsonl")
     with pytest.raises(BatchError, match="batch header"):
         load_journal(path)
+
+
+# --- journal-append: the transition bookkeeping, in code -------------------
+
+def slot_payload(**extra):
+    """A first-transition payload: everything slot() carries except the
+    envelope fields journal-append owns."""
+    payload = {k: v for k, v in slot("ignored", "ignored").items()
+               if k not in ("kind", "question_id", "status")}
+    payload.update(extra)
+    return payload
+
+
+def test_journal_append_merges_over_the_latest_line(tmp_path):
+    path = journal_file(tmp_path, [HEADER])
+    journal_append(path, "sql-01", "DRAFTING", slot_payload())
+    # The second transition passes ONLY what changed; everything else is
+    # carried forward, because latest-line-wins needs every line complete.
+    journal_append(path, "sql-01", "ACCEPTED", {"record": SQL_A})
+    journal = load_journal(path)
+    line = journal.slots["sql-01"]
+    assert line["status"] == "ACCEPTED"
+    assert line["record"] == SQL_A
+    assert line["cell"]["route"] == "sql"           # carried forward
+    assert line["evidence"] == "executed: 1,204 rows"
+    # Two slot lines on disk: append, never rewrite.
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 3
+
+
+def test_journal_append_enforces_the_envelope(tmp_path):
+    path = journal_file(tmp_path, [HEADER])
+    # A first transition with no cell is refused at append time, not
+    # discovered by write-batch at close-out.
+    with pytest.raises(BatchError, match="cell"):
+        journal_append(path, "sql-01", "DRAFTING", {"candidates": []})
+    with pytest.raises(BatchError, match="status"):
+        journal_append(path, "sql-01", "NOPE", slot_payload())
+    with pytest.raises(BatchError, match="question_id"):
+        journal_append(path, "", "DRAFTING", slot_payload())
+    # Nothing was appended by any refusal.
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_journal_append_keeps_the_record_opaque(tmp_path):
+    # A schema-invalid record mid-run is FINE - the envelope is typed, the
+    # payload is not. That distinction is deliberate.
+    path = journal_file(tmp_path, [HEADER])
+    journal_append(path, "sql-01", "DRAFTING",
+                   slot_payload(record={"half": "finished"}))
+    assert load_journal(path).slots["sql-01"]["record"] == {
+        "half": "finished"}
+
+
+def test_journal_append_refuses_a_conflicting_payload_envelope(tmp_path):
+    path = journal_file(tmp_path, [HEADER])
+    with pytest.raises(BatchError, match="question_id"):
+        journal_append(path, "sql-01", "DRAFTING",
+                       slot_payload(question_id="sql-02"))
+
+
+def test_journal_append_requires_a_header(tmp_path):
+    path = journal_file(tmp_path, [], name="empty.jsonl")
+    with pytest.raises(BatchError, match="batch header"):
+        journal_append(path, "sql-01", "DRAFTING", slot_payload())
+
+
+def test_journal_append_round_trips_through_write_batch(tmp_path):
+    """The fixture replay: a journal built by journal-append must produce the
+    two canonical outputs byte-identical to a hand-built journal's."""
+    by_hand = journal_file(tmp_path / "hand", [
+        HEADER,
+        slot("sql-01", "DRAFTING"),
+        slot("sql-01", "ACCEPTED", record=SQL_A)])
+    appended = journal_file(tmp_path / "appended", [HEADER])
+    journal_append(appended, "sql-01", "DRAFTING", slot_payload())
+    journal_append(appended, "sql-01", "ACCEPTED", {"record": SQL_A})
+    res_hand = write_batch(by_hand, bank_path=tmp_path / "no-bank.jsonl")
+    res_app = write_batch(appended, bank_path=tmp_path / "no-bank.jsonl")
+    assert (res_hand.draft_file.read_bytes()
+            == res_app.draft_file.read_bytes())
+    assert (res_hand.report_file.read_bytes()
+            == res_app.report_file.read_bytes())
 
 
 def test_write_batch_stages_accepted_records_and_accounts_for_every_slot(

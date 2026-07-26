@@ -15,6 +15,8 @@
   python -m src.cli gap-report [--bank ...] [--drafts-dir ...] [--plan ...]
   python -m src.cli next-ids [--sql N] [--vector N] [--hybrid N]
   python -m src.cli batch-crosscheck <journal.jsonl | draft-bank.jsonl>
+  python -m src.cli journal-append <journal.jsonl> --id hyb-08
+                                   --status REVIEWING [--payload - | file]
   python -m src.cli write-batch <journal.jsonl> [--output-dir ...]
                                 [--date YYYY-MM-DD] [--suffix -2] [--force]
   python -m src.cli promote-drafts <draft-report.md> [--bank eval/bank.jsonl]
@@ -591,6 +593,54 @@ def cmd_batch_crosscheck(args):
     print(render_flags(flags))
 
 
+def cmd_journal_append(args):
+    """Append one slot transition to a /draft-batch working journal.
+
+    The payload (fields to set, JSON object) comes from a file or stdin with
+    `-` - quoted-heredoc it, the same pattern as validate-record, so quotes
+    and `$` cannot break the shell. It is merged over the slot's latest line;
+    the envelope is enforced; `record` stays opaque."""
+    from src.eval.batch import BatchError, journal_append
+
+    payload = None
+    if args.payload:
+        try:
+            raw = (sys.stdin.read() if args.payload == "-"
+                   else Path(args.payload).read_text(encoding="utf-8"))
+        except OSError as e:
+            print(f"APPEND REFUSED: cannot read the payload ({e})")
+            sys.exit(1)
+        raw = raw.strip()
+        if raw:
+            # The same transcription boundary as validate-record: entities in
+            # an agent-returned package are refused, never silently written.
+            entities = html_entity_hits(raw)
+            if entities:
+                print("APPEND REFUSED: HTML entities in the payload - the "
+                      "source text almost certainly had the literal "
+                      "character; unescape and re-append:")
+                for hit in entities:
+                    print(f"  {hit}")
+                sys.exit(1)
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as e:
+                print(f"APPEND REFUSED: payload is not valid JSON ({e})")
+                sys.exit(1)
+    try:
+        line = journal_append(Path(args.journal), args.question_id,
+                              args.status, payload)
+    except BatchError as e:
+        print("APPEND REFUSED - journal untouched:")
+        for msg in str(e).splitlines():
+            print(f"  {msg}")
+        sys.exit(1)
+    merged = sorted(k for k in line if k not in ("kind", "question_id",
+                                                 "status"))
+    print(f"appended: {args.question_id} -> {args.status} "
+          f"(fields: {', '.join(merged)})")
+
+
 def cmd_write_batch(args):
     """Render the two canonical /draft-batch outputs from the journal."""
     from src.eval.batch import BatchError, write_batch
@@ -890,6 +940,22 @@ def main():
     bc.add_argument("source", help="working journal or staged draft jsonl")
     bc.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     bc.set_defaults(fn=cmd_batch_crosscheck)
+
+    ja = sub.add_parser("journal-append",
+                        help="append one slot transition to a /draft-batch "
+                             "working journal; payload merged over the "
+                             "slot's latest line, envelope enforced")
+    ja.add_argument("journal")
+    ja.add_argument("--id", required=True, dest="question_id",
+                    help="slot question_id, e.g. hyb-08")
+    ja.add_argument("--status", required=True,
+                    help="new slot status (DRAFTING, REVIEWING, JUDGING, "
+                         "FIXING, ACCEPTED, FAILED, BLOCKED)")
+    ja.add_argument("--payload", default=None,
+                    help="JSON object of fields to set: a file path, or '-' "
+                         "for stdin (quoted heredoc). Omit for a pure "
+                         "status change.")
+    ja.set_defaults(fn=cmd_journal_append)
 
     wb = sub.add_parser("write-batch",
                         help="render the staged draft jsonl + review report "

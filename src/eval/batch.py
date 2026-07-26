@@ -526,6 +526,52 @@ def load_journal(path: Path) -> Journal:
     return journal
 
 
+def journal_append(path: Path, question_id: str, status: str,
+                   payload: dict | None = None) -> dict:
+    """Append one slot transition; the envelope bookkeeping in code.
+
+    Latest-line-wins means every journal line must be COMPLETE (a new line
+    REPLACES the slot's state, it does not patch it) - which is why the
+    2026-07-25 run needed eighteen hand-written scripts, each re-marshalling
+    `record`, `evidence`, `findings` and `history` verbatim. This node does
+    the merge instead: `payload` holds only what changed, it is merged over
+    the slot's latest line, and the complete merged line is appended. The
+    envelope (kind, question_id, status, cell) is enforced here so a bad
+    line is refused at append time, not discovered by write-batch at
+    close-out. `record` stays opaque and may be schema-invalid mid-run -
+    that distinction is deliberate and preserved.
+
+    This is marshalling only: nothing here computes, compares or judges.
+    """
+    payload = payload if payload is not None else {}
+    if not isinstance(payload, dict):
+        raise BatchError("payload must be a JSON object (the fields to set)")
+    if status not in SLOT_STATUSES:
+        raise BatchError(f"status must be one of {SLOT_STATUSES}, "
+                         f"got {status!r}")
+    if not isinstance(question_id, str) or not question_id.strip():
+        raise BatchError("question_id must be a non-empty string")
+    fixed = {"kind": "slot", "question_id": question_id, "status": status}
+    for key, want in fixed.items():
+        if key in payload and payload[key] != want:
+            raise BatchError(
+                f"payload carries {key}={payload[key]!r} but the command "
+                f"says {want!r} - one of the two is wrong; drop the payload "
+                "field or fix the flag")
+    # load_journal validates every existing envelope loudly, so a corrupt
+    # journal is caught before anything is appended to it.
+    journal = load_journal(Path(path))
+    base = journal.slots.get(question_id, {})
+    line = {**base, **payload, **fixed}
+    if not isinstance(line.get("cell"), dict):
+        raise BatchError(
+            f"{question_id}: cell must be an object (route/level/subtype) - "
+            "the slot's first transition must carry it")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(line, ensure_ascii=False) + "\n")
+    return line
+
+
 def read_journal_lines(path: Path) -> list[dict]:
     lines, errors = [], []
     if not path.is_file():
