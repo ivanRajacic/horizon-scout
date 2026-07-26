@@ -99,6 +99,7 @@ The payload holds ONLY what changed; the command merges it over the slot's lates
 
 ```jsonc
 {"kind": "batch", "date": "2026-07-25",
+ "started": "2026-07-25T14:03:00",   // `date +%Y-%m-%dT%H:%M:%S`, at setup
  "order": "<the cells and counts the user asked for, in words>",
  "budgets": {"candidates_per_slot": 3, "passes_budget": 6},
  "versions": {
@@ -225,9 +226,21 @@ The writer refuses to overwrite an existing pair - it may hold an unpromoted ear
 
 The cross-check is the sweep no per-slot node can run: the critic's near-duplicate check reads `get_bank_questions`, which returns the *promoted* bank, so two parallel slots can converge and nothing notices. Its output is **flags on the report, never a gate and never a redraft** - the user adjudicates at promote time. Do not act on a flag yourself.
 
+**Then trace what the batch cost:**
+
+```bash
+./.venv/Scripts/python.exe -m src.cli agent-trace --orchestrator --steps --since <the header's "started">
+```
+
+Per agent: turns, steps, active time, span, output tokens, input tokens with the cache share, and tool calls - read from each agent's own transcript, so the slots you ran concurrently are never confused with each other. Pass `--since` or a long session picks up an earlier batch's agents. It rolls up two ways that matter here and nowhere else: **by agent type**, which is what a drafter costs against a critic against a judge, and **by slot**, which is what one question cost across the three agents that made it (the slot id is read from the spawn descriptions, so keep writing them as `Draft hyb-09 ...`, `Attack draft hyb-09 round 2`, `Judge slot hyb-09`).
+
+`--steps` is the part that matters for warm agents. A drafter's fix round, a critic's re-attack and each round the warm judge ruled on are separate lines, so "the judge cost 38 minutes" resolves into four rulings totalling three minutes plus 35 minutes of waiting on the bus. Read the two time columns together: **active** is work, **span** is lifetime. Summed active far below summed span means agents sat warm and idle - and if the batch's wall clock also exceeded summed active, the bus was the bottleneck, which is the exact failure step 5 warns about.
+
+This goes in the final message, not into the report: `write-batch` writes the canonical outputs, and those must not depend on a harness-internal transcript format that is not ours to control.
+
 ### 7. Final message
 
-Both paths, the tally (accepted / failed with reasons / blocked), any cell the judge flagged suspect, id gaps left, the cross-check flag count, and:
+Both paths, the tally (accepted / failed with reasons / blocked), any cell the judge flagged suspect, id gaps left, the cross-check flag count, the `agent-trace` table with its by-type and by-slot rollups, and:
 
 ```
 ./.venv/Scripts/python.exe -m src.cli validate-bank            # optional pre-check

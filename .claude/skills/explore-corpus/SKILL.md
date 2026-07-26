@@ -251,10 +251,12 @@ Do not read the payload for quality. You have no judgement to add that `verify-e
 4. **Trace what the run cost:**
 
    ```bash
-   ./.venv/Scripts/python.exe -m src.cli agent-trace --orchestrator
+   ./.venv/Scripts/python.exe -m src.cli agent-trace --orchestrator --since <the run header's "started">
    ```
 
-   Per agent: turns, wall clock, output tokens, input tokens with the cache share, and tool calls - read from each subagent's own transcript, so concurrent agents are never confused with each other. Paste the table into the review summary. This is how the next run's estimate stops being a guess.
+   Per agent: turns, steps, active time, span, output tokens, input tokens with the cache share, and tool calls - read from each subagent's own transcript, so concurrent agents are never confused with each other. Paste the table into the review summary. This is how the next run's estimate stops being a guess.
+
+   Read the two time columns together: **active** sums what the agent did under each instruction it received; **span** is first to last message, idle included. An explorer is spawned once and returns once, so its two numbers nearly agree - if they diverge here, a slice was re-spawned or an agent sat waiting, and that is worth a line in the summary. Add `--steps` to see the breakdown per instruction.
 
 5. Run `./.venv/Scripts/python.exe -m pytest tests/test_explore.py tests/test_mcp_server.py -q`.
 
