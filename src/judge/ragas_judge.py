@@ -32,6 +32,7 @@ from src.claude_cli import call_claude, shared_semaphore
 from src.config import (CLAUDE_CONCURRENCY, CLAUDE_MAX_CONCURRENCY,
                         JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS,
                         JUDGE_PASS_FACTUAL, JUDGE_PASS_FAITHFULNESS)
+from src.eval import usage
 from src.judge.judge import Judge
 from src.judge.ragas_backend import ClaudeCliLLM  # installs the ragas shim
 from src.llm import fingerprint
@@ -125,19 +126,25 @@ class JudgePool:
         ref = case["reference_answer"]
         ans = case["answer"]
 
-        if case.get("adversarial"):
-            v = await asyncio.to_thread(self.rubric.judge, q, ref, ans, qid)
-            return PoolVerdict(question_id=qid, path="overlay",
-                               passed=v.passed, model=self.model,
-                               detail=v.reasoning)
+        # Label this case's `claude -p` calls so a concurrent batch's cost
+        # splits back out per question. asyncio.gather gives every case its own
+        # context copy and asyncio.to_thread carries it into the worker, so
+        # neither the metric fan-out below nor the overlay can cross-label.
+        with usage.stage(qid or usage.UNATTRIBUTED, "judge"):
+            if case.get("adversarial"):
+                v = await asyncio.to_thread(self.rubric.judge, q, ref, ans, qid)
+                return PoolVerdict(question_id=qid, path="overlay",
+                                   passed=v.passed, model=self.model,
+                                   detail=v.reasoning)
 
-        contexts = case.get("contexts") or []
-        sample = SingleTurnSample(user_input=q, response=ans, reference=ref,
-                                  retrieved_contexts=contexts)
-        tasks = [self.factual.single_turn_ascore(sample)]
-        if contexts:
-            tasks.append(self.faithfulness.single_turn_ascore(sample))
-        scores = await asyncio.gather(*tasks)
+            contexts = case.get("contexts") or []
+            sample = SingleTurnSample(user_input=q, response=ans, reference=ref,
+                                      retrieved_contexts=contexts)
+            tasks = [self.factual.single_turn_ascore(sample)]
+            if contexts:
+                tasks.append(self.faithfulness.single_turn_ascore(sample))
+            scores = await asyncio.gather(*tasks)
+
         factual = _score(scores[0])
         faith = _score(scores[1]) if contexts else None
 

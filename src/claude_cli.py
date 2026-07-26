@@ -10,6 +10,11 @@ CLAUDE_CONCURRENCY (hard ceiling CLAUDE_MAX_CONCURRENCY = 16) instances run
 at once, whichever path spawned them. Max's constraint is the usage window
 (total tokens), not request rate, so concurrency is effectively free; the
 cap exists to bound local process sprawl.
+
+Because every path funnels through call_claude_gated, it is also the one place
+worth instrumenting: each successful envelope's cost and token counts go to
+src/eval/usage.py, attributed to whichever stage() block is in effect. Nothing
+downstream had to change to make a run's spend visible.
 """
 
 import json
@@ -100,6 +105,9 @@ def call_claude_gated(prompt: str, model: str, *, timeout_s: float | None = None
     timeout) back off and retry outside the semaphore; anything else raises
     immediately - loud failure stays loud.
     """
+    from src.eval.usage import record_envelope   # local: keeps the lowest-level
+    #                                              transport free of package deps
+
     sem = semaphore if semaphore is not None else _SEMAPHORE
     last: Exception | None = None
     for backoff in (0,) + _BACKOFF_S:
@@ -108,8 +116,14 @@ def call_claude_gated(prompt: str, model: str, *, timeout_s: float | None = None
         with sem:
             try:
                 if timeout_s is None:
-                    return transport(prompt, model)
-                return transport(prompt, model, timeout_s=timeout_s)
+                    envelope = transport(prompt, model)
+                else:
+                    envelope = transport(prompt, model, timeout_s=timeout_s)
+                # Cost and tokens, attributed to whatever stage() is in effect.
+                # Only on success, and record_envelope never raises: a tracing
+                # bug must not be the thing that fails a run.
+                record_envelope(envelope, model)
+                return envelope
             except ClaudeCliError as e:
                 msg = str(e).lower()
                 if not any(t in msg for t in _TRANSIENT):
