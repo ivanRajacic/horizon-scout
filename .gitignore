@@ -12,6 +12,9 @@ data/raw/
 data/processed/
 data/models/
 data/logs/
+# bank-runner output: records.jsonl carries whole chunk texts, so a run is
+# megabytes. A report worth keeping goes into the repo deliberately, by hand.
+data/runs/
 
 # server / process logs
 *.log

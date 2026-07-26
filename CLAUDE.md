@@ -24,7 +24,8 @@ Always use the venv interpreter: `./.venv/Scripts/python.exe` (Git Bash syntax).
 - Runtime: `ask "<q>"`, `ask-sql`, `search`, `explore` (verbose REPL), `build-index`, `build-fts`, `smoke`, `smoke-sql`, `smoke-router`, `bench-retrievers`
 - `/draft-batch` nodes: `gap-report`, `next-ids`, `journal-append`, `batch-crosscheck`, `write-batch`
 - `/explore-corpus` nodes: `frontier-report`, `verify-evidence`, `explore-crosscheck`, `write-profile`
-- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`)
+- Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`
+- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `src/eval/usage.py` records the dollars and tokens of every `claude -p` call at the one gate they all pass through
 
 Local model servers (llama-server; launch commands pinned in `src/config.py`, flags LOAD-BEARING - do not tune them):
 

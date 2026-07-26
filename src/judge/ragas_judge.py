@@ -164,15 +164,39 @@ class JudgePool:
         self._log(q, verdict)
         return verdict
 
-    async def judge_batch(self, cases: list[dict]) -> list:
+    async def judge_batch(self, cases: list[dict], on_verdict=None) -> list:
         """One verdict (or exception) per case, order-preserving. Exceptions
         are returned, not raised, so one bad case never sinks a batch - the
-        caller must check for and report them (loud failure stays loud)."""
-        return await asyncio.gather(*(self.judge_case(c) for c in cases),
-                                    return_exceptions=True)
+        caller must check for and report them (loud failure stays loud).
 
-    def judge_all(self, cases: list[dict]) -> list:
-        return asyncio.run(self.judge_batch(cases))
+        on_verdict(case, verdict_or_exception) fires as each case LANDS rather
+        than when the batch does. A batch of 11 takes minutes; without this the
+        caller has nothing to show for it until the last one returns. It runs
+        on the event loop thread, one case at a time, so a callback that writes
+        needs no lock of its own on this account.
+
+        A callback that raises is contained the same way a bad case is: the
+        other ten judges are already mid-flight and their cost is already
+        spent, so one broken callback must not throw that away. The raised
+        exception REPLACES that case's verdict, which is how it stays visible
+        instead of being swallowed.
+        """
+        async def one(case):
+            try:
+                verdict = await self.judge_case(case)
+            except Exception as e:                           # noqa: BLE001
+                verdict = e
+            if on_verdict is not None:
+                try:
+                    on_verdict(case, verdict)
+                except Exception as e:                       # noqa: BLE001
+                    return e
+            return verdict
+
+        return await asyncio.gather(*(one(c) for c in cases))
+
+    def judge_all(self, cases: list[dict], on_verdict=None) -> list:
+        return asyncio.run(self.judge_batch(cases, on_verdict))
 
     def _log(self, question: str, v: PoolVerdict):
         entry = {

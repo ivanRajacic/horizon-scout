@@ -22,6 +22,11 @@
   python -m src.cli promote-drafts <draft-report.md> [--bank eval/bank.jsonl]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
                                [--model haiku|sonnet]
+  python -m src.cli run-bank [--conditions router force-sql force-vector
+                                            always-hybrid]
+                             [--bank eval/bank.jsonl] [-k 10] [--no-judge]
+                             [--ids sql-01 ...] [--routes vector hybrid]
+                             [--limit N] [--run-id NAME] [--resume]
 """
 
 import argparse
@@ -840,6 +845,38 @@ def cmd_judge_file(args):
     sys.exit(0 if mismatches == 0 and errors == 0 else 1)
 
 
+def cmd_run_bank(args):
+    """Bank -> ask -> judge -> a traced record per question plus a report."""
+    from src.embed_client import check_server as check_embed
+    from src.eval.run import CONDITIONS, ConsoleProgress, run_bank
+    from src.llm import check_generator
+
+    bad = [c for c in args.conditions if c not in CONDITIONS]
+    if bad:
+        print(f"unknown condition(s) {bad}; choose from {sorted(CONDITIONS)}")
+        sys.exit(2)
+    if args.resume and not args.run_id:
+        print("--resume needs --run-id: it resumes a specific run directory.")
+        sys.exit(2)
+
+    check_generator()
+    # Only the topical paths need the embedder; a SQL-only selection does not.
+    if args.routes != ["sql"]:
+        check_embed()
+
+    try:
+        meta = run_bank(Path(args.bank), args.conditions, k=args.k,
+                        judge=not args.no_judge, ids=args.ids,
+                        routes=args.routes, limit=args.limit,
+                        run_id=args.run_id, judge_model=args.model,
+                        resume=args.resume, progress=ConsoleProgress())
+    except ValueError as e:
+        print(f"\n{e}")
+        sys.exit(2)
+    if meta["n_errors"]:
+        sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="python -m src.cli")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1050,6 +1087,35 @@ def main():
                     help=f"parallel judge processes "
                          f"(default {CLAUDE_CONCURRENCY}, max 16)")
     jf.set_defaults(fn=cmd_judge_file)
+
+    rb = sub.add_parser("run-bank",
+                        help="run the question bank end to end: execute, "
+                             "judge, and write a traced run report")
+    rb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    rb.add_argument("--conditions", nargs="+", default=["router"],
+                    help="router | force-sql | force-vector | always-hybrid "
+                         "(default: router)")
+    rb.add_argument("-k", type=int, default=10,
+                    help="chunks retrieved per topical question")
+    rb.add_argument("--no-judge", action="store_true",
+                    help="phase A only - execute and trace, spend nothing on "
+                         "judging. The judge cases are still saved, so "
+                         "--resume can judge them later without re-running "
+                         "generation")
+    rb.add_argument("--ids", nargs="+", default=None,
+                    help="run only these question ids, in this order")
+    rb.add_argument("--routes", nargs="+", default=None,
+                    help="run only these expected_routes")
+    rb.add_argument("--limit", type=int, default=None)
+    rb.add_argument("--run-id", default=None,
+                    help="name the run directory (default: a timestamp)")
+    rb.add_argument("--resume", action="store_true",
+                    help="continue the run named by --run-id: skip questions "
+                         "already executed, and judge any that are still owed "
+                         "a verdict without paying for generation again")
+    rb.add_argument("--model", choices=["haiku", "sonnet"],
+                    default=JUDGE_DEFAULT, help="judge model")
+    rb.set_defaults(fn=cmd_run_bank)
 
     args = ap.parse_args()
     args.fn(args)
