@@ -2,7 +2,7 @@
 
 ## Header
 
-- **Version:** cp4
+- **Version:** cp5
 - **Generated:** 2026-07-26
 - **Corpus fingerprint:** 35,389 projects (`SELECT COUNT(*) FROM project`). Dense index `data/processed/index_meta.json`: 190,248 vectors, embedder `bge-base-en-v1.5-f16.gguf`, dim 768, built 2026-07-22T08:53:52Z. euroscivoc classification covers 32,236 of 35,389 projects across 111,614 rows (`SELECT COUNT(DISTINCT projectID), COUNT(*) FROM euroscivoc`).
 - **Grounded against schema_docs:** version `sd2`, content_hash `e2696e0f80f5`.
@@ -13,6 +13,7 @@
 - cp2 (2026-07-23) scope `"pilot hybrid 10"`: Hybrid only, 10 candidates (10 found). 2 subagents, 54 `run_sql`, 6 `get_project_text` calls (~15 projects). Frontier not yet in existence.
 - cp3 (2026-07-24) scope `"structural: add the frontier"`: no exploration subagents. Introduced `## Frontier`, `## Corpus map` and `## Structural findings`, built the 46-bucket frontier from the data and back-filled `seeds`/`bank` from the existing candidates and `eval/bank.jsonl`. Frontier established at `mapped 0/46 | mined 18/46`.
 - cp4 (2026-07-26) scope `"map=6"`: 12m wall (32s in MCP calls), 3 subagents (2 explorers + 1 critic) over 6 slices, 14 `run_sql`, 18 projects read across 6 `get_project_text` calls; +6 map entries, +18 candidates; frontier `mapped 6/46 | mined 19/46 | unexplored 21/46`.
+- cp5 (2026-07-26) scope `"vector=15 (three named mined buckets, L1-weighted)"`: 16m wall (143s in MCP calls), 4 subagents over 3 slices, 39 `run_sql`, 21 projects read across 7 `get_project_text` calls; +3 map entries, +15 candidates; frontier `mapped 4/46 | mined 23/46 | unexplored 19/46`.
 
 **Reading order for a run:** `## Frontier` alone is enough to plan one (it says where we have not been). Read a section's candidates only when you are drafting from them. The whole file is never needed at once.
 
@@ -30,26 +31,26 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 
 | bucket | projects | status | map | seeds | bank |
 |---|---|---|---|---|---|
-| natural sciences / biological sciences | 8,057 | mined | - | vector-01, vector-12 | vec-01, vec-05 |
-| natural sciences / computer and information sciences | 7,654 | mined | - | vector-07 | vec-01 |
-| natural sciences / physical sciences | 5,788 | mined | - | hybrid-10 | hyb-03, vec-04, vec-05 |
-| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | - | vector-05 | hyb-03, vec-01 |
-| engineering and technology / environmental engineering | 5,178 | mined | - | vector-11 | hyb-03, vec-05 |
-| social sciences / economics and business | 4,711 | mined | - | vector-10 | vec-05 |
+| natural sciences / biological sciences | 8,057 | mined | - | vector-01, vector-12 | hyb-06, hyb-09, vec-01, vec-05 |
+| natural sciences / computer and information sciences | 7,654 | mined | m07 | vector-07, vector-34, vector-35, vector-36, vector-37, vector-38 | hyb-07, vec-01 |
+| natural sciences / physical sciences | 5,788 | mined | - | hybrid-10 | hyb-03, hyb-07, hyb-08, vec-04, vec-05 |
+| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | - | vector-05 | hyb-03, hyb-07, hyb-08, vec-01 |
+| engineering and technology / environmental engineering | 5,178 | mined | - | vector-11 | hyb-03, hyb-07, vec-05 |
+| social sciences / economics and business | 4,711 | mined | m08 | vector-10, vector-39, vector-40, vector-41, vector-42, vector-43 | hyb-09, vec-05 |
 | medical and health sciences / clinical medicine | 4,661 | mined | - | vector-06, vector-13 | vec-02 |
-| natural sciences / chemical sciences | 4,331 | mined | - | - | hyb-03, vec-05 |
-| medical and health sciences / basic medicine | 4,252 | mapped | m01 | vector-15, vector-16, vector-17, vector-18 | - |
-| social sciences / sociology | 3,802 | mapped | m02 | vector-19, vector-20, vector-21 | - |
+| natural sciences / chemical sciences | 4,331 | mined | m09 | vector-44, vector-45, vector-46, vector-47, vector-48 | hyb-03, hyb-07, vec-05 |
+| medical and health sciences / basic medicine | 4,252 | mined | m01 | vector-15, vector-16, vector-17, vector-18 | hyb-06 |
+| social sciences / sociology | 3,802 | mined | m02 | vector-19, vector-20, vector-21 | hyb-07 |
 | engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05 |
 | (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03 |
-| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, vec-05 |
+| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, hyb-07, vec-05 |
 | medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05 |
-| engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, vec-05 |
+| engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, hyb-06, hyb-08, vec-05 |
 | natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05 |
-| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | vec-05 |
+| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | hyb-09, vec-05 |
 | social sciences / political sciences | 1,795 | mapped | m03 | vector-22, vector-23, vector-24 | - |
 | humanities / history and archaeology | 1,669 | mapped | m04 | vector-08, vector-25, vector-26, vector-27 | - |
-| engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03 |
+| engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03, hyb-06 |
 | medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02 |
 | social sciences / social geography | 870 | mapped | m06 | vector-31, vector-32, vector-33 | - |
 | social sciences / law | 866 | mapped | m05 | vector-28, vector-29, vector-30 | - |
@@ -57,7 +58,7 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | social sciences / psychology | 636 | unexplored | - | - | - |
 | engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05 |
 | humanities / philosophy, ethics and religion | 627 | unexplored | - | vector-04 | - |
-| engineering and technology / industrial biotechnology | 613 | unexplored | - | - | - |
+| engineering and technology / industrial biotechnology | 613 | mined | - | - | hyb-09 |
 | humanities / arts | 552 | unexplored | - | hybrid-08 | - |
 | humanities / languages and literature | 490 | unexplored | - | - | - |
 | engineering and technology / medical engineering | 472 | unexplored | - | - | - |
@@ -65,7 +66,7 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | agricultural sciences / animal and dairy science | 402 | unexplored | - | - | - |
 | social sciences / educational sciences | 308 | unexplored | - | - | - |
 | engineering and technology / chemical engineering | 288 | unexplored | - | - | - |
-| engineering and technology / environmental biotechnology | 286 | unexplored | - | - | - |
+| engineering and technology / environmental biotechnology | 286 | mined | - | - | hyb-09 |
 | social sciences / media and communications | 177 | unexplored | - | - | - |
 | humanities / other humanities | 164 | unexplored | - | - | - |
 | agricultural sciences / agricultural biotechnology | 104 | unexplored | - | - | - |
@@ -77,7 +78,7 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | medical and health sciences / (top-level only) | 13 | unexplored | - | - | - |
 | engineering and technology / (top-level only) | 2 | unexplored | - | - | - |
 
-`mapped 6/46 | mined 19/46 | unexplored 21/46`
+`mapped 4/46 | mined 23/46 | unexplored 19/46`
 
 No bucket is `mapped` yet: the map is new at cp3 and no region has a `## Corpus map` entry. 18 buckets are `mined` (a bank question was drawn from them, traced through `gold_project_ids`), and a further 4 carry cp1/cp2 candidate seeds with no bank question yet - the `seeds` column keeps that history, but seeds are not a map, so those buckets still read `unexplored`.
 
@@ -167,6 +168,42 @@ Append-only: entries are added as buckets are explored, never rewritten. Format:
   good for: vector L1 seeds, unusually - narrow engineering topics are uniquely instantiated (inertial navigation 1), so single-project lookups are reliable. Also L2/L3 on named technology clusters (U-space 14, rural mobility 3), and adversarial seeds exploiting the label-vs-content mismatch.
   thin for: anything treating this as a humanities-style geography region - urban studies (42) and cultural and economic geography (30) are too small and heterogeneous for a survey, and there is no critical-geography corpus. Thin for hybrid filters stating the taxonomy label as a user filter, since no user describes an avionics INS project that way.
   mapped: cp4
+
+- region: m07
+  bucket: natural sciences / computer and information sciences
+  slice: EXISTS (SELECT 1 FROM euroSciVoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',1)='natural sciences' AND split_part(e.euroSciVocPath,'/',2)='computer and information sciences')
+  size: 7654 projects  (SELECT COUNT(*) FROM (SELECT DISTINCT projectID FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') -> 7654)
+  about: Reading the extremes first: the two biggest-funded members are infrastructure megaprojects - HBP SGA2 (785907, EUR 88,000,000) building six ICT platforms for neuroinformatics, brain simulation, high-performance analytics and neurorobotics, and EPI SGA1 (826647, EUR 79,991,745) taping out a low-power European HPC/automotive processor - while the oldest member (637529, EUR 60,000) is a small ERC text-mining job extracting funding statements from Europe PubMed Central full texts. So the bucket spans four orders of magnitude of budget and mixes core computing R&D with computing used as a service to another discipline. Probing further found genuine CS-internal research too: higher-order SMT and superposition provers for Isabelle/Coq (713999), serverless data-analytics platforms (825184, 825040), approximate/transprecision computing (732631, 956090) and SME-Instrument security products such as a CAPTCHA-free authentication platform (684168) and an AI image-forgery/deepfake detector (878319).
+  texture: 7581 of 7654 members carry a report row (99.0%), above the 98.1% corpus rate, so report teasers are usable evidence here. Member text names its techniques in its own words ("satisfiability modulo theories", "deepfakes", "serverless") rather than echoing euroSciVoc labels, so topic questions should be written from text phrases, not tag names. Tag noise is real: 785907 (Human Brain Project) and 796752 (FLOODARC, a Mediterranean flood-archive project) both sit in this bucket, and corpus-wide singleton leaf tags reachable from here include 'hydrometeorology' and 'other medical sciences' - leaf labels are unreliable as topic proxies.
+  read: 785907, 826647, 637529, 878319, 684168, 713999
+  read first: 785907, 826647, 637529
+  good for: Vector L1 seeds: the bucket is large and heterogeneous enough that sharply-worded technique phrases isolate exactly one project corpus-wide (deepfake, CAPTCHA, satisfiability modulo theories). Also supports L2/L3 technique clusters (program synthesis, differential privacy, serverless computing) whose members are genuinely comparable CS research.
+  thin for: Poor for questions keyed on the euroSciVoc leaf label itself, because members are tagged into computing for applying it as much as for researching it. Also thin for absence claims, since almost any computing term returns something across 7,654 members.
+  mapped: cp5
+
+- region: m08
+  bucket: social sciences / economics and business
+  slice: EXISTS (SELECT 1 FROM euroSciVoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='economics and business')
+  size: 4711 projects  (WITH b AS (SELECT DISTINCT e.projectID AS id FROM euroSciVoc e WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='economics and business') SELECT COUNT(*) FROM b -> 4711)
+  about: Reading the biggest and the oldest and newest members shows this is not a room full of economists. SGA3 (861952, EUR 81.8m) is the COST Association's own coordination grant for running research networks; General Purpose DP (650473, 2014) is an SME-instrument grant from a naval architecture firm to build a cheap dynamic-positioning controller and sell it to shipyards, where the only economics is the business plan and turnover forecast; ExpBoD (101025105, 2022) is an MSCA fellowship measuring the socio-economic and psychological burden of disease in Danish register data. Alongside these sit genuine research-economics grants - INFL (682288) on risk-adjusted inflation and central-bank liabilities, ORIGENDER (841969) on gender norms and the pay gap - so the region mixes ERC/MSCA academic economics with a very large SME commercialisation tail whose business content is market-size and revenue projections.
+  texture: 4676 of the 4711 members have a report row (99.3%). Only three third-level nodes exist under the field: business and management 3231, economics 1936, and 32 projects tagged at the field itself with an empty third level; leaf tags are coarse (business models alone holds 1677, employment 787, productivity 712) and no leaf in this bucket is a singleton - the smallest is 'economic impact of epidemics' at 4. So narrow questions must be built from distinctive phrases in objective/title, not from tags. Tag noise runs toward business: an SME hardware project is tagged economics and business because it has a commercialisation plan.
+  read: 861952, 650473, 101025105, 682288, 780143, 841969
+  read first: 861952, 650473, 101025105
+  good for: Single-project vector questions built on distinctive economic phrases (microfinance, inflation expectations, gender pay gap each occur in exactly one project corpus-wide), and small multi-project themes on labour and public finance (tax evasion 4, gig economy 6).
+  thin for: Tag-scoped questions of any narrowness - the leaves are huge and generic (business models 1677), so nothing at leaf level lands inside an L1/L2 window.
+  mapped: cp5
+
+- region: m09
+  bucket: natural sciences / chemical sciences
+  slice: EXISTS (SELECT 1 FROM euroSciVoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',1)='natural sciences' AND split_part(e.euroSciVocPath,'/',2)='chemical sciences')
+  size: 4331 projects  (WITH b AS (SELECT DISTINCT p.id FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='natural sciences' AND split_part(e.euroSciVocPath,'/',2)='chemical sciences') SELECT COUNT(*) FROM b -> 4331)
+  about: Reading the extremes: the biggest-budget member (PYROCO2, 101037009) is an industrial demonstrator turning captured CO2 plus green hydrogen into acetone through a thermophilic microbial bioprocess, then catalytically into fuels and recyclable polymers; the newest (CSE-LBATTS, 101021759) is a single-fellow MSCA project fabricating composite solid electrolytes to replace flammable liquid electrolytes in lithium batteries; the oldest (MACC-III, 633080) is a Copernicus atmospheric-composition service covering air quality, stratospheric ozone, UV and solar-energy resources. So the region is mostly chemistry-as-means - energy conversion and storage, CO2 utilisation, catalysis, materials synthesis - with a real bench/theory core (organocatalysis, relativistic electronic-structure theory) and a tail of atmospheric monitoring that is chemical only in subject matter.
+  texture: 4248 of 4331 members (98.1%) have a report row. Member text uses working technical vocabulary, never the taxonomy label: MACC-III never says 'chemical sciences' and CSE-LBATTS never says 'electrochemistry' though it is filed there, so questions must be built from substantive phrases (composite solid electrolyte, photoelectrochemical cell, C-H acid) rather than euroSciVoc wording. Third-level tags concentrate in inorganic chemistry 1740, organic chemistry 1002, catalysis 827, polymer sciences 725, electrochemistry 562, analytical chemistry 336, physical chemistry 174; 54 members carry a bare two-level path with no third level, and nuclear chemistry has only 38. Only ONE euroSciVoc leaf in this whole bucket is unique corpus-wide ('nuclear chemistry' on PCCDX, 702635), so L1 seeds here have to come from distinctive free-text phrases, not from leaf tags.
+  read: 101037009, 633080, 101021759, 891647, 694228, 849068
+  read first: 101037009, 633080, 101021759
+  good for: Narrow single-project vector questions, because distinctive method phrases really are unique here - 'thermophilic microbial', 'composite solid electrolyte' and 'relativistic quantum chemistry' each match exactly 1 project corpus-wide. Also small 2-4 project clusters around named chemistries (chiral phosphoric acid 2, carbon nitride 4) that are enumerable as gold.
+  thin for: Broad chemistry questions: head terms like catalysis, battery or CO2 conversion return hundreds of projects spread across engineering and energy buckets and cannot be enumerated. Also weak for quantitative chemistry questions - yields, conversions and temperatures live only in free text, never in a column.
+  mapped: cp5
 
 ## Structural findings
 
@@ -447,6 +484,141 @@ Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
   axes: domain=social-geography term_style=programme-term theme=u-space satisfying=14
   why: A named European airspace concept with 14 text-confirmed carriers - large enough for a real synthesis question and tightly bounded by a term only this cluster uses.
 
+- id: vector-34
+  topic: AI-generated deepfake / digital image forgery detection for business documents and insurance claims
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / computer and information sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%deepfake%' OR p.title ILIKE '%deepfake%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%deepfake%' OR p.title ILIKE '%deepfake%'` -> 878319 | QI | AI-powered image forgery detection ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%deepfake%' OR p.title ILIKE '%deepfake%'` -> 1
+  axes: topic=media-forensics; technique=AI image forgery detection; application=insurance/banking fraud
+  why: Read 878319: its objective explicitly frames AI-automated image manipulation as 'deepfakes' and sells detection to banking/insurance, and it is the only project in the corpus using the word.
+
+- id: vector-35
+  topic: Eliminating CAPTCHAs and passwords via a phone-as-security-token distributed cryptographic authentication platform
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / computer and information sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 684168 | Excalibur 2.0 | Revolutionary trustworthy platform for seamless authentication of Internet users ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%CAPTCHA%'` -> 1
+  axes: topic=usable-security; technique=distributed cryptographic scheme, behaviometrics, proximity detection; artefact=cloud password manager
+  why: Read 684168: the objective names CAPTCHAs, logins and verification emails as the friction it removes, using the phone as a universal security token - the only corpus objective mentioning CAPTCHA.
+
+- id: vector-36
+  topic: Higher-order automation for interactive proof assistants: superposition provers and satisfiability-modulo-theories solvers
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / computer and information sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%satisfiability modulo%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%satisfiability modulo%'` -> 713999 | Matryoshka | Fast Interactive Verification through Strong Higher-Order Automation ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%satisfiability modulo%'` -> 1
+  axes: topic=automated-theorem-proving; tools=Isabelle, Coq, TLA+ Proof System, Sledgehammer; goal=higher-order superposition and SMT
+  why: Read 713999: the objective sets out to enrich superposition and SMT with higher-order reasoning and integrate the provers into Coq, Isabelle and TLA+, and it is the corpus's only 'satisfiability modulo' project.
+
+- id: vector-37
+  topic: Program synthesis - automatically producing programs or network configurations from high-level intent
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / computer and information sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%program synthesis%'` -> 2 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%program synthesis%' ORDER BY p.id` -> 680358 BIGCODE 'Learning from Big Code: Probabilistic Models, Analysis and Synthesis'; 851809 SyNET 'From Network Verification to Synthesis: Breaking New Ground in Network Automation' ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%program synthesis%'` -> 2
+  axes: topic=program-synthesis; 680358=statistical synthesis from Big Code probabilistic models; 851809=synthesizing router configurations from operator intent
+  why: Read both objectives: 680358 proposes statistical program synthesis over probabilistic models of massive codebases, and 851809 explicitly frames automatic network-configuration generation as 'akin to program synthesis'.
+
+- id: vector-38
+  topic: Differential privacy as a leakage guarantee in data analytics, genomic privacy and dynamic data structures
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 5 corpus-wide, 3 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / computer and information sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%'` -> 5 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%' ORDER BY p.id` -> 707135 GenoPri; 726361 IMPROVE; 731583 SODA; 101002277 TypeFoundry; 101019564 MoDynStruct ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%'` -> 3
+  axes: topic=differential-privacy; settings=multi-party computation (731583), genomic data (707135), dynamic data structures (101019564); spill=2 members outside the bucket (726361, 101002277)
+  why: Read 731583: its objective combines multi-party computation with differential privacy so aggregated results do not leak individual data, and the phrase recurs across five corpus projects in clearly different settings.
+
+- id: vector-39
+  topic: The single project studying microfinance / digital lending to unbanked borrowers
+  recommend: route=vector level=L1 subtype=topical-single
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / economics and business
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%microfinance%' OR p.title ILIKE '%microfinance%'` -> 1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%microfinance%' OR p.title ILIKE '%microfinance%'` -> 780143 | VillageInvest
+  axes: topic=microfinance; region=India; theme=financial inclusion
+  why: VillageInvest (780143) is the only project whose text mentions microfinance, and its objective is explicitly about replacing the failing microfinance model with a digital lending platform for unbanked borrowers.
+
+- id: vector-40
+  topic: The single project on the anchoring of inflation expectations and risk-adjusted inflation pricing
+  recommend: route=vector level=L1 subtype=topical-single
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / economics and business
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%inflation expectation%' OR p.title ILIKE '%inflation expectation%'` -> 1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%inflation expectation%' OR p.title ILIKE '%inflation expectation%'` -> 682288 | INFL
+  axes: topic=monetary economics; instrument=inflation-indexed bonds; actor=central bank
+  why: INFL (682288) is the only project mentioning inflation expectations, and its objective builds risk-neutral inflation densities and inflation-indexed central-bank liabilities.
+
+- id: vector-41
+  topic: The single project on the gender pay gap and gender norms in the labour market
+  recommend: route=vector level=L1 subtype=topical-single
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / economics and business
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%gender pay gap%' OR p.title ILIKE '%gender pay gap%'` -> 1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%gender pay gap%' OR p.title ILIKE '%gender pay gap%'` -> 841969 | ORIGENDER
+  axes: topic=gender pay gap; region=Scandinavia/Denmark; method=administrative data
+  why: ORIGENDER (841969) is the only project whose text mentions the gender pay gap, and its objective is entirely about quantifying how gender norms sustain it.
+
+- id: vector-42
+  topic: Projects studying tax evasion (firm networks, tax morale, predatory economies)
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / economics and business
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%tax evasion%' OR p.title ILIKE '%tax evasion%'` -> 4 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%tax evasion%' OR p.title ILIKE '%tax evasion%' ORDER BY id` -> 693402 ECOSOCPOL; 748062 ChEATAX; 758984 DEVTAXNET; 101026736 AnthroTax ; `WITH b AS (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='economics and business') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%tax evasion%' OR p.title ILIKE '%tax evasion%'` -> 2
+  axes: topic=tax evasion; scope=developing countries + cross-cultural experiments
+  why: A small, cleanly enumerable set of four projects whose titles name tax evasion or tax morale directly.
+
+- id: vector-43
+  topic: Projects on the gig economy - platform work, precariousness and algorithmic management
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 6 corpus-wide, 5 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / economics and business
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%gig economy%' OR p.title ILIKE '%gig economy%'` -> 6 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%gig economy%' OR p.title ILIKE '%gig economy%' ORDER BY id` -> 833577 REsPecTMe; 837539 Mercurius Connect; 838081 FAIRWORK; 875255 GIGSTATS; 890434 SOJUFOW; 947806 iManage ; `WITH b AS (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='economics and business') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%gig economy%' OR p.title ILIKE '%gig economy%'` -> 5
+  axes: topic=gig/platform work; angles=measurement, fair work, employment law
+  why: Six projects share the gig-economy theme from distinct angles (statistics tooling, fair-work standards, employment law), giving a genuine multi-project synthesis target.
+
+- id: vector-44
+  topic: Thermophilic microbial conversion of captured industrial CO2 into acetone
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / chemical sciences
+  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%thermophilic microbial%' OR p.title ILIKE '%thermophilic microbial%'` -> c=1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%thermophilic microbial%' OR p.title ILIKE '%thermophilic microbial%'` -> 101037009 PYROCO2
+  axes: subfield=catalysis/CO2-utilisation; scale=industrial demonstrator; funding=largest ecMaxContribution in bucket
+  why: Read the objective: PYROCO2 demonstrates 4000 t/yr acetone from 9100 t industrial CO2 via an energy-efficient thermophilic microbial bioprocess, and no other project in the corpus uses that phrase.
+
+- id: vector-45
+  topic: Composite solid electrolytes for all-solid-state lithium batteries
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / chemical sciences
+  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%composite solid electrolyte%' OR p.title ILIKE '%composite solid electrolyte%'` -> c=1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%composite solid electrolyte%' OR p.title ILIKE '%composite solid electrolyte%'` -> 101021759 CSE-LBATTS
+  axes: subfield=electrochemistry; motivation=battery safety and energy density
+  why: Read the objective and teaser: CSE-LBATTS designs nanostructured composite solid electrolytes to remove flammable liquid electrolytes from lithium batteries; unique corpus-wide.
+
+- id: vector-46
+  topic: Reduced density matrix functionals for relativistic quantum chemistry of heavy elements
+  recommend: route=vector level=L1 subtype=topical-multi
+  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / chemical sciences
+  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%relativistic quantum chemistry%' OR p.title ILIKE '%relativistic quantum chemistry%'` -> c=1 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%relativistic quantum chemistry%' OR p.title ILIKE '%relativistic quantum chemistry%'` -> 891647 ReReDMFT
+  axes: subfield=theoretical/computational chemistry; method=RDMFT on four-component Dirac Hamiltonians
+  why: Read the objective: ReReDMFT transfers reduced density matrix functional theory to the Dirac equation for near-degenerate heavy-element compounds and implements it in the DIRAC code.
+
+- id: vector-47
+  topic: Chiral phosphoric acid organocatalysis and the push past its substrate limits in asymmetric synthesis
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / chemical sciences
+  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%chiral phosphoric acid%' OR p.title ILIKE '%chiral phosphoric acid%'` -> c=2 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%chiral phosphoric acid%' OR p.title ILIKE '%chiral phosphoric acid%'` -> 694228 CHAOS, 752405 DUAL-PHOSCAT
+  axes: subfield=organic chemistry/catalysis; property=enantioselectivity
+  why: Read CHAOS: it introduces C-H acids precisely because chiral phosphoric acid catalysts are limited to reactive substrates like imines; DUAL-PHOSCAT is the phosphorus-organocatalyst sibling for stereoselective ring-opening polymerisation.
+
+- id: vector-48
+  topic: Carbon nitride as a metal-free semiconductor for photoelectrochemical and solar-fuel devices
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 4 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / chemical sciences
+  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%carbon nitride%' OR p.title ILIKE '%carbon nitride%'` -> c=4 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%carbon nitride%' OR p.title ILIKE '%carbon nitride%'` -> 658327 2D Hetero-architecture, 849068 MFreePEC, 101031365 SolTIME, 101022649 METHASOL
+  axes: subfield=physical chemistry/photocatalysis; material=metal-free CNX semiconductor
+  why: Read MFreePEC: it grows carbon nitride and CNX (X=P,B,S) layers as metal-free PEC semiconductors for solar hydrogen; the other three sit in solar-fuel (SolTIME, METHASOL) and 2D-electronics settings, a tight enumerable cluster.
+
 ## Hybrid
 
 10 candidate seeds for `/draft-hybrid-question` (cp2 run), each a **topic x filter** combo whose TRUE survivor count - a real `COUNT(DISTINCT project.id)` re-executed in the merge pass - lands in a drafting window. Subtypes follow the bank's bounds: `filter-read` (L1, |gold|=1, 2-10 survivors), `filter-synthesize` (L2, ~5-20), `filter-compare` (L3, 2-4 contrastable), `filter-survey` (L3, >=5). Spread: all four filter dimensions used (country x3, date-range x2, fundingScheme x4, funding-percentile x1); level mix 3 L1 / 3 L2 / 4 L3; all four subtypes present. Every `evidence` line shows BOTH the topic's unfiltered total and the filtered survivor count, so the filter's pruning power (the structural bar for a hybrid question - projects must exist that satisfy the text but fail the filter) is visible; the textual answer (what the survivors do / found / how) lives only in free text, never in a stored column.
@@ -597,3 +769,14 @@ Regenerated at cp2. Covers the Vector candidates (cp1, vector-01..15), the Hybri
 - *Axis thin (non-topical).* No candidate uses country, scheme, funding band, date range or activity type; drafting hybrid `filter-*` cells from this run's material is impossible.
 - *Evidence source.* No seed uses `report_text` or retrieval pooling; all satisfying sets are lexical ILIKE proxies, so no seed carries evidence bearing on `term_style=paraphrase` - supply is biased toward `exact-term`.
 - *Frontier shape.* 21/46 buckets still unexplored, and largest-first remains defensible for width, but the marginal value of a seventh mapped bucket is now below an `adversarial`/`ambiguous` pass over the six already mapped, and below a hybrid pass anywhere - the bottleneck has moved from region coverage to route coverage.
+
+**cp5 (2026-07-26)**
+
+cp5 was a scoped run: `vector=15` only. sql, hybrid, adversarial, ambiguous, distributions and the map quota were skipped by instruction, so nothing below should be read as a finding about those sections - they were not attempted. Three slices returned, all VERIFIED, 84 PASS/NA and 0 FAIL from `verify-evidence`, 15/15 candidates delivered, no width, entity, near-duplicate or supply flags from `explore-crosscheck`.
+
+The run deliberately left the frontier's largest-unexplored order and went after the biggest **mined-but-unmapped** regions instead: computer and information sciences (7,654), economics and business (4,711), chemical sciences (4,331). All three now carry a map entry, so the map moves 6/46 -> 9/46 and three of the corpus's eight largest buckets stop being blank. This was the right call and it should continue: every remaining `unexplored` bucket is small (largest is social sciences / psychology at 636), while five large buckets are still mined-with-no-map - biological sciences 8,057, physical sciences 5,788, electrical/electronic engineering 5,566, environmental engineering 5,178, clinical medicine 4,661 (`SELECT split_part(euroSciVocPath,'/',1)||' / '||split_part(euroSciVocPath,'/',2), COUNT(DISTINCT projectID) FROM euroSciVoc GROUP BY 1 ORDER BY 2 DESC`). Largest-first is still correct, but on the mined-unmapped list, not the unexplored list.
+
+What the 15 seeds can be drafted into: the corpus-wide counts give 9 L1 (satisfying=1), 4 L2 (vector-37=2, vector-47=2, vector-42=4, vector-48=4) and 2 L3 (vector-38=5, vector-43=6). That was the intended L1 weighting and it more than covers the 4 open L1 slots; it means cp5 alone cannot feed an L3 quota - two seeds is the whole supply, and one of them (vector-38, differential privacy) sits right on the L2/L3 boundary at 5.
+
+The `read_first` mechanism worked as designed - each explorer fixed its pre-probe reads by budget/date extremes before any topic probe. It bit hardest on s02, where none of the three pre-probe projects became a candidate. On s03 (chemical sciences) only 1 of 3 pre-probe reads stayed outside the candidate set: PYROCO2 (101037009) and CSE-LBATTS (101021759) both became vector-44 and vector-45. Judged on the ordering, this is not a repeat of cp4 - the reads preceded the probes, so the `about:` was not written from search results. Judged on breadth, chemical sciences is still the thinnest of the three descriptions: its 4,331-project `about:` and two of its L1 seeds rest on the same pair of projects, so a later run should treat that entry's coverage claims as the weakest and re-read it from a different angle before drafting broadly from it.
+
