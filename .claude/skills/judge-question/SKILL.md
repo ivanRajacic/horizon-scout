@@ -35,15 +35,19 @@ How to rule:
 - **UPHELD** - the critic's executed evidence supports the claim, and the claim is what the brief calls a defect at that severity. The drafter's evidence does not refute it.
 - **DISMISSED** - one of: the drafter's own executed evidence plainly refutes it (say which); the claim is real but is not a defect under the brief (the commonest case is an L1 question being easy, which the brief explicitly excludes); the severity is wrong for what was found and the finding does not survive at its true level; or the finding cites no evidence executed this session.
 
+One more terminal state, for the finding you accept and keep:
+
+- **RECORDED** - the finding is real (it would be UPHELD), you are deliberately letting it ride into the report as a note rather than spending a fix round on it, and it must never be re-ruled. Mark it `RECORDED` instead of a bare UPHELD. From then on the class is settled on this candidate: a later re-discovery of the same class is noted in one line ("already RECORDED, round n") and not re-ruled, and it never counts toward the within-candidate stop rule. This is what stops the churn where a note-worthy MID gets re-found and re-ruled every round because the record had no way to say "yes, we know, it rides."
+
 Three specific rules:
 
-- **A repeat is dropped, not re-argued.** If a finding's `class` matches one you already DISMISSED on this candidate, dismiss it again in one line citing your earlier ruling. Do not relitigate.
+- **A repeat is dropped, not re-argued.** If a finding's `class` matches one you already DISMISSED or RECORDED on this candidate, dispose of it in one line citing your earlier ruling. Do not relitigate.
 - **Severity is the critic's report, not its authority.** You may rule a HIGH finding DISMISSED and a MID finding UPHELD. Say why.
 - **LOW findings are not ruled on.** They pass through untouched and land in the report as notes. A LOW finding never justifies a FIX.
 
 ### 2. Then emit exactly one disposition
 
-**ACCEPT** - no UPHELD HIGH finding remains. The question goes to the staged batch as it stands. UPHELD MID findings do not by themselves block acceptance: decide whether the question still measures what its cell says it measures. If it does, ACCEPT and let the MID ride into the report as a recorded note for Ivan's promote-time veto. If a MID genuinely changes what is being measured, treat it as the HIGH it actually is - say so in the ruling, and FIX.
+**ACCEPT** - no UPHELD HIGH finding remains. The question goes to the staged batch as it stands. UPHELD MID findings do not by themselves block acceptance: decide whether the question still measures what its cell says it measures. If it does, ACCEPT and mark the MID `RECORDED` so it rides into the report as a note for Ivan's promote-time veto and is never re-ruled. If a MID genuinely changes what is being measured, treat it as the HIGH it actually is - say so in the ruling, and FIX.
 
 **FIX `<classes>`** - one or more UPHELD findings name a bounded change that plausibly lands. Name the target classes; the drafter fixes only what you name. You get **one fix round per candidate** - spend it on a fix you actually expect to work, not on the hope that a round of churn helps. A fix that requires redesigning what the question is about is not a fix; that is an ABANDON.
 
@@ -57,7 +61,7 @@ Read them off the typed state (`defect_classes_seen`, `budget`, `candidate_index
 
 | Stop | Trigger | What you emit |
 |---|---|---|
-| within-candidate | the same defect `class` has now been UPHELD twice on this candidate | ABANDON - the fix did not take |
+| within-candidate | the same `class` is UPHELD again **after a fix round that targeted that class** | ABANDON - the fix did not take |
 | cross-candidate | the same `class` has killed two candidates in this slot | ABANDON, and say the cell looks suspect: the orchestrator flags it |
 | budget | 6 drafter passes spent, or all 3 candidates used | ABANDON - budget exhausted |
 
@@ -69,9 +73,11 @@ Your final message is raw data for the orchestrator, not prose for a human. Exac
 
 ```
 RULINGS
-- <CLASS> (<HIGH|MID>, round <n>): UPHELD | DISMISSED - <one sentence>
+- <CLASS> (<HIGH|MID>, round <n>): UPHELD | DISMISSED | RECORDED - <one sentence>
 (one line per HIGH and MID finding of this round, all of them, before the
- disposition; "none" if the critic reported no HIGH or MID findings)
+ disposition; "none" if the critic reported no HIGH or MID findings.
+ RECORDED = real, accepted, rides into the report, never re-ruled - a later
+ re-discovery of the class gets a one-line "already RECORDED" note here.)
 
 DISPOSITION  ACCEPT | FIX | ABANDON
 TARGETS      <comma-separated classes>        (FIX only; omit otherwise)

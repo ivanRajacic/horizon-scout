@@ -18,10 +18,11 @@ Format: `[output_dir]` - optional directory for the working journal and the two 
 ```
 mcp__horizon-draft                              the seven read-only tools
 Task                                            spawning drafters, critics, judges
-SendMessage                                     relaying to the warm drafter and judge
+SendMessage                                     relaying to the warm drafter, critic, and judge
 Read, Glob, Grep                                skills, brief, staged files
-Edit(eval/drafts/**), Write(eval/drafts/**)     the journal (Write creates it, Edit appends)
-Bash(./.venv/Scripts/python.exe -m src.cli:*)   the five deterministic nodes
+Write(eval/drafts/**)                           the journal's batch header (line 0) only
+Bash(./.venv/Scripts/python.exe -m src.cli:*)   the deterministic nodes (gap-report, next-ids,
+                                                validate-record, journal-append, write-batch)
 ```
 
 ## What this skill is
@@ -52,10 +53,11 @@ PER SLOT  budget: 3 candidates x (1 draft + 1 fix) = 6 drafter passes max
   [D] validate-record   schema gate; fail -> message the warm drafter
         v
   [A] CRITIC   adversarial only; findings [class, HIGH|MID|LOW, evidence,
-        v      fix_direction?]. Blind to the budget and to prior rounds.
+        v      fix_direction?]. Warm per slot, protocol re-draws keyed to
+               the diff. Blind to the budget and to the judge.
   [A] JUDGE    warm across this slot's rounds, no MCP tools.
-               Rules UPHELD/DISMISSED on every HIGH and MID first, then
-               ACCEPT | FIX <targets> | ABANDON <why>
+               Rules UPHELD/DISMISSED/RECORDED on every HIGH and MID first,
+               then ACCEPT | FIX <targets> | ABANDON <why>
         |-- FIX -> back to the warm DRAFTER (1 per candidate)
         |-- ABANDON -> next candidate, or fail the slot
         \-- ACCEPT -> journal line
@@ -73,15 +75,25 @@ Keep these boundaries; they are what the design buys.
 | Node | Sees | Never sees |
 |---|---|---|
 | drafter | its own cell, candidate block, and on a fix round the judge's named targets | other slots, the critic's raw report, the budget |
-| critic | `record` + `evidence` + the drafter's precheck result | the budget, prior rounds' findings, other slots, what the judge wants |
+| critic | `record` + `evidence` + the drafter's precheck result; on a re-attack, its own prior transcript plus what changed | the budget, other slots, what the judge wants, the judge's rulings on its findings |
 | judge | its own slot's full typed state, warm across rounds | any other slot, the batch tally, MCP tools |
 | you | everything | - |
 
-The critic is deliberately blind to prior rounds, so **a re-attack after a fix goes to a FRESH critic**, never the warm one. A critic that remembers its own earlier findings starts defending them; a critic that knows a fix round already ran starts calibrating severity to what it thinks you can afford.
+**A re-attack after a fix goes to the SAME warm critic (SendMessage), with mandatory protocol re-draws keyed to what changed** - see step 3. The isolation that actually matters, and that stays absolute: the critic must never see **the budget** or **what the judge wants** - a critic that knows a fix round already ran starts calibrating severity to what it thinks you can afford, and one that sees rulings starts arguing with the judge instead of attacking the draft. The old rule dispatched a fresh critic per round on the theory that a cold agent is what keeps the attack honest; the measured runs said otherwise - the load-bearing property is not that the agent is cold, it is that the anti-anchoring protocols (BLIND-SOLVE, OWN-WORDING) get a **fresh draw**, which a warm critic produces on demand when told to and will not produce spontaneously. (Honest caveat: a warm critic accumulates its own transcript, so per-round token counts stop being independent and the saving is smaller than round-count x average-round-cost.)
 
 ## Typed slot state - the working journal
 
 One append-only JSONL at `<output_dir>/draft-batch-journal-<YYYY-MM-DD>.jsonl`, one line per transition, **latest line per `question_id` wins**. Append the moment a transition happens - this is the crash-recovery layer, and it is also the only input to the writer, so anything not in it does not reach the report.
+
+**Every slot transition goes through `journal-append`** - never a hand-written script, never an Edit. You write exactly one line yourself: the batch header, at setup. After that:
+
+```
+./.venv/Scripts/python.exe -m src.cli journal-append <journal> --id hyb-08 --status REVIEWING --payload - <<'PAYLOAD'
+{"findings": [ ...only the fields that changed... ]}
+PAYLOAD
+```
+
+The payload holds ONLY what changed; the command merges it over the slot's latest line, enforces the envelope (`kind`, `question_id`, `status`, `cell`), keeps `record` opaque, and refuses HTML entities (`&lt;` etc.) at the boundary instead of letting them into the bank. A pure status flip needs no payload at all. This is what makes real slot concurrency possible: the previous run hand-marshalled eighteen Python scripts, each re-quoting `record`, `evidence`, `findings` and `history` verbatim on the orchestrator's single thread while every other slot sat idle.
 
 **Line 0 is the batch header:**
 
@@ -115,7 +127,11 @@ One append-only JSONL at `<output_dir>/draft-batch-journal-<YYYY-MM-DD>.jsonl`, 
   "findings": [{
     "round": 1, "class": "MISSED-GOLD", "severity": "HIGH",
     "claim": "...", "evidence": "...", "fix_direction": null,
-    "ruling": "UPHELD", "ruling_why": "..."     // filled in from the judge
+    "ruling": "UPHELD", "ruling_why": "...",    // filled in from the judge
+    "recorded": false                 // true once the judge rules it RECORDED:
+                                      // real, accepted, rides into the report,
+                                      // and a later re-discovery of the class on
+                                      // this candidate is noted, never re-ruled
   }],
   "defect_classes_seen": [{"candidate": 0, "class": "MISSED-GOLD", "round": 1}],
   "judge_decisions": [{"round": 1, "disposition": "FIX",
@@ -160,13 +176,17 @@ Counts the bank AND every staged draft file, so a staged id is taken even before
 
 ### 4. Health probe (topical batches only)
 
-If the batch contains any topical slot (vector, hybrid, or topical ADV - the routes that need the llama-servers), run one `mcp__horizon-draft__search_corpus("probe", k=1)` as an environment health check, not authoring. An error result means the retrieval servers are down: do not dispatch any topical slot, journal those slots `BLOCKED` with `terminal_reason: "retrieval servers down"`, run only the SQL slots, and report the blocked slots to the user. A SQL-only batch skips this probe.
+If the batch contains any topical slot (vector, hybrid, or topical ADV - the routes that need the llama-servers), run one `mcp__horizon-draft__search_corpus("probe", k=1, snippet_chars=0)` as an environment health check, not authoring. **Expect the first pooled call after server start to be slow - it is the embedder and reranker loading their models, serialised behind one call, and it can exceed the 120 s tool timeout.** That is a cold start, not an outage: give the first probe a longer window (run it in the background and wait) rather than killing and re-issuing it - the 2026-07-25 run lost ~7 minutes to exactly that stop-and-retry dance. Only a probe that returns an ERROR RESULT (or hangs long past any plausible model load, ~5 minutes) means the servers are down: then do not dispatch any topical slot, journal those slots `BLOCKED` with `terminal_reason: "retrieval servers down"`, run only the SQL slots, and report the blocked slots to the user. A SQL-only batch skips this probe.
 
 ### 5. The per-slot loop
 
-**Concurrency: at most 6 MCP-touching agents in flight** (drafters + critics combined). The MCP server is one stdio process over a single read-only DuckDB connection, and topical work additionally serializes on the single-GPU embedder and reranker. Judges touch no MCP tools and are free. In practice this is 3 slots in flight: 3 drafters + 3 critics + 3 judges. This is up from the previous cap of 5, which was itself never measured - watch for MCP and rerank contention on the first topical run at this width and say so if you see timeouts.
+**Concurrency: unlimited - every slot runs at once.** However many slots the batch has, that many chains are in flight: 4 questions means 4 drafters, then their critics and judges as each slot's rounds arrive. There is no agent cap to schedule around; the bound on a batch is its slot count. The shared resources still physically serialize underneath (the MCP server is one stdio process over a single read-only DuckDB connection; the embedder and reranker share one GPU) - that shows up as slower individual calls, not as a reason to hold a slot back. Watch for MCP and rerank contention on the first wide topical run and report timeouts if you see them.
 
 **Budget per slot: 3 candidates, 6 drafter passes, 1 fix round per candidate.**
+
+**Slots run concurrently; the loop below is written per-slot only for readability.** Dispatch every slot's first drafter BEFORE handling any return, then handle returns in the order they arrive - never in slot order, and never blocking slot B's dispatch on slot A's bookkeeping (with `journal-append`, a transition is one cheap call, so there is no bookkeeping excuse left). The 2026-07-25 run's wall clock (97 m) exceeded its total agent-time (86 m) - there were stretches with NO agent running - because every transition was a hand-written marshalling script on this single thread. Under real 4-wide dispatch the floor is the longest single slot chain (~41 m on that run's shape), and agent-time should EXCEED wall clock - that is what real concurrency looks like.
+
+**Retry = resume, not respawn.** When an agent dies mid-flight on a transport error (`ENOTFOUND`, connection reset), the preferred retry is to SendMessage the same agent with a short "you were cut off after X - carry on" note: its transcript is intact and it resumes exactly where it stopped, keeping work already paid for (a completed grounding pass is ~140k tokens). Respawn only when the transcript is unusable. Either way it consumes the slot's single retry.
 
 Per slot, per candidate:
 
@@ -181,13 +201,13 @@ Per slot, per candidate:
    ```
    - Valid -> continue.
    - Invalid -> send the exact validator output to the SAME warm drafter (SendMessage) and re-validate its correction. A schema round costs a pass but is NOT the candidate's fix round - it is a contract failure, not a quality one. One schema round only; still invalid -> abandon the candidate.
-3. **CRITIC.** Spawn a **fresh** `question-reviewer` in draft mode. Prompt: a `DRAFT:` block containing the RECORD JSON, the EVIDENCE section, and the PRECHECK result, all verbatim. Journal `REVIEWING`, then journal the parsed findings.
+3. **CRITIC.** For a candidate's first round spawn a `question-reviewer` in draft mode. Prompt: a `DRAFT:` block containing the RECORD JSON, the EVIDENCE section, and the PRECHECK result, all verbatim. **For a re-attack after a fix, SendMessage the SAME warm critic** with the updated package, a plain statement of WHAT CHANGED (the diff surface, e.g. "the question text and filter were reworded" or "only the reference answer changed"), and any `evidence_carried_forward` disclosure the drafter made - never the judge's rulings, never the budget. The critic's own skill keys its mandatory protocol re-draws to that diff statement, so state it accurately. Journal `REVIEWING`, then journal the parsed findings. Tell the critic which classes are already `RECORDED` on this candidate so a re-discovery comes back as a note, not a finding to re-rule.
    - `STATUS SKIPPED - retrieval servers down` -> the outage path. Do NOT consume a candidate.
-   - `STATUS REVIEW-FAILED` or a dead agent -> retry that agent once, then journal the slot `FAILED` with the reason.
+   - `STATUS REVIEW-FAILED` or a dead agent -> retry that agent once (resume-from-transcript preferred - see step 5's retry note), then journal the slot `FAILED` with the reason.
 4. **JUDGE.** For the slot's first round spawn a `question-judge`; for every later round SendMessage the SAME judge (it is warm across the slot's rounds - that is what lets it see a repeat class without being told). Payload: **this slot's typed state only** - never another slot's. Journal `JUDGING`, then write the rulings back onto the findings and append the decision to `judge_decisions`.
    - **ACCEPT** -> journal `ACCEPTED`. Slot done.
-   - **FIX `<targets>`** -> relay the judge's targets and direction to the SAME warm drafter (SendMessage - never respawn for rectification, its context is warm). Journal `FIXING`, then loop back to step 2 with the returned package.
-   - **ABANDON** -> journal the reason into `history` and `terminal_reason`, advance `candidate_index`, next candidate. Candidates or passes exhausted -> journal the slot `FAILED` with the judge's reason. If the judge flagged the cell suspect (the cross-candidate stop rule), record that on the slot and repeat it in the close-out message.
+   - **FIX `<targets>`** -> relay the judge's targets and direction to the SAME warm drafter (SendMessage - never respawn for rectification, its context is warm). Journal `FIXING`, then loop back to step 2 with the returned package. If the returned fix package carries an `evidence_carried_forward` disclosure (measurements NOT re-run because the edit did not invalidate them), pass that disclosure to the critic verbatim in the re-attack prompt - the critic re-measures rather than trusting it, and that only works if it is told.
+   - **ABANDON** -> journal the reason into `history` and `terminal_reason`, advance `candidate_index`, next candidate. **Relay the lesson to the next candidate's drafter: the trap, never the verdict and never the content.** Distil the abandonment into one transferable instruction ("check where your topic sits in the euroSciVoc path before wording the scope; word it so it has exactly one executable reading") and put it in the fresh drafter's prompt. The verdict would prejudice a node that must judge independently; the dead question's content would anchor the new drafter on it; the lesson is a known trap and travels free. Candidates or passes exhausted -> journal the slot `FAILED` with the judge's reason. If the judge flagged the cell suspect (the cross-candidate stop rule), record that on the slot and repeat it in the close-out message.
 
 **You do not overrule the judge.** There is no override valve any more and no `reviewer_override` in batch mode - with a real judge there is nothing to override, and the old valve existed only because the node that ruled was also the node that paid. (The field stays in the schema for the interactive "confirm anyway" path, and `bank.py` still tallies it.) Your only discretion is in relaying: you may sharpen the judge's FIX direction as you pass it on, never reverse its disposition.
 
@@ -220,7 +240,7 @@ The judge enforces these off the typed state; you supply the state and honour th
 
 | Stop | Trigger | Action |
 |---|---|---|
-| within-candidate | the same defect `class` upheld twice on one candidate | abandon it, next candidate |
+| within-candidate | the same defect `class` upheld again **after a fix round that targeted that class** (a fix that did not take - not a fresh critic re-finding a `RECORDED` note that no fix ever targeted) | abandon it, next candidate |
 | cross-candidate | the same `class` kills two candidates in one slot | fail the slot, flag the cell as suspect |
 | budget | 6 drafter passes spent, or all 3 candidates used | fail the slot |
 
@@ -232,6 +252,6 @@ A failed slot is a normal outcome, not an error. An empty cell is cheaper than a
 - **Relay, do not adjudicate.** You never author, never attack, never rule, and never open the MCP tools to form a finding of your own. Your MCP use is limited to setup: the corpus profile and the health probe.
 - **Records are byte-identical.** What the drafter returned is what gets staged. There is no sanctioned edit any more - the `reviewer_override` carve-out is gone with the override valve.
 - **Every slot accounted for.** N ordered slots in, N rows out - accepted, failed, or blocked. The writer enforces this; do not hide a slot by leaving it out of the journal.
-- **Bounded everything.** 6 MCP-touching agents in flight; 3 candidates per slot; 1 fix round per candidate; 1 schema round; 1 retry per dead agent; 6 drafter passes per slot. When a bound is hit, record it and move on - never loop.
+- **Bounded everything (except width).** Concurrency is unbounded - one chain per slot, all slots at once. Per slot the bounds stand: 3 candidates; 1 fix round per candidate (8 drafter tool calls max); 1 schema round; 1 retry per dead agent (resume-from-transcript preferred, respawn as fallback); 6 drafter passes. When a bound is hit, record it and move on - never loop.
 - **The quota is the user's.** Cells and counts come from the gap-report conversation; never top up beyond the order because a candidate looked promising.
 - **Existing output files are never overwritten without asking.**

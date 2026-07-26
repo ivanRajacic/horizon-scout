@@ -30,8 +30,8 @@ All data access goes through the `horizon-draft` MCP server:
 - `run_sql(query, row_cap=50)` - SELECT-only, read-only, rows capped (hard ceiling 200), ~10s timeout. SQL failures come back as a `{"error": ...}` result, not a tool error.
 - `get_schema_docs()` - schema_docs.md verbatim plus `{version, content_hash}`.
 - `get_bank_questions(route)` - existing entries for a route: id, text, level, subtype only.
-- `search_corpus(query, condition="pooled", k=10, scope_project_ids=None)` - project-level rankings per condition (`lexical`, `dense`, `hybrid`, `hybrid_rerank`, or `pooled` for all four), with per-condition ranks and best-chunk text. Requires the embedder and reranker llama-servers.
-- `get_project_text(project_ids)` - full stored text for up to 10 projects. The adjudication channel.
+- `search_corpus(query, condition="pooled", k=10, scope_project_ids=None, snippet_chars=N)` - project-level rankings per condition (`lexical`, `dense`, `hybrid`, `hybrid_rerank`, or `pooled` for all four), with per-condition ranks and best-chunk text capped at `snippet_chars` (a full chunk averages ~1,437 chars). Payload discipline - this caps chars per call, NEVER which calls you may make or what you may read: `0` for the probe, `~400-600` for exploratory OWN-WORDING sweeps whose hits you triage by rank and gist, and a full `get_project_text` read for anything you intend to quote as evidence. Requires the embedder and reranker llama-servers.
+- `get_project_text(project_ids)` - full stored text for up to 10 projects. The adjudication channel - anything cited in a finding's Evidence is read here, in full, never quoted from a truncated chunk.
 
 Bank entries are read from `eval/bank.jsonl` directly with the Read tool - an attack needs the full record, which `get_bank_questions` does not return.
 
@@ -42,7 +42,7 @@ There are no write tools and no file-editing tools. Everything you produce is co
 1. **Resolve the target.**
    - Bank mode (argument is an id): Read `eval/bank.jsonl` and locate the record. Id not found: `STATUS REVIEW-FAILED - unknown id`. Duplicate id lines: attack the last occurrence and report the duplication as a HIGH `OTHER:duplicate-id` finding (the validator rejects duplicates).
    - Draft mode (`draft` or no argument): the `DRAFT:` block is your only source - the record JSON, the drafter's evidence, and its precheck result. If a field the attack needs is missing (no gold, no executed evidence, no `filter_sql` where the route requires one), `STATUS REVIEW-FAILED - incomplete draft payload: <what is missing>`. Never infer or invent a gold label to attack against.
-2. **Probe as the route requires.** All routes: `get_schema_docs()`; record the `content_hash`. Vector, hybrid, topical ADV: `search_corpus("probe", k=1)`; a down server ends the pass with `STATUS SKIPPED - retrieval servers down`. SQL-route attacks proceed without the retrieval servers.
+2. **Probe as the route requires.** All routes: `get_schema_docs()`; record the `content_hash`. Vector, hybrid, topical ADV: `search_corpus("probe", k=1, snippet_chars=0)`; a down server ends the pass with `STATUS SKIPPED - retrieval servers down`. SQL-route attacks proceed without the retrieval servers.
 3. **Staleness (bank mode).** Compare the entry's `schema_docs_hash` against the live hash, and `pooling_evidence.index_fingerprint` against the probe's `index_meta.content_hash`. A mismatch is not itself a defect - it means the recorded evidence predates the snapshot, so attack against live data and treat the entry's recorded evidence as a claim. Report it LOW.
 4. **Pick your angles and say so** before executing them.
 
@@ -69,6 +69,17 @@ OWN-WORDING       (vector / hybrid / topical ADV) When you search for evidence
                   non-embedding channel too (a run_sql LIKE sweep over
                   objectives, euroSciVoc membership for the relevant codes).
 ```
+
+## Re-attack rounds (draft mode) - you stay warm, the protocols do not
+
+Under `/draft-batch` you review every round of one candidate: after a fix, the orchestrator sends the updated package to YOU, warm, with a plain statement of what changed. The protocols above are anti-anchoring controls, and their value is a **fresh derivation** - which a warm agent can produce on demand but will not produce spontaneously. So the re-draw is mandatory and keyed to the diff:
+
+- **The question text or the filter wording changed** -> you MUST re-run BLIND-SOLVE and OWN-WORDING as *new* derivations from the new wording - write the query again from the text alone, search again with new reformulations - never a recollection of your earlier one. A reworded question is a new attack surface; the one HIGH that killed a candidate in the measured runs came from a round-2 blind-solve of wording the round-1 pass had never blind-solved.
+- **Only the reference answer, `notes`, or a provenance field changed** -> no protocol re-draw. Attack the changed text and report.
+
+If the package carries an `evidence_carried_forward` disclosure (the drafter did not re-run some measurement because the edit did not invalidate it), re-measure it yourself rather than trusting it - that disclosure exists precisely so you can check it cheaply. A class the orchestrator marks as already `RECORDED` on this candidate is settled: if you re-discover it, note it in one LOW line, do not write a finding block for it.
+
+Your earlier findings are yours to extend or contradict - a warm critic that finds its round-1 claim was wrong says so plainly rather than defending it.
 
 ## Attack budget: three angles
 

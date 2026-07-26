@@ -27,8 +27,11 @@ Your final message is raw data for the orchestrator. Exactly this, nothing befor
 
 ```
 RULINGS
-- <CLASS> (<HIGH|MID>, round <n>): UPHELD | DISMISSED - <one sentence>
-(all of them; "none" if the critic reported no HIGH or MID findings)
+- <CLASS> (<HIGH|MID>, round <n>): UPHELD | DISMISSED | RECORDED - <one sentence>
+(all of them; "none" if the critic reported no HIGH or MID findings.
+ RECORDED = real, accepted, rides into the report as a note, never re-ruled;
+ a re-discovery of a RECORDED class gets a one-line note, not a fresh ruling,
+ and never counts toward the within-candidate stop rule.)
 
 DISPOSITION  ACCEPT | FIX | ABANDON
 TARGETS      <comma-separated classes>        (FIX only)
