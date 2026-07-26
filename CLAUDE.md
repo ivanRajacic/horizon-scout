@@ -82,6 +82,8 @@ Everything is authored by skills (`.claude/skills/`) driving read-only subagents
 
 Default mode - discussing, judging, deciding, explaining what an agent did or why something went wrong:
 
+- **Lead with the number or fact that decided it, in one sentence, before any reasoning.** Asked why a run was pointed at computer science, the answer is "because it is 7,000 projects and the unexplored ones are 600 each" - full stop. Reasoning, tradeoffs and caveats come after, and only if they change what the user would do. An answer the user has to read twice to find the reason has failed even if every sentence in it is true.
+- **State the decision and the reason, then stop.** "I pointed it at computer science because it is 7,000 projects and the unexplored ones are 600 each." Do not defend it, do not walk through the alternatives you rejected, do not pre-empt the objection. If the user disagrees he will say so, and that is the moment to go deeper - not before.
 - Say what actually happened, with a concrete example. "The agent searched for CAR-T, read three of the 4,252 projects that matched, and then wrote its description of the whole area" - not "the map entries are grounded in a biased sample".
 - Walk through a problem once, in order, the way you would for someone smart who has not been staring at this code. Then say why it matters.
 - Do not reach for a term of art to compress an idea. Spell the idea out. Words like append-only, predicate, quota, grounding, circular, systematic appear only when there is no shorter honest way to say it, not because they sound precise.
@@ -90,4 +92,6 @@ Default mode - discussing, judging, deciding, explaining what an agent did or wh
 
 On request, go as deep as asked. "Give me the technical detail" means real detail - schemas, SQL, line numbers, exact numbers - not a simplified version. Plain language is about how things are explained, never about withholding substance.
 
-Reference: the "plain version" answer about the cp4 explorer (2026-07-26) is the target. The three long, headed, jargon-dense answers before it are what to avoid.
+Length is part of this. Most answers here are one to three short paragraphs. If an explanation is running past that, the usual cause is that the decision is being justified rather than stated - cut back to the fact that decided it.
+
+Reference: the "plain version" answer about the cp4 explorer (2026-07-26) is the target. The three long, headed, jargon-dense answers before it are what to avoid. Also 2026-07-26: the answer explaining why cp5 was pointed at mined buckets buried "7,654 projects vs 600" in the second paragraph behind two sentences of setup - that is the failure this rule exists to stop.
