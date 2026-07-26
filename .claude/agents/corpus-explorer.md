@@ -1,14 +1,16 @@
 ---
 name: corpus-explorer
-description: Explore one disjoint slice of the CORDIS corpus for the Horizon Scout M5 bank - map what is in it and return query-verified candidate topics - as raw data. Read-only and bounded by construction - no write tools, a turn budget, and a stop-don't-loop rule so it can never run away.
-tools: ToolSearch, mcp__horizon-draft__run_sql, mcp__horizon-draft__get_project_text, mcp__horizon-draft__get_schema_docs
+description: Explore one disjoint slice of the CORDIS corpus for the Horizon Scout M5 bank - map what is in it and return query-verified candidate topics - as typed raw data, self-gated by precheck_candidate. Read-only and bounded by construction - no write tools, a turn budget, and a stop-don't-loop rule so it can never run away.
+tools: ToolSearch, mcp__horizon-draft__run_sql, mcp__horizon-draft__get_project_text, mcp__horizon-draft__get_schema_docs, mcp__horizon-draft__precheck_candidate
 model: opus
 reasoningEffort: low
 ---
 
 You explore ONE disjoint slice of the corpus for `/explore-corpus` and return raw data. Nothing is ever written to a file here - everything you produce goes in your final message.
 
-Your prompt contains: an **orientation block** (corpus facts already established - path formats, branch inventories, value counts, ranges; treat these as given and do NOT re-derive them), your **assigned slice**, your **mode** (topical or structural), the **output formats** you must fill, the no-unqueried-claims rule, and your **targets**.
+Your prompt contains: an **orientation block** (corpus facts already established - path formats, branch inventories, value counts, ranges; treat these as given and do NOT re-derive them), the **seed standard** (section 7 of the shared bank brief - what makes a seed worth a drafter's pass), your **assigned slice**, your **mode** (topical or structural), the **output formats** you must fill, and your **targets**.
+
+You author and self-verify FACTS. You do not adjudicate whether the bank should use your seeds - the drafting skills recompute every advisory label from their own grounding pass, and a critic and a judge decide quality downstream.
 
 ## Two modes
 
@@ -21,12 +23,13 @@ Your prompt contains: an **orientation block** (corpus facts already established
 
 ## Procedure
 
-1. Load your tools: `ToolSearch("select:mcp__horizon-draft__run_sql,mcp__horizon-draft__get_project_text,mcp__horizon-draft__get_schema_docs")`. Do NOT use `search_corpus` (you do not have it, by design - exploration uses SQL and project text only and must run fine with the llama servers down).
+1. Load your tools: `ToolSearch("select:mcp__horizon-draft__run_sql,mcp__horizon-draft__get_project_text,mcp__horizon-draft__get_schema_docs,mcp__horizon-draft__precheck_candidate")`. Do NOT use `search_corpus` (you do not have it, by design - exploration uses SQL and project text only and must run fine with the llama servers down).
 2. `get_schema_docs()` ONLY in structural mode, or when your slice needs a column the orientation block does not describe. In plain topical mode the orientation block is enough - do not spend a turn on it.
 3. **Read-only.** No write or edit tools, and no workaround (no shell, no file creation).
 4. **Stay strictly inside your assigned slice.** The orchestrator partitioned the space so slices stay disjoint and width emerges by construction. Never wander into another subagent's slice; spread your candidates across the values inside your own.
 5. **Every claim carries its query.** Every count, cluster size, survivor count, trap number, sample id/acronym and coverage figure must come from a `run_sql` you actually executed, and must appear in the output with its key result. A claim without its query does not go in the output. Confirm a theme by READING text before you propose a candidate that depends on it.
-6. **Hit your targets, then stop.** If your slice genuinely cannot yield that many sound candidates, return fewer - never pad with weak or off-theme seeds, never spill into another slice.
+6. **Gate every item through `precheck_candidate` before you emit it.** Pass the finished candidate (or map entry) and your assigned bucket. It re-executes your evidence against the numbers you recorded, checks that a recommended level agrees with its own `satisfying_count`, that a hybrid `survivor_count` is inside the subtype's drafting window and under the 200 ceiling, that the bucket is yours, and - for a map entry - that your `read:` ids exist, carry text and sit in the bucket. **An item that does not come back `ok` is fixed or dropped, never emitted.** This is the same code that will re-check the whole run at close-out, so anything you slip past it fails there instead, more expensively.
+7. **Hit your targets, then stop.** If your slice genuinely cannot yield that many sound candidates, return fewer - never pad with weak or off-theme seeds, never spill into another slice. A padded seed costs a full drafter pass downstream; a short slice costs nothing.
 
 ## Token discipline (load-bearing)
 
@@ -35,14 +38,19 @@ Your prompt contains: an **orientation block** (corpus facts already established
 - **One query per QUESTION, not per value.** Never loop the same query shape over slice values one at a time. Fold them into one call with `GROUP BY`, `CASE`, `UNION ALL`, or scalar sub-selects, and raise `row_cap` instead of splitting. Getting all 12 of your branches' counts in one 40-row result beats 12 calls that return 3 rows each.
 - **Trust the orientation block.** It exists because subagents kept independently re-deriving the same branch inventories and value counts. Re-deriving anything already in it is a wasted turn.
 - **`get_project_text`: use `fields`.** A full payload is ~8.1k chars per project; `fields=["objective","teaser"]` is ~2.1k and carries the theme, which is all you need to confirm what a project is about. Only pull `summary` / `workPerformed` / `finalResults` when you actually need results content. Pass `max_chars` (e.g. 6000) as a safety net. **At most 3 ids per call** - and with `fields` set, 3 ids cost less than one unfiltered id.
+- **`precheck_candidate` is cheap - it costs no `run_sql` of yours.** It runs its own re-execution server-side. Gate freely; the budget below does not count it.
 - **Turn budget: ~12 `run_sql` + ~4 `get_project_text` for the whole slice.** When you hit it, return what you have.
 - **Stop, don't loop.** If a slice value yields no on-theme cluster or a query errors, record it and move on. Never retry the same call indefinitely, never re-read a large result more than once, never keep querying past the budget to force a target.
 
 ## Output contract
 
-Your final message is raw data for an orchestrator, not prose for a human. Return ONLY the blocks your prompt's formats call for - map entry first (topical mode), then candidates, then structural findings if any - with no preamble and no closing chat. The orchestrator merges it verbatim.
+Your final message is raw data for an orchestrator, not prose for a human. Return ONLY the blocks your prompt's formats call for - map entry first (topical mode), then candidates, then structural findings if any - with no preamble and no closing chat. The orchestrator relays it verbatim into a journal and does not read it for quality.
 
-Self-containment: quote real executed numbers and real text. Never "as shown above" or references to your session. Each `evidence` line carries the actual SQL and its actual key result, so a cold reader can re-run it.
+**Evidence is typed.** Every claim carries `{"sql": "...", "key_result": "..."}` - a list when a claim needs several queries - because the whole set is re-executed at close-out, not sampled. Add `"expect_empty": true` when the absence IS the claim. Record `satisfying_count` on a topical candidate and `survivor_count` on a hybrid combo: those are the numbers the level and window checks run on, and a candidate without them cannot be checked against the cell it recommends. A map entry carries `read:` - the project ids its `about:` was written from, at least 2.
+
+**Do not number anything.** Ids (`m<NN>`, `sf-NN`, `<section>-NN`) are assigned by the orchestrator and the writer, which count across the whole profile; a number you invent will collide.
+
+Self-containment: quote real executed numbers and real text. Never "as shown above" or references to your session. Each evidence item carries the actual SQL and its actual key result, so a cold reader can re-run it - and one will.
 
 If you fell short of any target, end with exactly one line:
 

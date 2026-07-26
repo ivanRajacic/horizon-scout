@@ -1,6 +1,6 @@
 ---
 name: explore-corpus
-description: Cumulative corpus exploration for the Horizon Scout M5 bank. Maintains src/retrieval/corpus_profile.md as a growing MAP of the database - what each part is about and what questions it can support - plus query-verified candidate seeds for drafting. A frontier table over the 46 euroSciVoc buckets records what has been explored and what has not, so every run goes somewhere new instead of re-deriving the corpus. Fans out bounded parallel `corpus-explorer` subagents (max 4 in flight) over the horizon-draft MCP tools, then merges by APPENDING - never rewriting - and presents the result for one user review.
+description: Cumulative corpus exploration for the Horizon Scout M5 bank. Maintains src/retrieval/corpus_profile.md as a growing MAP of the database - what each part is about and what questions it can support - plus query-verified candidate seeds for drafting. A frontier table over the 46 euroSciVoc buckets records what has been explored and what has not, so every run goes somewhere new instead of re-deriving the corpus. Everything with a right answer is a deterministic CLI node (`frontier-report`, `verify-evidence`, `explore-crosscheck`, `write-profile`); the orchestrator spawns bounded `corpus-explorer` subagents (4 in flight), relays their typed payloads into an append-only journal, and judges nothing.
 argument-hint: [scope, e.g. "map=6" or "vector=10 hybrid=10"]
 ---
 
@@ -8,7 +8,9 @@ argument-hint: [scope, e.g. "map=6" or "vector=10 hybrid=10"]
 
 **Arguments:** $ARGUMENTS
 
-Maintain `src/retrieval/corpus_profile.md`: the query-verified "what is in this database" map that tells the drafting skills where to go and what each region can support. Runs autonomously - bounded parallel sub-batches, one merge pass, ONE user review of the finished artifact at the end. No per-section confirmation.
+Maintain `src/retrieval/corpus_profile.md`: the query-verified "what is in this database" map that tells the drafting skills where to go and what each region can support. Runs autonomously - bounded parallel slices, per-slice close-out, ONE user review of the finished artifact at the end. No per-section confirmation.
+
+**You are a message bus, not an author.** Four deterministic CLI nodes own everything with a right answer - the frontier, the partition, the orientation block, id assignment, evidence verification, the width and duplicate checks, the profile insertions, the version bump, and the telemetry. Your irreducible jobs are: parse the scope, spawn subagents on their slices, relay each returned payload into the journal, decide whether a thin section earns its one top-up wave, and present the result. You verify nothing by hand and you write no profile prose.
 
 **The point of this skill is that knowledge ACCUMULATES.** Every run adds to the map and advances the frontier; no run re-derives what an earlier run already established. That is what keeps the bank wide - drafting draws from parts of the corpus we have deliberately been to, instead of clustering on the handful of entities and funding columns that are easy to find from a cold start.
 
@@ -23,9 +25,9 @@ Anything not named is SKIPPED - no subagent is spawned for it. **Restate the par
 
 ## Hard constraints
 
-- **Read-only exploration.** All data access through the `horizon-draft` MCP tools; every call is traced automatically. The ONLY files this skill writes are `src/retrieval/corpus_profile.md` and the `CORPUS_PROFILE_VERSION` bump in `src/config.py`. Never touch the bank, schema_docs, or anything frozen.
-- **No unqueried claims.** Every number, distribution, trap pair, cluster size, survivor count and absence shows the executed SQL that produced it and its key result. A claim without its query does not go in the file.
-- **Append, never rewrite.** A later run fills stubs, adds map entries, appends candidates and updates frontier rows. It never renumbers, edits or drops what an earlier version recorded - drafting sessions may already have consumed it.
+- **Read-only exploration.** All data access through the `horizon-draft` MCP tools; every call is traced automatically. The only file YOU write is the run journal (`eval/exploration/journal-<date>.jsonl`); `write-profile` writes `src/retrieval/corpus_profile.md` and the `CORPUS_PROFILE_VERSION` bump in `src/config.py`. Never touch the bank, schema_docs, or anything frozen.
+- **No unqueried claims.** Every number, distribution, trap pair, cluster size, survivor count and absence carries typed evidence - `{"sql": ..., "key_result": ...}` - and `verify-evidence` re-executes ALL of it. A claim without its query does not reach the file, and a number that does not reproduce fails its slice.
+- **Append, never rewrite.** A later run fills stubs, adds map entries, appends candidates and updates frontier rows. It never renumbers, edits or drops what an earlier version recorded - drafting sessions may already have consumed it. The writer enforces this by construction: it inserts before the next H2 and re-emits nothing it did not touch.
 - **Candidates are advisory.** Recommended route/level/subtype are the exploration agent's judgment calls to speed drafting; the drafting skills recompute levels from evidence and remain the authority. Nothing here pre-commits a bank entry.
 - **No retrieval-stack dependency.** Exploration uses SQL and project text only. `search_corpus` verification belongs to the drafting skills; this skill must run fine with the llama servers down.
 
@@ -66,10 +68,13 @@ Ends with the counter line: `mapped <n>/46 · mined <n>/46`.
   size: <N> projects  (<count query> -> <N>)
   about: <2-3 sentences on what work actually lives here, written from text you READ>
   texture: <report_text coverage; whether taxonomy labels are echoed verbatim in member text or paraphrased; how noisy the tags are; anything that changes how a question must be written>
+  read: <the project ids the `about:` was written from - at least 2>
   good for: <which question kinds this region supports - route/level/subtype - and WHY>
   thin for: <what this region cannot support, and why>
   mapped: <cpN>
 ```
+
+`read:` is what turns "written from text, not from the tag" into a check instead of an honour rule: `verify-evidence` confirms those ids exist, carry text and sit in the bucket, and flags an `about:` that is mostly the bucket label back. The region id and `mapped:` are assigned by the writer - a subagent never numbers its own entry.
 
 `about` / `good for` / `thin for` are the payload the drafting skills consume. `texture` must come from read text, never from the tag alone: cp1 established that euroSciVoc leaf labels lie on interdisciplinary and MSCA projects (`ethnomycology` tagged an aquatic-fungi ecology project; `sustainable architecture` tagged a district-heating project). A map entry that just paraphrases the taxonomy label is worthless.
 
@@ -95,6 +100,8 @@ Ends with the counter line: `mapped <n>/46 · mined <n>/46`.
   why: <one sentence - what makes this a good seed>
 ```
 
+In the journal this is typed: `evidence` is a list of `{"sql": ..., "key_result": ...}` (add `"expect_empty": true` when the absence IS the claim), and topical candidates carry `satisfying_count`, hybrid combos `survivor_count`. Those two numbers are what let `verify-evidence` catch a level that contradicts its own count or a survivor set outside the subtype's drafting window - the birth-failures a drafter used to discover the expensive way. The writer renders the block above from the typed form and assigns the id.
+
 Adversarial candidates add `claim:` (the precise absence or false premise) and `near-miss:` (the synonym / adjacent-column / loosened-range variants checked, each with its count - a zero-match candidate without checked near-misses is not query-verified). Ambiguous candidates carry no subtype; they use `routes=<two-or-three of sql|vector|hybrid, joined with +>` and add a `readings:` line, one clause per route stating how that route would parse the question.
 
 **Supply targets, FULL run** (2-3x the allocation so drafting always has slack): SQL >= 45 candidates (allocation 22), Vector >= 50 (25), Hybrid >= 50 (24), Adversarial >= 25 (12), Ambiguous >= 20 (10). **Scoped run:** the argument's targets replace these outright - they are caps as much as floors; exploration stops at the target.
@@ -115,68 +122,123 @@ Adversarial candidates add `claim:` (the precise absence or false premise) and `
 
 ## Orchestration
 
-**Model and effort:** run in an Opus-class session at **medium** effort - the orchestrator partitions, merges, dedups, updates the frontier, spot-checks and writes, which is bookkeeping, not authorship. A skill cannot change the session's own model, so CHECK: if the session model is not Opus-class or better, stop before spawning anything and tell the user to relaunch under `/model` (or explicitly waive the check). Subagents are the `corpus-explorer` agent type (`.claude/agents/corpus-explorer.md`): read-only, Opus at LOW effort, with its turn budget and stop-don't-loop rule baked into the agent def so the spawn prompt stays lean. Spawn via the Agent tool with `subagent_type: corpus-explorer`. **Never use Haiku** for any part of this run - Haiku is the system under test, and letting it pick the topics it will be tested on violates the one-hat rule. Avoid Sonnet too (it wears the judge hat).
+**Model and effort:** run in an Opus-class session at **low** effort. Partition, merge, dedup, frontier update, spot-check and write are all deterministic nodes now; what is left is parse, spawn, relay, present. (Effort is set AT LAUNCH - `claude --effort low` - not by asking a session to change its own.) A skill cannot change the session's own model, so CHECK: if the session model is not Opus-class or better, stop before spawning anything and tell the user to relaunch under `/model` (or explicitly waive the check). Subagents are the `corpus-explorer` agent type (`.claude/agents/corpus-explorer.md`): read-only, Opus at LOW effort, with its turn budget and stop-don't-loop rule baked into the agent def so the spawn prompt stays lean. Spawn via the Agent tool with `subagent_type: corpus-explorer`. **Never use Haiku** for any part of this run - Haiku is the system under test, and letting it pick the topics it will be tested on violates the one-hat rule. Avoid Sonnet too (it wears the judge hat).
 
-**Concurrency:** at most **4** `corpus-explorer` subagents in flight - the `horizon-draft` MCP server is one stdio process over a single read-only DuckDB connection, so more just queues. Run in waves: dispatch up to 4, wait, dispatch the next; log a one-line progress note per wave so a fan-out run is never a silent black box.
+**Concurrency:** at most **4** `corpus-explorer` subagents in flight - the `horizon-draft` MCP server is one stdio process over a single read-only DuckDB connection, so more just queues. **Sliding window, not waves:** dispatch up to 4, and dispatch the next the moment ANY of them returns, rather than waiting for the slowest of a batch. Log a one-line progress note per slice so a fan-out run is never a silent black box.
 
-### 1. Startup
+**Per-slice close-out.** A returned slice is verified and journalled immediately, before you dispatch its replacement. Two things follow. Work is checkpointed - a killed run keeps every verified slice, and a re-run resumes from the journal instead of starting over. And your context never has to hold a payload twice: relay it into the journal and forget it, because `write-profile` reads the journal from disk, not from your window.
+
+### 1. Startup - one command
 
 1. Parse and restate the scope.
-2. `get_corpus_profile(section="frontier")` - the plan comes from here. An `{"error": ...}` means the profile does not exist yet: this is a bootstrap run, so build the frontier from scratch with one `GROUP BY` query and mark all 46 buckets `unexplored`.
-3. `get_bank_questions(route)` for every route - recompute the `bank` column and promote any `mapped` bucket that now has a bank question to `mined`.
-4. `get_schema_docs()` - record the hash.
-5. **Build the orientation block** (once, ~6 queries, pasted verbatim into EVERY spawn prompt): the euroSciVocPath format and level idiom, the 6 top-level branches with counts, the 40 second-level categories with counts, the fundingScheme inventory, the startDate range, ecMaxContribution deciles, and report_text coverage. If `## Distributions` is already populated, lift these from it instead of re-querying.
+2. Run it:
 
-   This block is not optional. It exists because measured runs showed subagents independently re-deriving the same branch inventory and re-probing the path format - roughly a third of each subagent's queries spent getting oriented. ~1.5-2k prompt tokens buys back ~10 turns per subagent.
+   ```bash
+   ./.venv/Scripts/python.exe -m src.cli frontier-report --map <N>
+   ```
 
-### 2. Fan out (max 4 in flight, in waves)
+   That single call replaces the whole old startup. It returns, computed from the live database and the live bank:
 
-Assign slices from the frontier, not from re-derivation:
+   - the **frontier** - all 46 buckets with `status` / `map` / `seeds` / `bank` recomputed (`bank` traced through `gold_project_ids` -> `euroscivoc`), plus the counter line;
+   - the **slice partition** - which unexplored buckets go to which slice, largest-first, 3 per slice;
+   - the **next free ids** - `m<NN>`, `sf-NN`, and one per candidate section, counted across the whole profile;
+   - the **orientation block** - path format and level idiom, the 6 branches with counts, the fundingScheme inventory, the startDate range, ecMaxContribution deciles, report_text coverage - followed by the **seed standard** (`## 7. Seeds` of `src/eval/bank_brief.md`).
+
+   Paste the orientation block **verbatim** into every spawn prompt. It is not optional: measured runs showed subagents independently re-deriving the same branch inventory and re-probing the path format - roughly a third of each subagent's queries spent getting oriented. ~1.5-2k prompt tokens buys back ~10 turns per subagent. The seed standard travels with it so the explorer is held to the same definition of "good" the drafter, critic and judge use.
+
+3. Open the journal: `eval/exploration/journal-<date>.jsonl`, line 0 the run header.
+
+   ```jsonc
+   {"kind": "run", "date": "2026-07-25", "scope": "map=6",
+    "started": "2026-07-25T14:03:00",          // used to window the telemetry
+    "targets": {"vector": 9},                   // per-section supply, if scoped
+    "versions": {"corpus_profile": "cp3", "schema_docs": "sd2",
+                 "bank_brief": "bb2"}}
+   ```
+
+   `started` must be an ISO timestamp in the MCP log's format (`date +%Y-%m-%dT%H:%M:%S`); `write-profile` counts this run's `run_sql` and `get_project_text` traffic from it.
+
+### 2. Fan out (sliding window, 4 in flight)
+
+Slices come from `frontier-report`'s partition, never from your own re-derivation:
 
 - **Topical work** (`map=N`, vector, hybrid, ambiguous): take `unexplored` buckets, largest-first unless the scope says otherwise, and give each subagent **2-3 buckets**. It returns a map entry per bucket plus ~3 candidates per bucket for the requested route(s).
 - **Structural work** (sql, adversarial): sub-batches of ~8 candidates over disjoint families - funding-money traps; role/grain; distinct-value inventories; date/status/scheme for SQL; zero-match filters; false-presuppositions; data-absent fields for Adversarial.
 - **Distributions** - statistical, no candidates and no width rule; one subagent (or two by metric group).
 
-Each spawn prompt carries: the orientation block, its mode, its assigned buckets or family, the output formats it must fill, the no-unqueried-claims rule, and its targets. The toolset and the turn/anti-loop bounds live in the agent def, not the prompt.
+Each spawn prompt carries: the orientation block **and the seed standard** (verbatim from `frontier-report`), its mode, its assigned buckets or family, the output formats it must fill, and its targets. The toolset, the turn/anti-loop bounds, the no-unqueried-claims rule and the `precheck_candidate` gate live in the agent def, not the prompt.
 
-**Always spawn.** Never explore inline in this session, even for a single sub-batch. Inline work runs the cheapest queries in the most expensive context - it lands in the orchestrator's window and then has to survive the whole merge, spot-check and write phase. Transparency is covered by the wave progress notes and the telemetry line, not by doing the work here.
+**Always spawn.** Never explore inline in this session, even for a single slice. Inline work runs the cheapest queries in the most expensive context. Transparency is covered by the per-slice progress notes and the telemetry line, not by doing the work here.
 
-### 3. Merge pass (this session)
+### 3. Relay each returned slice (you judge nothing)
 
-- Assemble the NEW material only: map entries, structural findings, and candidates, concatenated across sub-batches. Number new map entries `m<NN>` and new candidates `<section>-NN` continuing from the highest existing id - never restart numbering, never renumber what exists.
-- Drop near-duplicates across a wave's sub-batches (boundary overlaps) and against what the profile already holds (same topic + same axes).
-- **Spot-check:** re-execute at least two embedded queries per produced section via `run_sql`. Any mismatch between a claim and the re-run fails that item - send its slice back to a fix-up sub-batch, never hand-edit the numbers.
-- Update the frontier: newly mapped buckets `unexplored` -> `mapped` with their `m<NN>` id; recompute the counter line.
-- Check the width rule across each merged section and the supply targets. A section that fails width or falls short gets **one** top-up wave - a single additional sub-batch aimed at the thin axis. A subagent's `SHORT:` note counts toward deciding a top-up.
+As each subagent returns - not at the end - do exactly this, then dispatch its replacement:
 
-### 4. Write - by insertion, never by rewrite
+1. **Append a journal line** with the payload verbatim. Envelope typed, payload relayed:
 
-The profile grows monotonically; re-emitting it every run costs output tokens for sections that did not change, and invites transcription drift in anything "carried over verbatim". So:
+   ```jsonc
+   {"kind": "slice", "slice_id": "s01", "status": "RETURNED",
+    "mode": "topical",
+    "buckets": ["social sciences / sociology"],
+    "targets": {"map_entries": 1, "candidates": 3},
+    "map_entry": {"bucket": "...", "slice": "...", "size": "...",
+                  "about": "...", "texture": "...", "read": [123456, 234567],
+                  "good_for": "...", "thin_for": "..."},
+    "candidates": [{"id": "vector-16", "topic": "...",
+                    "recommend": "route=vector level=L2 subtype=comparison",
+                    "bucket": "...", "satisfying_count": 3,
+                    "evidence": [{"sql": "SELECT ...", "key_result": "3 projects"}],
+                    "axes": "branch=social-sciences leaf=... satisfying=3",
+                    "why": "..."}],
+    "findings": [],
+    "short": null}
+   ```
 
-1. `Grep` `corpus_profile.md` for `^## ` to get the heading line numbers.
-2. `Read` ONLY the narrow ranges you are about to change (the frontier rows, the end of a section you are appending to). This also satisfies the read-before-edit requirement without pulling the whole file.
-3. `Edit` in place: insert new blocks immediately before the next H2, replace stub lines with real content, update the changed frontier rows and the counter line.
+   Ids are yours to assign from `frontier-report`'s next-free list, in dispatch order. `evidence` is a LIST of `{sql, key_result}`; mark an absence claim `"expect_empty": true`. `satisfying_count` / `survivor_count` are what make the level and window checks possible - relay them if the subagent reported them.
 
-Never `Write` the whole file (bootstrap run excepted, when there is nothing to preserve).
+2. **Verify it:**
 
-Then bump `CORPUS_PROFILE_VERSION` in `src/config.py` to the next `cpN`, and append the **telemetry line** to the Header's run log:
+   ```bash
+   ./.venv/Scripts/python.exe -m src.cli verify-evidence eval/exploration/journal-<date>.jsonl
+   ```
 
-```
-- cp<N> (<date>) scope "<scope>": <n> subagents, <n> run_sql, <n> projects read, <duration>; frontier mapped <before>/46 -> <after>/46, mined <n>/46
-```
+   Exhaustive, not sampled: every evidence SQL is re-executed and every recorded number must reproduce; map entries must cite >= 2 real read project ids that exist, carry text and sit in the bucket; `about:`/`texture:` must not be the taxonomy label back; a recommended level must agree with its own count and a hybrid survivor count must sit inside its subtype's window.
 
-Counts come from `data/logs/draft_mcp.jsonl` (filter to this run's time window). This is how the next optimization pass gets measured instead of guessed.
+3. **On PASS** append a second line for that slice with `"status": "VERIFIED"` (or `"SHORT"` if the subagent returned a `SHORT:` note). **On FAIL**, re-spawn that one slice with the failing checks quoted, then journal the replacement payload. One re-spawn per slice; if it fails again, journal `"status": "FAILED"` with the reason and move on. Never hand-edit a number into passing.
 
-Finally run `./.venv/Scripts/python.exe -m pytest tests/test_mcp_server.py -q`.
+Do not read the payload for quality. You have no judgement to add that `verify-evidence` has not already made mechanically, and re-reading it is the context leak this design removes.
+
+### 4. Close out
+
+1. **Cross-check** - what no single slice can see:
+
+   ```bash
+   ./.venv/Scripts/python.exe -m src.cli explore-crosscheck eval/exploration/journal-<date>.jsonl
+   ```
+
+   Width (no axis value on more than a third of a section), entity spread (no named entity in more than two candidates), near-duplicates against both the run and the existing profile, and supply against this run's targets. These are FLAGS, not gates. A section that fails width or falls short gets **one** top-up slice aimed at the thin axis - that decision is yours, and it is the only judgement call in the loop. A subagent's `SHORT:` note counts toward it.
+
+2. **Spawn the completeness critic** (`subagent_type: explore-critic`) once, with the journal path and the crosscheck output. It reads the typed summaries - never the payloads - and returns the `## Coverage notes` prose plus a list of what is missing. It reports; it does not gate and it does not re-spawn.
+
+3. **Write:**
+
+   ```bash
+   ./.venv/Scripts/python.exe -m src.cli write-profile eval/exploration/journal-<date>.jsonl cp<N>
+   ```
+
+   Insertion only: new map entries, structural findings and candidates go in before the next H2 with their assigned ids, stub lines are replaced, the frontier table and counter line are recomputed, `CORPUS_PROFILE_VERSION` is bumped, and the telemetry line is appended to the Header's run log with `run_sql` / `get_project_text` counts computed from `data/logs/draft_mcp.jsonl` over this run's window. Pass `--dry-run` first if you want to see the result before it lands. Append the critic's `## Coverage notes` prose afterwards, as the one piece of writing a model still does.
+
+4. Run `./.venv/Scripts/python.exe -m pytest tests/test_explore.py tests/test_mcp_server.py -q`.
 
 ### 5. Review gate
 
-Present a summary to the user and wait: the scope this run used, which buckets moved and which are still `unexplored`, per-section candidate counts vs targets, the frontier counter, the least-covered areas, anything surprising found, any section that needed a top-up, and the telemetry line. The user reviews the artifact once; revision instructions loop back through subagents or targeted queries (spot-check discipline applies to any edit). Revisions within this review session do not re-bump the version.
+Present a summary to the user and wait: the scope this run used, which buckets moved and which are still `unexplored`, per-section candidate counts vs targets, the frontier counter, the crosscheck flags, what the completeness critic said is missing, any slice that failed verification or needed a re-spawn, any section that needed a top-up, and the telemetry line. The user reviews the artifact once; revision instructions loop back through subagents (any revised payload goes through the journal and `verify-evidence` like any other - never hand-edit the profile). Revisions within this review session do not re-bump the version.
 
 ## Standing rules
 
 - **Autonomous until the review gate.** No mid-run confirmations; surface problems in the final summary.
-- **Bounded everything - never loop.** 2-3 buckets or ~8 candidates per subagent; max 4 in flight; each `corpus-explorer` has a turn budget (~12 `run_sql` + ~4 `get_project_text`), uses `fields` on project text and reads <= 3 ids per call; one top-up wave per section. A subagent that hits a bound returns partial with a `SHORT:` note - it never loops and never wanders outside its slice.
-- **Every claim carries its query.** A number without SQL does not enter the profile.
+- **Bounded everything - never loop.** 2-3 buckets or ~8 candidates per subagent; max 4 in flight; each `corpus-explorer` has a turn budget (~12 `run_sql` + ~4 `get_project_text`), uses `fields` on project text and reads <= 3 ids per call; one re-spawn per failed slice; one top-up per section. A subagent that hits a bound returns partial with a `SHORT:` note - it never loops and never wanders outside its slice.
+- **Every claim carries its query, and every query is re-run.** A number without SQL does not enter the profile, and a number that does not reproduce under `verify-evidence` does not either.
+- **The deterministic nodes are the authority on facts.** If your reading of a payload disagrees with `verify-evidence` or `explore-crosscheck`, they are right. You do not overrule them, and you do not re-derive what they computed.
 - **Knowledge accumulates.** Each run advances the frontier and adds to the map. Never re-derive what the profile already records; never rewrite what an earlier run wrote.
 - **The profile proposes, the drafting skills dispose.** No bank writes, ever, from this skill.

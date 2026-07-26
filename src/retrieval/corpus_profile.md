@@ -93,10 +93,13 @@ Append-only: entries are added as buckets are explored, never rewritten. Format:
   size: <N> projects  (<count query> -> <N>)
   about: <2-3 sentences on the work that actually lives here>
   texture: <report_text coverage; tag echoed verbatim vs paraphrased; tag noisiness; anything that changes how a question must be written>
+  read: <the project ids the `about:` was written from - at least 2>
   good for: <which question kinds this region supports - route/level/subtype - and why>
   thin for: <what it cannot support, and why>
   mapped: <cpN>
 ```
+
+`read:` (added cp4) makes "written from text, not from the tag" checkable rather than promised: `python -m src.cli verify-evidence` confirms those ids exist, carry text and sit in the bucket, and flags an `about:` whose wording is mostly the bucket label back.
 
 *No entries yet - the map is new at cp3. The 18 buckets carrying `seeds` in the frontier have candidate blocks in the Vector and Hybrid sections below, but no region description; mapping them is the first job of the next `/explore-corpus` run.*
 
