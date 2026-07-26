@@ -766,7 +766,8 @@ def cmd_agent_trace(args):
     print(f"Session {session.name}\n")
     print(render_traces(trace_session(session, since=args.since),
                         orchestrator_trace(session) if args.orchestrator
-                        else None))
+                        else None,
+                        steps=args.steps))
 
 
 def cmd_promote_drafts(args):
@@ -1027,6 +1028,10 @@ def main():
                          "it, to separate one run from an earlier one")
     at.add_argument("--orchestrator", action="store_true",
                     help="include the parent session's own spend as a row")
+    at.add_argument("--steps", action="store_true",
+                    help="break each agent down per instruction: what the "
+                         "first draft cost vs its fix round, vs each round "
+                         "the warm judge ruled on")
     at.set_defaults(fn=cmd_agent_trace)
 
     pd = sub.add_parser("promote-drafts",

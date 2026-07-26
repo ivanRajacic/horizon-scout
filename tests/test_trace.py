@@ -8,8 +8,9 @@ that fails a run.
 
 import json
 
-from src.eval.trace import (project_slug, read_agent, render_traces,
-                            session_dirs, trace_session)
+from src.eval.trace import (instruction_text, project_slug, read_agent,
+                            render_traces, session_dirs, slot_of,
+                            trace_session)
 
 
 def agent_lines(model="claude-opus-5"):
@@ -127,9 +128,129 @@ def test_render_is_readable_and_states_what_wall_means(tmp_path):
     assert "| corpus-explorer |" in rendered
     assert "2 subagent(s)" in rendered
     assert "Map slice a1" in rendered
-    # The caveat has to travel with the number: for the orchestrator row this
-    # is session lifetime, not work.
-    assert "first-to-last message timestamp" in rendered
+    # The caveat has to travel with the number: active is work, span is
+    # lifetime, and for the orchestrator row span is not work at all.
+    assert "**active** sums the steps" in rendered
+    assert "**span** is first-to-last" in rendered
+
+
+# --- steps: what a warm agent did under each instruction -------------------
+
+RELAY = ("The coordinator sent a message while you were working: "
+         "Rectification round for hyb-09.")
+
+
+def warm_lines():
+    """A drafter that drafts, waits ten minutes, then gets a fix round.
+
+    The relay carries `isMeta` AND `origin.kind == "coordinator"` - the real
+    shape from the 2026-07-25 batch, and the reason the meta flag alone must
+    not be the filter.
+    """
+    return [
+        {"timestamp": "2026-07-26T10:00:00.000Z", "type": "user",
+         "message": {"role": "user", "content": "Draft exactly one question."}},
+        {"timestamp": "2026-07-26T10:01:00.000Z", "type": "assistant",
+         "message": {"model": "claude-opus-5", "content": [
+             {"type": "tool_use", "name": "mcp__horizon-draft__run_sql"}],
+             "usage": {"input_tokens": 10, "output_tokens": 100}}},
+        {"timestamp": "2026-07-26T10:01:05.000Z", "type": "user",
+         "message": {"role": "user", "content": [
+             {"type": "tool_result", "content": "rows"}]}},
+        {"timestamp": "2026-07-26T10:02:00.000Z", "type": "assistant",
+         "message": {"model": "claude-opus-5", "content": [
+             {"type": "text", "text": "RECORD ..."}],
+             "usage": {"input_tokens": 20, "output_tokens": 200}}},
+        # ten idle minutes: warm, waiting on the bus, doing nothing
+        {"timestamp": "2026-07-26T10:12:00.000Z", "type": "user",
+         "isMeta": True, "origin": {"kind": "coordinator"},
+         "message": {"role": "user", "content": RELAY}},
+        {"timestamp": "2026-07-26T10:13:00.000Z", "type": "assistant",
+         "message": {"model": "claude-opus-5", "content": [
+             {"type": "text", "text": "fixed"}],
+             "usage": {"input_tokens": 30, "output_tokens": 300}}},
+    ]
+
+
+def warm_session(tmp_path, description="Draft hyb-09 musicology MSCA"):
+    session = tmp_path / "warm"
+    subagents = session / "subagents"
+    subagents.mkdir(parents=True)
+    (subagents / "agent-w1.jsonl").write_text(
+        "\n".join(json.dumps(o) for o in warm_lines()), encoding="utf-8")
+    (subagents / "agent-w1.meta.json").write_text(
+        json.dumps({"agentType": "question-drafter",
+                    "description": description}), encoding="utf-8")
+    return session
+
+
+def test_a_relayed_message_opens_a_step_despite_being_meta(tmp_path):
+    """The trap this exists to avoid: relays are flagged isMeta, so filtering
+    on that flag collapses a warm agent to one step and hides every round
+    after the first."""
+    (trace,) = trace_session(warm_session(tmp_path))
+    assert len(trace.steps) == 2
+    assert trace.steps[1].label.startswith("Rectification round")
+    assert "coordinator sent a message" not in trace.steps[1].label
+
+
+def test_active_time_excludes_the_wait_between_rounds(tmp_path):
+    (trace,) = trace_session(warm_session(tmp_path))
+    assert trace.seconds == 780.0            # 10:00:00 -> 10:13:00, idle in it
+    assert trace.active_seconds == 180.0     # 2m drafting + 1m fixing
+    assert [s.seconds for s in trace.steps] == [120.0, 60.0]
+
+
+def test_a_step_carries_its_own_tokens_and_tool_calls(tmp_path):
+    (trace,) = trace_session(warm_session(tmp_path))
+    first, second = trace.steps
+    assert (first.spend.output, second.spend.output) == (300, 300)
+    assert first.spend.tools == {"mcp__horizon-draft__run_sql": 1}
+    assert second.spend.tools == {}
+    # The agent total is still the sum of its steps.
+    assert trace.output == first.spend.output + second.spend.output
+
+
+def test_tool_results_do_not_open_steps(tmp_path):
+    """A tool result is a user entry too. Treating it as an instruction would
+    make every tool call its own 'step' and the breakdown meaningless."""
+    assert instruction_text(
+        {"type": "user",
+         "message": {"content": [{"type": "tool_result", "content": "x"}]}}) is None
+
+
+def test_an_injected_note_that_is_not_a_relay_opens_no_step():
+    assert instruction_text(
+        {"type": "user", "isMeta": True,
+         "message": {"content": "<system-reminder>be good</system-reminder>"}}
+    ) is None
+
+
+def test_slot_id_is_read_from_the_spawn_description(tmp_path):
+    (trace,) = trace_session(warm_session(tmp_path))
+    assert slot_of(trace) == "hyb-09"
+    (other,) = trace_session(
+        warm_session(tmp_path / "b", description="Attack draft SQL-18 round 2"))
+    assert slot_of(other) == "sql-18"
+
+
+def test_no_slot_id_is_not_a_slot(tmp_path):
+    (trace,) = trace_session(
+        warm_session(tmp_path, description="Explore slice s01"))
+    assert slot_of(trace) is None
+
+
+def test_rollups_add_up_the_agents_that_made_one_question(tmp_path):
+    session = warm_session(tmp_path)
+    rendered = render_traces(trace_session(session), steps=True)
+    assert "By slot" in rendered and "| hyb-09 |" in rendered
+    assert "## Per step" in rendered
+    assert "Rectification round" in rendered
+
+
+def test_steps_are_off_by_default(tmp_path):
+    assert "## Per step" not in render_traces(
+        trace_session(warm_session(tmp_path)))
 
 
 def test_render_says_so_when_there_is_nothing_to_trace():
