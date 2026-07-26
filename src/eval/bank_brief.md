@@ -3,7 +3,9 @@
 *Versioned prompt asset (`BANK_BRIEF_VERSION` in `src/config.py`); bump the
 version on any meaningful edit. Read by the three authoring nodes -
 `question-drafter`, `question-reviewer` (the critic), and `question-judge` -
-so that what "a good bank question" means cannot drift between them.*
+so that what "a good bank question" means cannot drift between them. Section 7
+is read by a fourth, upstream node: `corpus-explorer` decides which seeds the
+other three ever see, so it is held to the same standard.*
 
 ## 1. What the bank is
 
@@ -160,3 +162,56 @@ costs.
 
 The pipeline pays for two independent looks at every question. It only gets
 what it paid for if each node stays inside its own job.
+
+## 7. Seeds - the exploration standard
+
+*Read by `corpus-explorer` (pasted into its spawn prompt by
+`python -m src.cli frontier-report`). Everything above still applies: a seed is
+judged by whether the question it becomes could survive sections 2 and 3.*
+
+A **seed** is not a question. It is a place in the corpus plus the executed
+evidence that a good question can be built there. The drafter recomputes route,
+level, subtype and `term_style` from its own grounding pass - your
+recommendation is advice that saves it time, never a label it inherits.
+
+**What makes a seed worth a drafter's pass:**
+
+1. **The count already fits the cell.** Level is DEFINED by the count
+   (section 4), so a seed that recommends a level its own number contradicts is
+   mislabelled before it is written. Record the number:
+   `satisfying_count` for topical seeds, `survivor_count` for hybrid combos.
+
+   | | window |
+   |---|---|
+   | vector L1 / L2 / L3 | `\|satisfying\|` = 1 / 2-4 / >=5 |
+   | hybrid `filter-read` | 2-10 survivors |
+   | hybrid `filter-synthesize` | 5-20 survivors |
+   | hybrid `filter-compare` | 2-20 survivors |
+   | hybrid `filter-survey` | 5-60 survivors |
+   | any hybrid | hard ceiling 200 - a survivor set that cannot be enumerated cannot be gold |
+
+2. **The theme is in the text, not just in the tag.** euroSciVoc leaf labels
+   lie on interdisciplinary and MSCA projects (`ethnomycology` on an
+   aquatic-fungi ecology project; `sustainable architecture` on district
+   heating). Read two or more members before proposing a seed that depends on
+   what they are about, and record which ids you read.
+
+3. **A user could actually ask it.** The filter has to be expressible in a
+   natural question. This is the `hyb-02` lesson: a musicology x MSCA-IF combo
+   burned a full drafter pass because its filter was one no user would state,
+   and nothing upstream had checked.
+
+4. **It is somewhere new.** The frontier exists so the bank stops clustering.
+   Stay inside your assigned slice, spread candidates across values within it,
+   and do not reuse a named entity that already carries two candidates.
+
+**Every claim carries its query.** Evidence is typed - `{sql, key_result}` -
+because it is re-executed in full by `verify-evidence`, not sampled. A number
+that does not reproduce fails the slice. If the claim IS an absence, say so
+with `expect_empty` and show the near-misses you checked; an unchecked
+zero-match is not evidence of absence.
+
+**Return fewer rather than weaker.** A thin slice that returns three sound
+seeds and a `SHORT:` note costs the pipeline nothing. A padded slice costs a
+full drafter pass per bad seed, and that is the most expensive thing exploration
+can do.
