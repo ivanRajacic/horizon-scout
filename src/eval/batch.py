@@ -31,6 +31,7 @@ from src.config import (BANK_BRIEF_PATH, BANK_BRIEF_VERSION, BANK_PATH,
                         CORPUS_PROFILE_PATH, CORPUS_PROFILE_VERSION, ROOT,
                         SCHEMA_DOCS_PATH, SCHEMA_DOCS_VERSION)
 from src.eval.bank import LADDER, LEVELS
+from src.eval.promote import DECISION_RE, HEADING_ID_RE
 from src.llm import fingerprint
 
 PLAN_DOC_PATH = ROOT / "horizon-scout.md"
@@ -153,6 +154,38 @@ def staged_files(drafts_dir: Path = DRAFTS_DIR) -> list[Path]:
     return sorted(drafts_dir.glob("draft-bank-*.jsonl"))
 
 
+def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
+    """Ids a review report ticked REJECT, across every report in the dir.
+
+    A rejected record stays in its draft file for the record, exactly as a
+    promoted one does, so without this it would read as pending work forever
+    and inflate a cell the batch is still supposed to fill. Deliberately
+    tolerant where `promote.py` is strict: an unticked or malformed report
+    means "no decision yet", never a crash, because a gap report must be
+    readable mid-review.
+    """
+    ids: set[str] = set()
+    for path in sorted(drafts_dir.glob("draft-report-*.md")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        current: str | None = None
+        for line in lines:
+            heading = HEADING_ID_RE.match(line)
+            if heading:
+                current = heading.group(1)
+                continue
+            decision = DECISION_RE.match(line)
+            if decision and current is not None:
+                approve = decision.group("approve") != " "
+                reject = decision.group("reject") != " "
+                if reject and not approve:
+                    ids.add(current)
+                current = None
+    return ids
+
+
 def next_ids(counts: dict[str, int], bank_path: Path = BANK_PATH,
              drafts_dir: Path = DRAFTS_DIR) -> dict[str, list[str]]:
     """Assign the next free `sql-NN` / `vec-NN` / `hyb-NN` per route.
@@ -193,19 +226,26 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
     targets = parse_allocation(plan_path)
     bank = read_records(bank_path)
     staged_paths = staged_files(drafts_dir)
-    # Staged means staged-but-UNPROMOTED. A promoted batch's draft file stays
-    # on disk for the record, and counting those records again would show a
-    # filled cell as half pending.
-    banked_ids = {r.get("question_id") for r in bank}
-    staged = [r for path in staged_paths for r in read_records(path)
-              if r.get("question_id") not in banked_ids]
+    # Staged means staged-but-UNDECIDED. A promoted OR rejected batch's draft
+    # file stays on disk for the record, and counting those records again would
+    # show a filled cell as half pending (promoted) or a cell the batch still
+    # has to fill as already covered (rejected).
+    decided_ids = ({r.get("question_id") for r in bank}
+                   | rejected_ids(drafts_dir))
+    staged, live_paths = [], []
+    for path in staged_paths:
+        undecided = [r for r in read_records(path)
+                     if r.get("question_id") not in decided_ids]
+        staged.extend(undecided)
+        if undecided:
+            live_paths.append(path)
     filled, pending = _tally(bank), _tally(staged)
 
     out = [f"Bank: {bank_path} ({len(bank)} question(s))",
-           f"Staged (unpromoted): {len(staged)} record(s) across "
-           f"{len(staged_paths)} draft file(s)"
-           + (" - " + ", ".join(p.name for p in staged_paths)
-              if staged_paths else ""),
+           f"Staged (undecided): {len(staged)} record(s) across "
+           f"{len(live_paths)} draft file(s)"
+           + (" - " + ", ".join(p.name for p in live_paths)
+              if live_paths else ""),
            f"Allocation: {plan_path.name} '### Allocation' (read live)",
            "",
            "route x level - filled + staged / target",

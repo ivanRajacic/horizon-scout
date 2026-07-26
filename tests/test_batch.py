@@ -181,8 +181,61 @@ def test_gap_report_ignores_already_promoted_staged_records(tmp_path):
     drafts = tmp_path / "drafts"
     write_jsonl(drafts / "draft-bank-2026-07-24.jsonl", [SQL_A])   # promoted
     text = gap_report(bank, drafts, plan_file(tmp_path))
-    assert "Staged (unpromoted): 0 record(s)" in text
+    assert "Staged (undecided): 0 record(s)" in text
     assert "| sql | 1+0/7 |" in text
+
+
+def _report(drafts, name, decisions):
+    """A minimal review report in the exact format promote-drafts parses."""
+    drafts.mkdir(parents=True, exist_ok=True)
+    body = ["Draft-bank-file: eval/drafts/draft-bank-2026-07-24.jsonl", ""]
+    for qid, approve in decisions.items():
+        box = ("[x] APPROVE  [ ] REJECT" if approve
+               else "[ ] APPROVE  [x] REJECT")
+        body += [f"## {qid} - ACCEPTED", "", f"Decision: {box}", ""]
+    path = drafts / name
+    path.write_text("\n".join(body), encoding="utf-8")
+    return path
+
+
+def test_gap_report_ignores_rejected_staged_records(tmp_path):
+    # A REJECTED record also stays in its draft file. Counting it as staged
+    # would tell the next batch a cell is covered that it still has to fill.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{**HYB_A, "question_id": "hyb-09"}])
+    _report(drafts, "draft-report-2026-07-24.md", {"hyb-09": False})
+    text = gap_report(bank, drafts, plan_file(tmp_path))
+    assert "Staged (undecided): 0 record(s)" in text
+    assert "0+0/6" in text                     # hybrid L1 still unfilled
+    # but the id stays taken, so the counter never reuses it
+    assert next_ids({"hybrid": 1}, bank, drafts)["hybrid"] == ["hyb-10"]
+
+
+def test_gap_report_still_counts_an_approved_but_unpromoted_record(tmp_path):
+    # Ticked APPROVE but promote-drafts not yet run: genuinely pending.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{**HYB_A, "question_id": "hyb-09"}])
+    _report(drafts, "draft-report-2026-07-24.md", {"hyb-09": True})
+    assert "Staged (undecided): 1 record(s)" in gap_report(
+        bank, drafts, plan_file(tmp_path))
+
+
+def test_gap_report_treats_an_unticked_report_as_undecided(tmp_path):
+    # A report mid-review has empty boxes; that must not crash and must not
+    # be read as a rejection.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{**HYB_A, "question_id": "hyb-09"}])
+    (drafts / "draft-report-2026-07-24.md").write_text(
+        "## hyb-09 - ACCEPTED\n\nDecision: [ ] APPROVE  [ ] REJECT\n",
+        encoding="utf-8")
+    assert "Staged (undecided): 1 record(s)" in gap_report(
+        bank, drafts, plan_file(tmp_path))
 
 
 def test_gap_report_refuses_a_half_parsed_bank(tmp_path):
