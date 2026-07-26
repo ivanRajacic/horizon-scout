@@ -1316,6 +1316,15 @@ class Telemetry:
     run_sql: int
     project_text_calls: int
     projects_read: int
+    seconds: float | None = None
+    mcp_ms: int = 0
+
+    def _duration(self) -> str:
+        if self.seconds is None:
+            return ""
+        wall = (f"{self.seconds / 60:.0f}m" if self.seconds >= 60
+                else f"{self.seconds:.0f}s")
+        return f"{wall} wall ({self.mcp_ms / 1000:.0f}s in MCP calls), "
 
     def line(self, version: str, date: str, scope: str,
              maps: int, candidates: int, findings: int,
@@ -1327,11 +1336,11 @@ class Telemetry:
             f"+{n} {label}" for n, label in
             ((maps, "map entries"), (candidates, "candidates"),
              (findings, "structural findings")) if n)
-        return (f"- {version} ({date}) scope `\"{scope}\"`: {self.subagents} "
-                f"subagents, {self.run_sql} `run_sql`, {self.projects_read} "
-                f"projects read across {self.project_text_calls} "
-                f"`get_project_text` calls; {added or 'nothing added'}; "
-                f"frontier {counters}.")
+        return (f"- {version} ({date}) scope `\"{scope}\"`: {self._duration()}"
+                f"{self.subagents} subagents, {self.run_sql} `run_sql`, "
+                f"{self.projects_read} projects read across "
+                f"{self.project_text_calls} `get_project_text` calls; "
+                f"{added or 'nothing added'}; frontier {counters}.")
 
 
 def telemetry_since(started: str | None, subagents: int,
@@ -1342,7 +1351,8 @@ def telemetry_since(started: str | None, subagents: int,
     drafting audit had to reconstruct spend as "~70% of a 5-hour window"
     because nobody was counting.
     """
-    run_sql = calls = projects = 0
+    run_sql = calls = projects = mcp_ms = 0
+    last: str | None = None
     if log_path.is_file():
         for raw in log_path.read_text(encoding="utf-8").splitlines():
             if not raw.strip():
@@ -1351,15 +1361,29 @@ def telemetry_since(started: str | None, subagents: int,
                 entry = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if started and str(entry.get("ts", "")) < started:
+            stamp = str(entry.get("ts", ""))
+            if started and stamp < started:
                 continue
+            last = stamp
+            mcp_ms += int(entry.get("ms") or 0)
             if entry.get("tool") == "run_sql":
                 run_sql += 1
             elif entry.get("tool") == "get_project_text":
                 calls += 1
                 # `found` is what the server logs (mcp_server.get_project_text).
                 projects += int(entry.get("found") or 0)
-    return Telemetry(subagents, run_sql, calls, projects)
+    # Wall clock spans the run header's `started` to the last logged call. It
+    # is what the next estimate gets built on, so it is recorded rather than
+    # remembered - cp1/cp2 had a duration slot and never filled it.
+    seconds = None
+    if started and last:
+        try:
+            seconds = max(0.0, (datetime.datetime.fromisoformat(last)
+                                - datetime.datetime.fromisoformat(started)
+                                ).total_seconds())
+        except ValueError:
+            seconds = None
+    return Telemetry(subagents, run_sql, calls, projects, seconds, mcp_ms)
 
 
 @dataclass

@@ -228,11 +228,19 @@ Do not read the payload for quality. You have no judgement to add that `verify-e
 
    Insertion only: new map entries, structural findings and candidates go in before the next H2 with their assigned ids, stub lines are replaced, the frontier table and counter line are recomputed, `CORPUS_PROFILE_VERSION` is bumped, and the telemetry line is appended to the Header's run log with `run_sql` / `get_project_text` counts computed from `data/logs/draft_mcp.jsonl` over this run's window. Pass `--dry-run` first if you want to see the result before it lands. Append the critic's `## Coverage notes` prose afterwards, as the one piece of writing a model still does.
 
-4. Run `./.venv/Scripts/python.exe -m pytest tests/test_explore.py tests/test_mcp_server.py -q`.
+4. **Trace what the run cost:**
+
+   ```bash
+   ./.venv/Scripts/python.exe -m src.cli agent-trace --orchestrator
+   ```
+
+   Per agent: turns, wall clock, output tokens, input tokens with the cache share, and tool calls - read from each subagent's own transcript, so concurrent agents are never confused with each other. Paste the table into the review summary. This is how the next run's estimate stops being a guess.
+
+5. Run `./.venv/Scripts/python.exe -m pytest tests/test_explore.py tests/test_mcp_server.py -q`.
 
 ### 5. Review gate
 
-Present a summary to the user and wait: the scope this run used, which buckets moved and which are still `unexplored`, per-section candidate counts vs targets, the frontier counter, the crosscheck flags, what the completeness critic said is missing, any slice that failed verification or needed a re-spawn, any section that needed a top-up, and the telemetry line. The user reviews the artifact once; revision instructions loop back through subagents (any revised payload goes through the journal and `verify-evidence` like any other - never hand-edit the profile). Revisions within this review session do not re-bump the version.
+Present a summary to the user and wait: the scope this run used, which buckets moved and which are still `unexplored`, per-section candidate counts vs targets, the frontier counter, the crosscheck flags, what the completeness critic said is missing, any slice that failed verification or needed a re-spawn, any section that needed a top-up, the telemetry line, and the `agent-trace` table. The user reviews the artifact once; revision instructions loop back through subagents (any revised payload goes through the journal and `verify-evidence` like any other - never hand-edit the profile). Revisions within this review session do not re-bump the version.
 
 ## Standing rules
 

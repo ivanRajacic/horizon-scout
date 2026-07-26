@@ -50,6 +50,7 @@ Run: python -m src.eval.mcp_server   (stdio transport; wired in .mcp.json)
 
 import datetime
 import decimal
+import functools
 import json
 import os
 import threading
@@ -127,8 +128,30 @@ class ServerConfig:
 cfg = ServerConfig.from_env()
 
 
+# Set by @traced on entry to every tool, read by _log on the way out, so each
+# logged call carries how long it took without every tool having to time
+# itself at each of its several exit points. Safe as a module global: the
+# stdio server handles one call at a time over a single DuckDB connection.
+_call_start: float | None = None
+
+
+def traced(fn):
+    """Stamp a tool's start time so its log line can carry `ms`."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        global _call_start
+        _call_start = time.perf_counter()
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _call_start = None
+    return wrapper
+
+
 def _log(tool: str, **fields) -> None:
     entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "tool": tool, **fields}
+    if _call_start is not None:
+        entry["ms"] = round((time.perf_counter() - _call_start) * 1000)
     cfg.log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cfg.log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -161,6 +184,7 @@ def _execute(con: duckdb.DuckDBPyConnection, sql: str,
         timer.cancel()
 
 
+@traced
 def run_sql(query: str, row_cap: int = ROW_CAP_DEFAULT) -> dict:
     """Execute a single read-only SELECT against the CORDIS DuckDB.
 
@@ -213,6 +237,7 @@ def run_sql(query: str, row_cap: int = ROW_CAP_DEFAULT) -> dict:
     return result
 
 
+@traced
 def get_schema_docs() -> dict:
     """Return schema_docs.md verbatim plus its version label and content
     hash, so drafted questions can record what they were authored against."""
@@ -224,6 +249,7 @@ def get_schema_docs() -> dict:
             "content_hash": content_hash}
 
 
+@traced
 def get_bank_questions(route: str) -> dict:
     """List existing bank questions for one route - id, text, level, subtype
     only (enough for near-duplicate avoidance, nothing that tempts copying
@@ -255,6 +281,7 @@ def get_bank_questions(route: str) -> dict:
     return {"route": route, "questions": questions}
 
 
+@traced
 def get_corpus_profile(section: str | None = None) -> dict:
     """Return corpus_profile.md - whole file, or one H2 section by key
     (kebab-cased heading, e.g. "vector", "coverage-ledger"). The version
@@ -336,6 +363,7 @@ def _first_k_projects(hits, k: int) -> list:
     return out
 
 
+@traced
 def search_corpus(query: str, condition: str = "pooled",
                   k: int = SEARCH_K_DEFAULT,
                   scope_project_ids: list[int] | None = None) -> dict:
@@ -445,6 +473,7 @@ def _waterfill_cap(lengths: list[int], budget: int) -> int:
     return lo
 
 
+@traced
 def get_project_text(project_ids: list[int],
                      fields: list[str] | None = None,
                      max_chars: int | None = None) -> dict:
@@ -613,6 +642,7 @@ def _id_column(columns: list[str]) -> int:
     return 0
 
 
+@traced
 def precheck_record(record: dict | str) -> dict:
     """Re-execute a drafted bank record's factual claims. Read-only.
 
@@ -856,6 +886,7 @@ def precheck_record(record: dict | str) -> dict:
     return result
 
 
+@traced
 def precheck_candidate(candidate: dict | str,
                        bucket: str | None = None) -> dict:
     """Re-execute one exploration candidate's claims. Read-only.

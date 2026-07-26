@@ -667,6 +667,25 @@ def cmd_write_profile(args):
               "CORPUS_PROFILE_VERSION left alone)")
 
 
+def cmd_agent_trace(args):
+    """What each agent in a run cost - time and tokens, per agent."""
+    from src.eval.trace import (orchestrator_trace, render_traces,
+                                session_dirs, trace_session)
+
+    sessions = session_dirs()
+    if args.session:
+        sessions = [s for s in sessions if s.name.startswith(args.session)]
+    if not sessions:
+        print("No session with subagent transcripts found under "
+              "~/.claude/projects/. Nothing to trace.")
+        return
+    session = sessions[0]
+    print(f"Session {session.name}\n")
+    print(render_traces(trace_session(session, since=args.since),
+                        orchestrator_trace(session) if args.orchestrator
+                        else None))
+
+
 def cmd_promote_drafts(args):
     """Append the APPROVE-ticked questions of a /draft-batch report to the
     bank. Deterministic: parses the report's decision boxes, validates the
@@ -897,6 +916,19 @@ def main():
     wp.add_argument("--dry-run", action="store_true",
                     help="render and report, write nothing")
     wp.set_defaults(fn=cmd_write_profile)
+
+    at = sub.add_parser("agent-trace",
+                        help="per-agent time and token spend for a run, from "
+                             "the subagent transcripts")
+    at.add_argument("--session", default=None,
+                    help="session id prefix; default: the most recent session "
+                         "that spawned subagents")
+    at.add_argument("--since", default=None,
+                    help="ISO timestamp; keep only agents that ended after "
+                         "it, to separate one run from an earlier one")
+    at.add_argument("--orchestrator", action="store_true",
+                    help="include the parent session's own spend as a row")
+    at.set_defaults(fn=cmd_agent_trace)
 
     pd = sub.add_parser("promote-drafts",
                         help="append APPROVE-ticked /draft-batch drafts "

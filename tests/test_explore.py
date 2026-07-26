@@ -669,6 +669,32 @@ def test_write_appends_telemetry_counted_from_the_mcp_log(corpus):
     assert "- cp3 (2026-07-24)" in text   # the earlier run log survives
 
 
+def test_telemetry_records_the_run_duration(corpus):
+    """cp1/cp2 had a duration slot and never filled it, so every estimate
+    since has been a guess. The run header's `started` to the last logged
+    call, plus the time actually spent inside MCP calls."""
+    write(corpus, a_slice())
+    line = next(ln for ln in
+                corpus["profile"].read_text(encoding="utf-8").splitlines()
+                if ln.startswith("- cp4 ("))
+    # header started 09:00:00, last in-window call logged at 10:02:00
+    assert "62m wall" in line
+    assert "in MCP calls)" in line
+
+
+def test_telemetry_sums_per_call_ms_when_the_log_has_it(corpus):
+    corpus["log"].write_text(
+        json.dumps({"ts": "2026-07-25T10:00:00", "tool": "run_sql",
+                    "ms": 1500}) + "\n"
+        + json.dumps({"ts": "2026-07-25T10:00:30", "tool": "run_sql",
+                      "ms": 500}) + "\n", encoding="utf-8")
+    write(corpus, a_slice())
+    line = next(ln for ln in
+                corpus["profile"].read_text(encoding="utf-8").splitlines()
+                if ln.startswith("- cp4 ("))
+    assert "(2s in MCP calls)" in line
+
+
 def test_write_bumps_both_version_labels(canonical):
     result = write(canonical, a_slice())
     assert result.version_bumped
