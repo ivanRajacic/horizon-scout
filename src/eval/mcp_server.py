@@ -897,13 +897,23 @@ def precheck_candidate(candidate: dict | str,
 
       EVIDENCE     every evidence.sql executes, is non-empty (unless
                    expect_empty), and every number in key_result reproduces
-      LEVEL        satisfying_count agrees with the recommended level
-                   (level is DEFINED by the count, so they cannot disagree)
+      ONE-READING  each euroSciVoc term the evidence scopes on is a leaf
+                   (one executable reading). A branch term WARNs with its
+                   sibling paths attached - usable only if the question
+                   names the subtree explicitly. WARN never gates.
+      COUNT        satisfying_count / survivor_count reproduce from this
+                   payload's own evidence rows
+      LEVEL        topic_filter runs corpus-wide and the level is DERIVED
+                   from that count. The explorer works one bucket at a time,
+                   so its own counts are fenced by the bucket and the question
+                   never is - a recommended level that disagrees with the
+                   unfenced count fails here
       WINDOW       survivor_count is inside the recommended hybrid subtype's
                    drafting window and under the 200 enumerability ceiling
       SLICE        the candidate's bucket is the one this slice was assigned
-      MAP-*        map entries only: `read:` ids exist, carry text, belong to
-                   the bucket, and the prose is not the taxonomy label back
+      MAP-*        map entries only: `read:` ids exist, carry text and belong
+                   to the bucket, `read_first:` names members read before any
+                   topic probe, and the prose is not the taxonomy label back
 
     Pass a candidate block or a map entry; `bucket` is the slice's assigned
     bucket, which turns SLICE and the map checks on. A failing check is a

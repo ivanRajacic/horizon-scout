@@ -208,6 +208,7 @@ def a_slice(**overrides):
             "texture": "Report text present for both; the tag words do not "
                        "appear in the objectives.",
             "read": [1, 2],
+            "read_first": [1, 2],
             "good_for": "vector L2 comparison",
             "thin_for": "SQL, no distinctive column",
             "evidence": {
@@ -221,8 +222,11 @@ def a_slice(**overrides):
             "recommend": "route=vector level=L2 subtype=comparison",
             "bucket": "natural sciences / biological sciences",
             "satisfying_count": 2,
+            "topic_filter": "p.objective ILIKE '%fungi%' "
+                            "OR p.objective ILIKE '%genome%'",
             "evidence": [{
-                "sql": "SELECT COUNT(*) AS n FROM project WHERE id IN (1, 2)",
+                "sql": "SELECT COUNT(*) AS n FROM project WHERE "
+                       "objective ILIKE '%fungi%' OR objective ILIKE '%genome%'",
                 "key_result": "2 projects"}],
             "axes": "branch=biological-sciences satisfying=2",
             "why": "Two members, distinct methods, same habitat."}],
@@ -424,6 +428,8 @@ def test_an_empty_result_fails_unless_the_absence_is_the_claim(corpus):
     declared["candidates"][0]["evidence"] = [{
         "sql": "SELECT id FROM project WHERE acronym = 'NOPE'",
         "key_result": "0 rows", "expect_empty": True}]
+    # An absence has no satisfying set to count or to derive a level from.
+    declared["candidates"][0].pop("satisfying_count")
     assert failures(checks_for(corpus, declared)) == []
 
 
@@ -453,13 +459,44 @@ def test_evidence_is_mandatory(corpus):
     assert "no evidence recorded" in failures(checks_for(corpus, bare))[0][1]
 
 
-def test_a_level_that_contradicts_its_own_count_fails(corpus):
-    """Level is DEFINED by |satisfying|, so the two cannot disagree."""
+def test_the_level_comes_from_the_count_taken_without_the_bucket(corpus):
+    """cp4's defect: the explorer counts inside its own bucket, the question
+    it becomes carries no bucket filter, so the level is derived from the
+    unfenced count and a recommended level that disagrees is refused."""
     mislabelled = a_slice()
-    mislabelled["candidates"][0]["satisfying_count"] = 1     # L1 territory
+    # Matches 5 of the 6 projects corpus-wide - L3 - while the candidate
+    # still claims the L2 its in-bucket count suggested.
+    mislabelled["candidates"][0]["topic_filter"] = "p.objective IS NOT NULL"
     named, detail = next(f for f in failures(checks_for(corpus, mislabelled))
                          if f[0].startswith("LEVEL"))
-    assert "L2" in detail and "satisfying_count=1" in detail
+    assert "L2" in detail and "L3" in detail and "corpus-wide" in detail
+
+
+def test_a_level_that_agrees_with_the_unfenced_count_passes(corpus):
+    checks = checks_for(corpus, a_slice())
+    detail = next(c.detail for c in checks if c.name.startswith("LEVEL"))
+    assert failures(checks) == []
+    assert "L2 from 2 project(s) corpus-wide" in detail
+
+
+def test_a_candidate_with_no_topic_filter_warns_that_its_level_is_a_guess(corpus):
+    """Old candidates still render, but nobody is told their level is sound."""
+    legacy = a_slice()
+    legacy["candidates"][0].pop("topic_filter")
+    checks = checks_for(corpus, legacy)
+    level = next(c for c in checks if c.name.startswith("LEVEL"))
+    assert failures(checks) == []
+    assert level.status == "WARN" and "inside the bucket" in level.detail
+
+
+def test_a_satisfying_count_from_no_query_fails(corpus):
+    """It no longer decides the level, so it is exactly the number that would
+    drift unnoticed."""
+    invented = a_slice()
+    invented["candidates"][0]["satisfying_count"] = 7
+    named, detail = next(f for f in failures(checks_for(corpus, invented))
+                         if f[0].startswith("COUNT"))
+    assert "satisfying_count=7" in detail
 
 
 def test_a_survivor_count_outside_the_subtype_window_fails(corpus):
@@ -532,6 +569,40 @@ def test_a_map_entry_cannot_describe_a_region_it_did_not_read(corpus):
     detail = next(f for f in failures(checks_for(corpus, strayed))
                   if f[0] == "MAP-MEMBER")[1]
     assert "not in bucket" in detail
+
+
+def test_a_map_entry_must_read_members_before_it_probes_for_topics(corpus):
+    """cp4's real defect: 16 of the 17 projects the explorers read were
+    members of a candidate's own result set, so `about:` described the seeds
+    rather than the bucket - and the map is append-only, so it stays wrong."""
+    unprompted = a_slice()
+    unprompted["map_entry"].pop("read_first")
+    detail = next(f for f in failures(checks_for(corpus, unprompted))
+                  if f[0] == "MAP-FIRST")[1]
+    assert "BEFORE any topic probe" in detail
+
+    inconsistent = a_slice()
+    inconsistent["map_entry"]["read_first"] = [1, 5]     # 5 is not in `read:`
+    detail = next(f for f in failures(checks_for(corpus, inconsistent))
+                  if f[0] == "MAP-FIRST")[1]
+    assert "[5]" in detail
+
+
+def test_reads_that_all_land_inside_the_candidates_warn_but_never_gate(corpus):
+    huddled = a_slice()
+    huddled["candidates"][0]["evidence"] = [{
+        "sql": "SELECT COUNT(*) AS n FROM project WHERE id IN (1, 2)",
+        "key_result": "2 projects"}]
+    checks = checks_for(corpus, huddled)
+    check = next(c for c in checks if c.name == "MAP-INDEPENDENT")
+    assert check.status == "WARN" and "describing the seeds" in check.detail
+    assert [f for f in failures(checks) if f[0] == "MAP-INDEPENDENT"] == []
+
+
+def test_a_read_from_outside_the_candidates_passes_independence(corpus):
+    check = next(c for c in checks_for(corpus, a_slice())
+                 if c.name == "MAP-INDEPENDENT")
+    assert check.status == "PASS" and "[1]" in check.detail
 
 
 def test_a_map_entry_that_paraphrases_its_own_tag_fails(corpus):
@@ -634,6 +705,48 @@ def test_write_inserts_and_numbers_from_the_highest_existing_id(corpus):
     assert "- region: m02" in text
     assert "- id: vector-02" in text
     assert "mapped: cp4" in text
+
+
+def test_write_sets_the_level_from_the_unfenced_count_and_shows_both(corpus):
+    """A drafter reading the seed has to know which number carries a bucket
+    filter and which does not, so the block states both and says which one
+    the level came from."""
+    write(corpus, a_slice())
+    block = next(b for b in corpus["profile"].read_text(encoding="utf-8")
+                 .split("- id: ") if b.startswith("vector-02"))
+    assert "recommend: route=vector level=L2 subtype=comparison" in block
+    assert "counts: 2 corpus-wide, 2 inside the bucket" in block
+    assert "the question carries no bucket filter" in block
+
+
+def test_write_overrides_a_level_the_explorer_guessed_wrong(corpus):
+    guessed = a_slice()
+    guessed["candidates"][0]["recommend"] = "route=vector level=L3 subtype=x"
+    write(corpus, guessed)
+    text = corpus["profile"].read_text(encoding="utf-8")
+    assert "recommend: route=vector level=L2 subtype=x" in text
+
+
+def test_write_renders_the_pre_probe_reads(corpus):
+    write(corpus, a_slice())
+    assert "read first: 1, 2" in corpus["profile"].read_text(encoding="utf-8")
+
+
+def test_write_refuses_a_topic_filter_it_cannot_run(corpus):
+    broken = a_slice()
+    broken["candidates"][0]["topic_filter"] = "objective ILIKE (("
+    with pytest.raises(ExploreError, match="topic_filter"):
+        write(corpus, broken)
+
+
+def test_write_leaves_a_candidate_with_no_topic_filter_alone(corpus):
+    """Old journals still render - they just carry the level they guessed."""
+    legacy = a_slice()
+    legacy["candidates"][0].pop("topic_filter")
+    write(corpus, legacy)
+    text = corpus["profile"].read_text(encoding="utf-8")
+    assert "recommend: route=vector level=L2 subtype=comparison" in text
+    assert "counts:" not in text.split("- id: vector-02")[1].split("- id:")[0]
 
 
 def test_write_preserves_every_byte_an_earlier_run_wrote(corpus):

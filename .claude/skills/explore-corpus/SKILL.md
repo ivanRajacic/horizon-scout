@@ -28,7 +28,7 @@ Anything not named is SKIPPED - no subagent is spawned for it. **Restate the par
 - **Read-only exploration.** All data access through the `horizon-draft` MCP tools; every call is traced automatically. The only file YOU write is the run journal (`eval/exploration/journal-<date>.jsonl`); `write-profile` writes `src/retrieval/corpus_profile.md` and the `CORPUS_PROFILE_VERSION` bump in `src/config.py`. Never touch the bank, schema_docs, or anything frozen.
 - **No unqueried claims.** Every number, distribution, trap pair, cluster size, survivor count and absence carries typed evidence - `{"sql": ..., "key_result": ...}` - and `verify-evidence` re-executes ALL of it. A claim without its query does not reach the file, and a number that does not reproduce fails its slice.
 - **Append, never rewrite.** A later run fills stubs, adds map entries, appends candidates and updates frontier rows. It never renumbers, edits or drops what an earlier version recorded - drafting sessions may already have consumed it. The writer enforces this by construction: it inserts before the next H2 and re-emits nothing it did not touch.
-- **Candidates are advisory.** Recommended route/level/subtype are the exploration agent's judgment calls to speed drafting; the drafting skills recompute levels from evidence and remain the authority. Nothing here pre-commits a bank entry.
+- **Candidates are advisory.** Recommended route and subtype are the exploration agent's judgment calls to speed drafting; the drafting skills recompute everything from their own evidence and remain the authority. Nothing here pre-commits a bank entry. The **level is not a judgment call** - it is arithmetic on a count, so a deterministic node derives it from the candidate's `topic_filter` and the subagent never writes one.
 - **No retrieval-stack dependency.** Exploration uses SQL and project text only. `search_corpus` verification belongs to the drafting skills; this skill must run fine with the llama servers down.
 
 ## The frontier - how coverage is counted
@@ -69,12 +69,15 @@ Ends with the counter line: `mapped <n>/46 · mined <n>/46`.
   about: <2-3 sentences on what work actually lives here, written from text you READ>
   texture: <report_text coverage; whether taxonomy labels are echoed verbatim in member text or paraphrased; how noisy the tags are; anything that changes how a question must be written>
   read: <the project ids the `about:` was written from - at least 2>
+  read first: <the subset read BEFORE any topic probe - at least 2>
   good for: <which question kinds this region supports - route/level/subtype - and WHY>
   thin for: <what this region cannot support, and why>
   mapped: <cpN>
 ```
 
 `read:` is what turns "written from text, not from the tag" into a check instead of an honour rule: `verify-evidence` confirms those ids exist, carry text and sit in the bucket, and flags an `about:` that is mostly the bucket label back. The region id and `mapped:` are assigned by the writer - a subagent never numbers its own entry.
+
+`read first:` (added cp5) closes the gap that check left open. cp4 passed every `read:` check and the descriptions were still wrong: the explorers searched for a term, read the projects that matched, and described the whole bucket from them - 16 of 17 reads were members of a candidate's own result set. An `about:` written that way describes the seeds, not the region, and because the map is append-only and a mapped bucket is never revisited, it stays wrong. So the first reads happen before any topic probe, picked by something topic-blind (largest contribution, oldest/newest start, one per large third-level node), and `verify-evidence` checks both that `read_first` is populated (`MAP-FIRST`, FAIL) and that some of it landed outside the slice's candidates (`MAP-INDEPENDENT`, WARN - a pre-probe read that turns up in a candidate is a coincidence worth allowing, all of them doing so is cp4 again).
 
 `about` / `good for` / `thin for` are the payload the drafting skills consume. `texture` must come from read text, never from the tag alone: cp1 established that euroSciVoc leaf labels lie on interdisciplinary and MSCA projects (`ethnomycology` tagged an aquatic-fungi ecology project; `sustainable architecture` tagged a district-heating project). A map entry that just paraphrases the taxonomy label is worthless.
 
@@ -94,13 +97,16 @@ Ends with the counter line: `mapped <n>/46 · mined <n>/46`.
 - id: <section>-NN
   topic: <one line - what the question would be about>
   recommend: route=<sql|vector|hybrid|ambiguous> level=<L1|L2|L3|ADV> subtype=<drafting-skill vocabulary>
+  counts: <N corpus-wide, M inside the bucket>
   bucket: <the frontier bucket this came from, or "-" for structural>
   evidence: <the executed SQL> -> <the key numbers/rows it returned>
   axes: <axis=value pairs, e.g. country=IT scheme=EIC dates=2019-2021>
   why: <one sentence - what makes this a good seed>
 ```
 
-In the journal this is typed: `evidence` is a list of `{"sql": ..., "key_result": ...}` (add `"expect_empty": true` when the absence IS the claim), and topical candidates carry `satisfying_count`, hybrid combos `survivor_count`. Those two numbers are what let `verify-evidence` catch a level that contradicts its own count or a survivor set outside the subtype's drafting window - the birth-failures a drafter used to discover the expensive way. The writer renders the block above from the typed form and assigns the id.
+In the journal this is typed: `evidence` is a list of `{"sql": ..., "key_result": ...}` (add `"expect_empty": true` when the absence IS the claim), and topical candidates carry `satisfying_count`, hybrid combos `survivor_count`. Each must reproduce from that candidate's own evidence rows (`COUNT`), and `survivor_count` must sit inside the subtype's drafting window (`WINDOW`) - the hyb-02 birth-failure a drafter used to discover the expensive way. The writer renders the block above from the typed form and assigns the id.
+
+**The level is derived, not recommended (cp5).** A subagent explores one bucket, so every count it takes is fenced by that bucket's predicate; the question the seed becomes carries no such fence. cp4 counted `loneliness` at 3 in sociology when the corpus has 8, and 7 of its 18 seeds landed in the wrong cell for exactly this reason. So a topical candidate hands back `topic_filter` - its topic condition ALONE, over `project` aliased `p`, with no euroSciVoc join and no bucket predicate - and `verify-evidence` runs it corpus-wide and derives the level. The subagent writes no `level=`; `write-batch`'s sibling `write-profile` sets it and renders both counts in `counts:` so a drafter can see which number is fenced. A candidate whose `recommend` still names a level that disagrees with the derived one FAILs (`LEVEL`), and one whose `topic_filter` will not execute is refused at write time rather than written with an underivable level.
 
 Adversarial candidates add `claim:` (the precise absence or false premise) and `near-miss:` (the synonym / adjacent-column / loosened-range variants checked, each with its count - a zero-match candidate without checked near-misses is not query-verified). Ambiguous candidates carry no subtype; they use `routes=<two-or-three of sql|vector|hybrid, joined with +>` and add a `readings:` line, one clause per route stating how that route would parse the question.
 
@@ -165,7 +171,9 @@ Adversarial candidates add `claim:` (the precise absence or false premise) and `
 
 Slices come from `frontier-report`'s partition, never from your own re-derivation:
 
-- **Topical work** (`map=N`, vector, hybrid, ambiguous): take `unexplored` buckets, largest-first unless the scope says otherwise, and give each subagent **2-3 buckets**. It returns a map entry per bucket plus ~3 candidates per bucket for the requested route(s).
+- **Topical work** (`map=N`, vector, hybrid, ambiguous): take `unexplored` buckets, largest-first unless the scope says otherwise, and give each subagent **2-3 buckets**. It returns a map entry per bucket plus **~5 candidates per bucket** for the requested route(s).
+
+  Five is flat, not scaled by bucket size, and that is deliberate. A run is not trying to drain a bucket - it takes what a visit yields and the NEXT run reads the frontier, sees which buckets have the fewest seeds, and goes back into those. Breadth first: every bucket visited once beats one big bucket mined out, because a bucket nobody has entered is the only thing a later run cannot recover from cheaply. (cp4 used 3 and that was slightly thin; the bank needs ~400 seeds against 46 buckets, so 5 a visit plus return visits gets there.)
 - **Structural work** (sql, adversarial): sub-batches of ~8 candidates over disjoint families - funding-money traps; role/grain; distinct-value inventories; date/status/scheme for SQL; zero-match filters; false-presuppositions; data-absent fields for Adversarial.
 - **Distributions** - statistical, no candidates and no width rule; one subagent (or two by metric group).
 
@@ -183,7 +191,7 @@ As each subagent returns - not at the end - do exactly this, then dispatch its r
    {"kind": "slice", "slice_id": "s01", "status": "RETURNED",
     "mode": "topical",
     "buckets": ["social sciences / sociology"],
-    "targets": {"map_entries": 1, "candidates": 3},
+    "targets": {"map_entries": 1, "candidates": 5},
     "map_entry": {"bucket": "...", "slice": "...", "size": "...",
                   "about": "...", "texture": "...", "read": [123456, 234567],
                   "good_for": "...", "thin_for": "..."},
@@ -257,7 +265,7 @@ Present a summary to the user and wait: the scope this run used, which buckets m
 ## Standing rules
 
 - **Autonomous until the review gate.** No mid-run confirmations; surface problems in the final summary.
-- **Bounded everything - never loop.** 2-3 buckets or ~8 candidates per subagent; max 4 in flight; each `corpus-explorer` has a turn budget (~12 `run_sql` + ~4 `get_project_text`), uses `fields` on project text and reads <= 3 ids per call; one re-spawn per failed slice; one top-up per section. A subagent that hits a bound returns partial with a `SHORT:` note - it never loops and never wanders outside its slice.
+- **Bounded everything - never loop.** 2-3 buckets or ~15 candidates per subagent; max 4 in flight; each `corpus-explorer` has a turn budget (~18 `run_sql` + ~5 `get_project_text`), uses `fields` on project text and reads <= 3 ids per call; one re-spawn per failed slice; one top-up per section. A subagent that hits a bound returns partial with a `SHORT:` note - it never loops and never wanders outside its slice.
 - **Every claim carries its query, and every query is re-run.** A number without SQL does not enter the profile, and a number that does not reproduce under `verify-evidence` does not either.
 - **The deterministic nodes are the authority on facts.** If your reading of a payload disagrees with `verify-evidence` or `explore-crosscheck`, they are right. You do not overrule them, and you do not re-derive what they computed.
 - **Knowledge accumulates.** Each run advances the frontier and adds to the map. Never re-derive what the profile already records; never rewrite what an earlier run wrote.

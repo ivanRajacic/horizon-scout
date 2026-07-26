@@ -176,10 +176,22 @@ recommendation is advice that saves it time, never a label it inherits.
 
 **What makes a seed worth a drafter's pass:**
 
-1. **The count already fits the cell.** Level is DEFINED by the count
-   (section 4), so a seed that recommends a level its own number contradicts is
-   mislabelled before it is written. Record the number:
-   `satisfying_count` for topical seeds, `survivor_count` for hybrid combos.
+1. **The count is taken without the fence, and you do not turn it into a
+   level.** Level is DEFINED by the count (section 4), which makes it
+   arithmetic - so a deterministic node does it and a seed carries no
+   `level=` at all. What a topical seed carries instead is `topic_filter`:
+   its topic condition ALONE, over `project` aliased `p`, with no euroSciVoc
+   join and no bucket predicate.
+
+   You explore one bucket at a time, so every count you take is fenced by
+   "...and the project is tagged sociology". The question your seed becomes
+   carries no such fence - nobody asks "which sociology-tagged project studies
+   loneliness". cp4 counted `loneliness` at 3 inside its bucket when the corpus
+   has 8, the other 5 being the same kind of project filed under health or
+   computing; 7 of that run's 18 seeds named the wrong cell for this one
+   reason. Record the fenced number too - `satisfying_count` for topical seeds,
+   `survivor_count` for hybrid combos, each reproducible from your own evidence
+   - as context for a drafter, not as a level.
 
    | | window |
    |---|---|
@@ -190,11 +202,23 @@ recommendation is advice that saves it time, never a label it inherits.
    | hybrid `filter-survey` | 5-60 survivors |
    | any hybrid | hard ceiling 200 - a survivor set that cannot be enumerated cannot be gold |
 
-2. **The theme is in the text, not just in the tag.** euroSciVoc leaf labels
-   lie on interdisciplinary and MSCA projects (`ethnomycology` on an
-   aquatic-fungi ecology project; `sustainable architecture` on district
-   heating). Read two or more members before proposing a seed that depends on
-   what they are about, and record which ids you read.
+2. **The theme is in the text, not just in the tag - and the map is written
+   before the search.** euroSciVoc leaf labels lie on interdisciplinary and
+   MSCA projects (`ethnomycology` on an aquatic-fungi ecology project;
+   `sustainable architecture` on district heating). Read two or more members
+   before proposing a seed that depends on what they are about, and record
+   which ids you read.
+
+   For a map entry the reading order matters as much as the reading. Your
+   first reads happen BEFORE any topic probe and are picked by something
+   topic-blind (largest contribution, oldest and newest start, one per large
+   third-level node); they go in `read_first:`. cp4 skipped this and passed
+   every check anyway: its explorers searched for a term, read what matched,
+   and described the whole bucket from those - 16 of 17 reads were members of
+   a candidate's own result set, so `about:` described the seeds and not the
+   region. A seed is disposable and a drafter recomputes it; the map is
+   append-only and a mapped bucket is never revisited, so a description
+   written backwards stays wrong.
 
 3. **A user could actually ask it.** The filter has to be expressible in a
    natural question. This is the `hyb-02` lesson: a musicology x MSCA-IF combo

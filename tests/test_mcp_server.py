@@ -605,6 +605,8 @@ def candidate(**overrides):
         "recommend": "route=vector level=L2 subtype=comparison",
         "bucket": BIO,
         "satisfying_count": 2,
+        "topic_filter": "p.objective ILIKE '%Alpha%' "
+                        "OR p.objective ILIKE '%Beta%'",
         "evidence": [{"sql": "SELECT COUNT(*) AS n FROM project WHERE id < 3",
                       "key_result": "2 projects"}],
         "axes": "branch=biological-sciences satisfying=2",
@@ -620,6 +622,7 @@ def map_entry(**overrides):
                  "field-collection work rather than theory.",
         "texture": "Report text present for one of the two.",
         "read": [1, 2],
+        "read_first": [1, 2],
         "evidence": {"sql": "SELECT COUNT(*) AS n FROM project WHERE id < 3",
                      "key_result": "2 projects"}}
     entry.update(overrides)
@@ -646,10 +649,22 @@ def test_precheck_candidate_catches_a_number_that_does_not_reproduce(server):
     assert "11" in status_detail(result, "EVIDENCE vector-07")
 
 
-def test_precheck_candidate_catches_a_level_that_contradicts_its_count(server):
-    result = precheck_candidate(candidate(satisfying_count=7))
+def test_precheck_candidate_derives_the_level_without_the_bucket_fence(server):
+    """The explorer counts inside its bucket; the question will not. So the
+    level comes from the topic_filter run over the whole corpus, and a
+    recommended level that disagrees with it is refused in the agent's own
+    loop rather than three nodes later."""
+    result = precheck_candidate(candidate(
+        topic_filter="p.acronym = 'ALPHA'"))       # 1 project -> L1, not L2
     assert result["failures"] == ["LEVEL vector-07"]
-    assert "L2" in status_detail(result, "LEVEL vector-07")
+    detail = status_detail(result, "LEVEL vector-07")
+    assert "L2" in detail and "L1" in detail and "corpus-wide" in detail
+
+
+def test_precheck_candidate_catches_an_unqueried_satisfying_count(server):
+    result = precheck_candidate(candidate(satisfying_count=7))
+    assert result["failures"] == ["COUNT vector-07"]
+    assert "satisfying_count=7" in status_detail(result, "COUNT vector-07")
 
 
 def test_precheck_candidate_catches_a_survivor_count_outside_its_window(server):

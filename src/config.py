@@ -149,7 +149,7 @@ DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 # seeds the other three nodes ever see, so it is held to the same definition of
 # good. `frontier-report` pastes that section into every explorer spawn prompt.
 BANK_BRIEF_PATH = ROOT / "src" / "eval" / "bank_brief.md"
-BANK_BRIEF_VERSION = "bb2"
+BANK_BRIEF_VERSION = "bb3"
 
 # corpus_profile.md is the exploration agent's output (working-plan d3):
 # a CUMULATIVE map of the database - what each explored region is about and

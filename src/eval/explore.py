@@ -80,6 +80,16 @@ TOPIC_TRIGRAM_FLAG = 0.45
 LABEL_ECHO_FLAG = 0.34
 MAP_READ_MINIMUM = 2        # project ids an `about:` must be written from
 
+# cp4's real defect, and a subtler one than the label echo: 16 of the 17
+# projects the explorers read were members of a candidate's own result set.
+# The explorer searched for a term, read what matched, and then described the
+# whole bucket from those - so `about:` described the seeds, not the region.
+# `read_first` is the fix stated as a contract: projects read BEFORE any topic
+# probe, chosen by a rule that has nothing to do with a topic. The map is
+# append-only and a mapped bucket is never revisited, so a wrong description
+# is permanent in a way a wrong seed label never is.
+MAP_READ_FIRST_MINIMUM = 2
+
 # Level is DEFINED by |satisfying projects| for the topical routes
 # (src/eval/bank.py). A candidate that recommends a level its own count
 # contradicts is mislabelled at birth.
@@ -732,7 +742,7 @@ def journal_candidates(journal: ExplorationJournal) -> list[tuple[str, dict]]:
 class Check:
     slice_id: str
     name: str
-    status: str          # PASS | FAIL | N/A
+    status: str          # PASS | FAIL | WARN | N/A  (WARN never gates)
     detail: str
 
 
@@ -866,7 +876,46 @@ def verify_evidence(journal: ExplorationJournal, con) -> list[Check]:
             checks += verify_payload(con, slice_id, label, payload, buckets)
         if isinstance(map_entry, dict):
             checks += verify_map_entry(con, slice_id, map_entry, buckets)
+            checks.append(_map_independence(
+                slice_id, map_entry, record.get("candidates") or []))
     return checks
+
+
+def _map_independence(slice_id: str, entry: dict,
+                      candidates: list) -> Check:
+    """Did ANY project the description was written from come from outside the
+    candidates?
+
+    The close-out half of MAP-FIRST, and the one that needs the whole slice:
+    `read_first` says the explorer read before probing, this says the reading
+    actually reached past its own hits. A pre-probe read that happens to land
+    in a candidate set is fine and even a good sign - the topic was worth
+    finding twice - so this WARNs and never gates. All of them landing there
+    is cp4's defect exactly, and that is worth saying out loud.
+    """
+    first_ids = _int_ids(entry.get("read_first"))
+    if not first_ids:
+        return Check(slice_id, "MAP-INDEPENDENT", "N/A",
+                     "no `read_first:` ids to check")
+    blob = " ".join(
+        f"{item.get('sql', '')} {item.get('key_result', '')}"
+        for candidate in candidates if isinstance(candidate, dict)
+        for item in _evidence_items(candidate))
+    if not blob.strip():
+        return Check(slice_id, "MAP-INDEPENDENT", "N/A",
+                     "no candidate evidence in this slice to compare against")
+    # Whole number tokens, not substrings: project 805 must not count as a
+    # sighting of project 5.
+    mentioned = set(_numbers_in(blob))
+    outside = [i for i in first_ids if str(i) not in mentioned]
+    if outside:
+        return Check(slice_id, "MAP-INDEPENDENT", "PASS",
+                     f"{len(outside)} of {len(first_ids)} pre-probe read(s) "
+                     f"sit outside every candidate's evidence: {outside}")
+    return Check(slice_id, "MAP-INDEPENDENT", "WARN",
+                 f"every pre-probe read {first_ids} also turns up in this "
+                 "slice's candidate evidence - `about:` may be describing the "
+                 "seeds rather than the bucket, which is what cp4 did")
 
 
 def verify_payload(con, slice_id: str, label: str, payload: dict,
@@ -883,6 +932,7 @@ def verify_payload(con, slice_id: str, label: str, payload: dict,
         return [Check(slice_id, f"EVIDENCE {label}", "FAIL",
                       "no evidence recorded - a claim without its query does "
                       "not go in the profile")]
+    seen_live: set[str] = set()
     for n, item in enumerate(items, 1):
         name = f"EVIDENCE {label}" + (f" #{n}" if len(items) > 1 else "")
         sql = item.get("sql")
@@ -914,6 +964,7 @@ def verify_payload(con, slice_id: str, label: str, payload: dict,
                                 "number is what makes the claim checkable"))
             continue
         live = _live_number_strings(rows)
+        seen_live |= live
         in_query = set(_numbers_in(sql))
         truncated = len(rows) >= VERIFY_ROW_CAP
         stale = [n_ for n_ in _numbers_in(key_result)
@@ -934,11 +985,164 @@ def verify_payload(con, slice_id: str, label: str, payload: dict,
                 f"re-executed, {len(rows)}{'+' if truncated else ''} row(s), "
                 "recorded numbers reproduce"))
 
-    checks += _verify_recommendation(slice_id, label, payload, buckets)
+    checks += _verify_count(slice_id, label, payload, seen_live)
+    checks += _verify_one_reading(con, slice_id, label, items)
+    checks += _verify_recommendation(con, slice_id, label, payload, buckets)
     return checks
 
 
-def _verify_recommendation(slice_id: str, label: str, payload: dict,
+def _verify_count(slice_id: str, label: str, payload: dict,
+                  live: set[str]) -> list[Check]:
+    """Does `satisfying_count` come from a query that was actually run?
+
+    Since the level is derived from `topic_filter` rather than from this
+    number, `satisfying_count` no longer decides anything - it is the
+    bucket-scoped figure a drafter reads for context. That makes it exactly
+    the sort of number that drifts unnoticed, so it is still held to the
+    house rule: every claim reproduces from its own evidence.
+    """
+    for key in ("satisfying_count", "survivor_count"):
+        value = payload.get(key)
+        if not isinstance(value, int) or isinstance(value, bool):
+            continue
+        if str(value) not in live:
+            return [Check(
+                slice_id, f"COUNT {label}", "FAIL",
+                f"{key}={value} appears in no evidence result for this "
+                f"payload (values seen: {sorted(live, key=len)[:8]}) - record "
+                "the query that produced it")]
+    return []
+
+
+# euroSciVoc predicates a one-reading check can recognise. Deliberately
+# narrow: a check that silently does nothing on an unrecognised shape is
+# fine; a check that guesses a term wrong is not.
+_ESV_TITLE_RE = re.compile(
+    r"euroSciVocTitle\s*(?:=|I?LIKE)\s*'([^']+)'", re.IGNORECASE)
+_ESV_PATH_RE = re.compile(
+    r"euroSciVocPath\s*(?:I?LIKE)\s*'([^']+)'", re.IGNORECASE)
+
+
+def _euroscivoc_terms(sql: str) -> list[str]:
+    """The taxonomy terms a piece of SQL scopes on, best-effort."""
+    terms = []
+    for match in _ESV_TITLE_RE.finditer(sql):
+        term = match.group(1).strip().strip("%").strip()
+        if term:
+            terms.append(term)
+    for match in _ESV_PATH_RE.finditer(sql):
+        # A path literal is '%/a/b/term%' (or a fragment of one); the term
+        # is its last path segment.
+        inner = match.group(1).strip().strip("%").rstrip("/")
+        segment = inner.rsplit("/", 1)[-1].strip()
+        if segment:
+            terms.append(segment)
+    return list(dict.fromkeys(terms))
+
+
+def _verify_one_reading(con, slice_id: str, label: str,
+                        items: list[dict]) -> list[Check]:
+    """Does each euroSciVoc term the evidence scopes on have ONE executable
+    reading?
+
+    One (path, title) row means a leaf: "classified under <term>" selects
+    the same set whether read as the title or as the subtree - safe.
+    Multiple rows mean a branch with children: the narrow (title) and wide
+    (subtree) readings diverge, and a question worded against the term is
+    ambiguous unless it names the branch explicitly. `musicology` is the
+    case that cost ~519k tokens downstream: 3 rows, all gold on sub-leaves,
+    and the narrow reading has zero gold. WARN, never FAIL - a branch term
+    is usable when the wording names the subtree; the explorer should be
+    told what it is proposing, not blocked.
+    """
+    checks: list[Check] = []
+    sqls = [item.get("sql") for item in items
+            if isinstance(item.get("sql"), str)]
+    touches_esv = any("euroscivoc" in sql.lower() for sql in sqls)
+    terms = [t for sql in sqls for t in _euroscivoc_terms(sql)]
+    terms = list(dict.fromkeys(terms))
+    if not terms:
+        if touches_esv:
+            checks.append(Check(
+                slice_id, f"ONE-READING {label}", "N/A",
+                "evidence touches euroscivoc but no title/path predicate "
+                "was recognisable - nothing to check"))
+        return checks
+    for term in terms:
+        name = (f"ONE-READING {label}"
+                + (f" '{term}'" if len(terms) > 1 else ""))
+        quoted = term.replace("'", "''")
+        rows, error = _execute(
+            con,
+            "SELECT DISTINCT euroSciVocPath, euroSciVocTitle, "
+            "COUNT(DISTINCT projectID) FROM euroscivoc "
+            f"WHERE euroSciVocPath LIKE '%{quoted}%' GROUP BY 1, 2")
+        if error is not None:
+            checks.append(Check(slice_id, name, "N/A",
+                                f"one-reading query failed: {error}"))
+        elif not rows:
+            checks.append(Check(
+                slice_id, name, "WARN",
+                f"'{term}' appears in no euroSciVocPath - the scope may "
+                "not mean what it says"))
+        elif len(rows) == 1:
+            checks.append(Check(
+                slice_id, name, "PASS",
+                f"'{term}' is a leaf ({rows[0][2]} project(s)) - the title "
+                "and subtree readings select the identical set"))
+        else:
+            siblings = ", ".join(f"{r[1]} ({r[2]})" for r in rows[:8])
+            more = f" +{len(rows) - 8} more" if len(rows) > 8 else ""
+            checks.append(Check(
+                slice_id, name, "WARN",
+                f"'{term}' is a branch with {len(rows)} (path, title) "
+                f"rows: {siblings}{more} - the title and subtree readings "
+                "diverge; a question scoped on it must name the branch "
+                "explicitly (\"classified anywhere under ... - X and Y "
+                "included\") or pick a leaf"))
+    return checks
+
+
+def level_for(count: int) -> str | None:
+    """The level a satisfying-set size defines. Arithmetic, not judgement."""
+    for name, (low, high) in LEVEL_WINDOWS.items():
+        if count >= low and (high is None or count <= high):
+            return name
+    return None
+
+
+def corpus_count(con, topic_filter: str) -> tuple[int | None, str | None]:
+    """How many projects match a candidate's topic with NO bucket restriction.
+
+    The explorer works one bucket at a time - that is how the frontier keeps
+    runs going somewhere new - so every count it takes carries "...and the
+    project is tagged sociology". The question the seed becomes carries no such
+    condition: "which projects work on loneliness in older people" says nothing
+    about sociology. cp4 counted loneliness at 3 in-bucket; the corpus has 8,
+    and the other 5 are the same kind of project filed under health or
+    computing. 7 of that run's 18 seeds were labelled with the wrong level
+    for exactly this reason.
+
+    So the candidate hands back its topic condition ALONE and the level is
+    derived here, from the count taken without the fence. Composed and guarded
+    rather than trusted: `validate_sql` is the same read-only single-SELECT
+    guard the runtime SQL path uses.
+    """
+    sql = ("SELECT count(DISTINCT p.id) AS n FROM project p "
+           f"WHERE ({topic_filter.strip().rstrip(';')})")
+    try:
+        validate_sql(sql)
+    except SqlGuardrailError as exc:
+        return None, f"topic_filter is not a safe read-only condition: {exc}"
+    rows, error = _execute(con, sql, fetch=1)
+    if error is not None:
+        return None, f"topic_filter did not execute: {error}"
+    if not rows:
+        return None, "topic_filter returned no count row"
+    return int(rows[0][0]), None
+
+
+def _verify_recommendation(con, slice_id: str, label: str, payload: dict,
                            buckets: list[str]) -> list[Check]:
     """Level-vs-count and survivor-window agreement, plus slice discipline.
 
@@ -956,19 +1160,59 @@ def _verify_recommendation(slice_id: str, label: str, payload: dict,
     route = next((m for m in re.findall(r"route=(\w+)", recommend)), None)
 
     satisfying = payload.get("satisfying_count")
-    if level in LEVEL_WINDOWS and isinstance(satisfying, int):
+    topic_filter = payload.get("topic_filter")
+    name = f"LEVEL {label}"
+
+    # An adversarial seed's whole claim can BE the empty set, so a filter that
+    # matches nothing is the point there and a defect everywhere else.
+    absence = (level == "ADV"
+               or any(i.get("expect_empty") for i in _evidence_items(payload)))
+
+    if isinstance(topic_filter, str) and topic_filter.strip():
+        wide, error = corpus_count(con, topic_filter)
+        if error is not None:
+            checks.append(Check(slice_id, name, "FAIL", error))
+        elif absence:
+            checks.append(Check(
+                slice_id, name, "N/A",
+                f"topic matches {wide} project(s) corpus-wide; this seed's "
+                "claim is an absence, so no level is derived from it"))
+        elif wide == 0:
+            checks.append(Check(
+                slice_id, name, "FAIL",
+                "topic_filter matches 0 projects corpus-wide - it does not "
+                "select the topic it claims to"))
+        else:
+            derived = level_for(wide)
+            scoped = (f", {satisfying} inside the bucket"
+                      if isinstance(satisfying, int) else "")
+            if level and level != derived:
+                checks.append(Check(
+                    slice_id, name, "FAIL",
+                    f"recommends {level} but the topic matches {wide} "
+                    f"project(s) corpus-wide{scoped}, which is {derived} - "
+                    "levels are derived here, not recommended; drop the "
+                    "level= from `recommend` and let the count decide"))
+            else:
+                checks.append(Check(
+                    slice_id, name, "PASS",
+                    f"{derived} from {wide} project(s) corpus-wide{scoped}"))
+    elif level in LEVEL_WINDOWS and isinstance(satisfying, int):
         low, high = LEVEL_WINDOWS[level]
         if satisfying < low or (high is not None and satisfying > high):
             window = f"{low}" if high == low else f"{low}-{high or 'inf'}"
             checks.append(Check(
-                slice_id, f"LEVEL {label}", "FAIL",
+                slice_id, name, "FAIL",
                 f"recommends {level} (|satisfying| {window}) but records "
                 f"satisfying_count={satisfying} - level is DEFINED by the "
                 "count, so one of the two is wrong"))
         else:
-            checks.append(Check(slice_id, f"LEVEL {label}", "PASS",
-                                f"{level} agrees with satisfying_count="
-                                f"{satisfying}"))
+            checks.append(Check(
+                slice_id, name, "WARN",
+                f"{level} agrees with satisfying_count={satisfying}, but that "
+                "count was taken inside the bucket and the question will not "
+                "be - no topic_filter to re-count without it, so this level "
+                "is a guess a drafter must redo"))
 
     survivors = payload.get("survivor_count")
     if route == "hybrid" and isinstance(survivors, int):
@@ -1002,6 +1246,11 @@ def _verify_recommendation(slice_id: str, label: str, payload: dict,
     return checks
 
 
+def _int_ids(raw) -> list[int]:
+    return [i for i in (raw or [])
+            if isinstance(i, int) and not isinstance(i, bool)]
+
+
 def verify_map_entry(con, slice_id: str, entry: dict,
                      buckets: list[str]) -> list[Check]:
     """The map's own failure mode: an entry written from the tag, not the text.
@@ -1009,11 +1258,32 @@ def verify_map_entry(con, slice_id: str, entry: dict,
     `read:` carries the project ids the `about:` was written from. They must
     exist, carry text, and sit in the bucket - and the prose must not simply be
     the taxonomy label back.
+
+    `read_first:` is the subset read BEFORE any topic probe, which is what
+    keeps `about:` a description of the bucket instead of a description of
+    whatever the explorer happened to search for.
     """
     checks: list[Check] = []
     label = str(entry.get("bucket") or (buckets[0] if buckets else "?"))
-    read_ids = [i for i in (entry.get("read") or [])
-                if isinstance(i, int) and not isinstance(i, bool)]
+    read_ids = _int_ids(entry.get("read"))
+    first_ids = _int_ids(entry.get("read_first"))
+
+    if len(first_ids) < MAP_READ_FIRST_MINIMUM:
+        checks.append(Check(
+            slice_id, "MAP-FIRST", "FAIL",
+            f"`read_first:` lists {len(first_ids)} project id(s); at least "
+            f"{MAP_READ_FIRST_MINIMUM} members must be read BEFORE any topic "
+            "probe, picked by a rule that has nothing to do with a topic, so "
+            "`about:` describes the bucket rather than the search results"))
+    elif not set(first_ids) <= set(read_ids):
+        checks.append(Check(
+            slice_id, "MAP-FIRST", "FAIL",
+            f"`read_first:` {sorted(set(first_ids) - set(read_ids))} is not "
+            "listed in `read:` - everything read before probing was still read"))
+    else:
+        checks.append(Check(
+            slice_id, "MAP-FIRST", "PASS",
+            f"{len(first_ids)} member(s) read before probing: {first_ids}"))
 
     if len(read_ids) < MAP_READ_MINIMUM:
         checks.append(Check(
@@ -1233,10 +1503,10 @@ def render_flags(flags: list[Flag]) -> str:
 # --------------------------------------------------------------------------
 
 MAP_FIELDS = ("bucket", "slice", "size", "about", "texture", "read",
-              "good for", "thin for")
+              "read first", "good for", "thin for")
 FINDING_FIELDS = ("kind", "claim", "evidence", "serves")
-CANDIDATE_FIELDS = ("topic", "recommend", "bucket", "evidence", "axes",
-                    "claim", "near-miss", "routes", "readings", "why")
+CANDIDATE_FIELDS = ("topic", "recommend", "counts", "bucket", "evidence",
+                    "axes", "claim", "near-miss", "routes", "readings", "why")
 
 
 def _render_evidence(payload: dict) -> str:
@@ -1246,12 +1516,11 @@ def _render_evidence(payload: dict) -> str:
 
 
 def _render_map_entry(entry: dict, region: str, version: str) -> str:
-    read_ids = ", ".join(str(i) for i in (entry.get("read") or []))
     lines = [f"- region: {region}"]
     for key in MAP_FIELDS:
         value = entry.get(key.replace(" ", "_"), entry.get(key))
-        if key == "read":
-            value = read_ids
+        if key in ("read", "read first"):
+            value = ", ".join(str(i) for i in (value or []))
         if value in (None, "", []):
             continue
         lines.append(f"  {key}: {value}")
@@ -1270,11 +1539,31 @@ def _render_finding(finding: dict, fid: str) -> str:
     return "\n".join(lines)
 
 
-def _render_candidate(candidate: dict, cid: str) -> str:
+def _render_candidate(candidate: dict, cid: str,
+                      wide: int | None = None) -> str:
+    """One candidate block. `wide` is the corpus-wide match count computed by
+    the writer; when it is known the level in `recommend:` is set from it and
+    both counts are shown, because a drafter reading this seed needs to know
+    which number is fenced and which is not."""
+    fields = dict(candidate)
+    scoped = fields.get("satisfying_count")
+    if wide is not None:
+        level = level_for(wide)
+        recommend = str(fields.get("recommend") or "")
+        recommend = re.sub(r"\s*level=\w+", "", recommend).strip()
+        parts = recommend.split()
+        route = [p for p in parts if p.startswith("route=")]
+        rest = [p for p in parts if not p.startswith("route=")]
+        fields["recommend"] = " ".join(route + [f"level={level}"] + rest)
+        fields["counts"] = (
+            f"{wide} corpus-wide"
+            + (f", {scoped} inside the bucket" if isinstance(scoped, int) else "")
+            + " (the level is the corpus-wide count; the question carries no "
+              "bucket filter)")
     lines = [f"- id: {cid}"]
     for key in CANDIDATE_FIELDS:
-        value = (_render_evidence(candidate) if key == "evidence"
-                 else candidate.get(key.replace("-", "_"), candidate.get(key)))
+        value = (_render_evidence(fields) if key == "evidence"
+                 else fields.get(key.replace("-", "_"), fields.get(key)))
         if value in (None, "", []):
             continue
         if isinstance(value, list):
@@ -1455,43 +1744,57 @@ def write_profile(journal_path: Path, version: str,
     map_blocks, finding_blocks = [], []
     section_blocks: dict[str, list[str]] = {}
 
-    for slice_id in journal.order:
-        record = journal.slices[slice_id]
-        if record.get("status") not in ("VERIFIED", "SHORT"):
-            continue
-        entry = record.get("map_entry")
-        if isinstance(entry, dict):
-            ids["map"] += 1
-            region = f"m{ids['map']:02d}"
-            map_blocks.append(_render_map_entry(entry, region, version))
-            written_maps.append(region)
-        for finding in record.get("findings") or []:
-            if not isinstance(finding, dict):
-                continue
-            ids["finding"] += 1
-            fid = f"sf-{ids['finding']:02d}"
-            finding_blocks.append(_render_finding(finding, fid))
-            written_findings.append(fid)
-        for candidate in record.get("candidates") or []:
-            if not isinstance(candidate, dict):
-                continue
-            section = _section_of(candidate)
-            if section is None:
-                raise ExploreError(
-                    f"{slice_id}: candidate id {candidate.get('id')!r} does "
-                    f"not name a section ({', '.join(CANDIDATE_SECTIONS)}-NN)")
-            ids[section] += 1
-            cid = f"{section}-{ids[section]:02d}"
-            section_blocks.setdefault(section, []).append(
-                _render_candidate(candidate, cid))
-            written_candidates.append(cid)
-
-    # Cross-check against the profile as it stands BEFORE this run's blocks go
-    # in - otherwise every new candidate is a near-duplicate of itself.
-    flags = crosscheck(journal, text, journal.header.get("targets"))
-
     con = connect(db_path)
     try:
+        for slice_id in journal.order:
+            record = journal.slices[slice_id]
+            if record.get("status") not in ("VERIFIED", "SHORT"):
+                continue
+            entry = record.get("map_entry")
+            if isinstance(entry, dict):
+                ids["map"] += 1
+                region = f"m{ids['map']:02d}"
+                map_blocks.append(_render_map_entry(entry, region, version))
+                written_maps.append(region)
+            for finding in record.get("findings") or []:
+                if not isinstance(finding, dict):
+                    continue
+                ids["finding"] += 1
+                fid = f"sf-{ids['finding']:02d}"
+                finding_blocks.append(_render_finding(finding, fid))
+                written_findings.append(fid)
+            for candidate in record.get("candidates") or []:
+                if not isinstance(candidate, dict):
+                    continue
+                section = _section_of(candidate)
+                if section is None:
+                    raise ExploreError(
+                        f"{slice_id}: candidate id {candidate.get('id')!r} "
+                        "does not name a section "
+                        f"({', '.join(CANDIDATE_SECTIONS)}-NN)")
+                ids[section] += 1
+                cid = f"{section}-{ids[section]:02d}"
+                # The level is arithmetic on the unfenced count, so the writer
+                # does it. A candidate with no topic_filter renders as it
+                # always did, carrying whatever level its explorer guessed.
+                wide = None
+                topic_filter = candidate.get("topic_filter")
+                if isinstance(topic_filter, str) and topic_filter.strip():
+                    wide, error = corpus_count(con, topic_filter)
+                    if error is not None:
+                        raise ExploreError(
+                            f"{slice_id}: {cid} topic_filter is unusable - "
+                            f"{error}. verify-evidence fails this too; "
+                            "re-spawn the slice rather than writing a seed "
+                            "whose level cannot be derived")
+                section_blocks.setdefault(section, []).append(
+                    _render_candidate(candidate, cid, wide))
+                written_candidates.append(cid)
+
+        # Cross-check against the profile as it stands BEFORE this run's blocks
+        # go in - otherwise every new candidate is a near-duplicate of itself.
+        flags = crosscheck(journal, text, journal.header.get("targets"))
+
         before = build_frontier(con, text, read_records(bank_path))
         mapped_before = sum(1 for b in before if b.status != "unexplored")
         if map_blocks:
