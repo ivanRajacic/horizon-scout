@@ -29,7 +29,7 @@ read, the adjudication and often the reference before running anything that can 
 candidate is dead - and once that invested, `hybrid:94`'s cascade rule makes a rewrite look
 cheaper than a `DRAFT-FAILED`.
 
-`drafting-pipeline-audit.md` already called for this ("Birth-failures are expensive...
+`docs/archive/drafting-pipeline-audit.md` already called for this ("Birth-failures are expensive...
 Tighten upstream vetting so dead candidates are caught before a drafter is spawned"). This
 plan is the drafter-side half; plan 01 item 3 is the upstream half.
 

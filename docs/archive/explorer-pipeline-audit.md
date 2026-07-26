@@ -1,5 +1,7 @@
 # Explorer pipeline - cost & quality audit
 
+*ARCHIVED 2026-07-26. All decisions here are implemented (see `working-plan.md` items 3 and 6). Kept as the record of the decisions and their rationale.*
+
 *Opened 2026-07-24, immediately after the drafting-pipeline pass (`drafting-pipeline-audit.md`). Same constraint: same safety, less spend. Decisions below were resolved with Ivan and are IMPLEMENTED unless marked otherwise.*
 
 ## Why this exists

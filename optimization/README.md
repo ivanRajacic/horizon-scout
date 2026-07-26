@@ -2,7 +2,7 @@
 
 *Opened 2026-07-26, from analysis of the 2026-07-25 four-node `/draft-batch` A/B run
 (`eval/drafts/ab-run-log-2026-07-25.md`). Successor to the proposals in
-`drafting-pipeline-audit.md`, which called for "tighter upstream vetting so dead
+`docs/archive/drafting-pipeline-audit.md`, which called for "tighter upstream vetting so dead
 candidates are caught before a drafter is spawned" - this folder measures that problem
 and says exactly what to do about it.*
 

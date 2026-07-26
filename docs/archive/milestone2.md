@@ -1,5 +1,10 @@
 # Milestone 2 - chunk, embed, index, vector search
 
+*ARCHIVED 2026-07-26. The deferral below is history: the full index was built
+2026-07-22 (190,248 vectors, limit=null, FTS verified in sync - see
+`working-plan.md`) and is the working index. The commands and load-bearing
+flags remain documented in `src/config.py` and `CLAUDE.md`.*
+
 Status: **complete on the dev index** (limit 2000). The full ~223k-chunk build
 is **deferred to pre-milestone-5**. The dev index is the working index for
 milestones 2-4.

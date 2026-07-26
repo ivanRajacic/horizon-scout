@@ -1,5 +1,7 @@
 # Drafting pipeline - cost & quality audit
 
+*ARCHIVED 2026-07-26. Every proposal here was decided and implemented (P1-P5 closed; see the Status sections in `working-plan.md`, 2026-07-24 through 2026-07-25). The successor doc is `optimization/README.md`. Kept as the record of the decisions and their rationale.*
+
 *Opened 2026-07-24, triggered by the first `/draft-batch` pilot run. Working doc, not a locked plan - the optimizations below are PROPOSALS pending Ivan's decision.*
 
 ## Why this exists
