@@ -162,7 +162,7 @@ BANK_BRIEF_VERSION = "bb3"
 # /explore-corpus run writes the file (then cp1). cp3 (2026-07-24) added the
 # frontier, the corpus map and the structural-findings list.
 CORPUS_PROFILE_PATH = ROOT / "src" / "retrieval" / "corpus_profile.md"
-CORPUS_PROFILE_VERSION = "cp5"
+CORPUS_PROFILE_VERSION = "cp6"
 
 # --- Lexical (BM25) retrieval: DuckDB FTS over the chunk corpus ---
 FTS_STEMMER = "porter"

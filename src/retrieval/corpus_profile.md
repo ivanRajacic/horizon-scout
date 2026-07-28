@@ -2,8 +2,8 @@
 
 ## Header
 
-- **Version:** cp5
-- **Generated:** 2026-07-26
+- **Version:** cp6
+- **Generated:** 2026-07-27
 - **Corpus fingerprint:** 35,389 projects (`SELECT COUNT(*) FROM project`). Dense index `data/processed/index_meta.json`: 190,248 vectors, embedder `bge-base-en-v1.5-f16.gguf`, dim 768, built 2026-07-22T08:53:52Z. euroscivoc classification covers 32,236 of 35,389 projects across 111,614 rows (`SELECT COUNT(DISTINCT projectID), COUNT(*) FROM euroscivoc`).
 - **Grounded against schema_docs:** version `sd2`, content_hash `e2696e0f80f5`.
 
@@ -14,6 +14,7 @@
 - cp3 (2026-07-24) scope `"structural: add the frontier"`: no exploration subagents. Introduced `## Frontier`, `## Corpus map` and `## Structural findings`, built the 46-bucket frontier from the data and back-filled `seeds`/`bank` from the existing candidates and `eval/bank.jsonl`. Frontier established at `mapped 0/46 | mined 18/46`.
 - cp4 (2026-07-26) scope `"map=6"`: 12m wall (32s in MCP calls), 3 subagents (2 explorers + 1 critic) over 6 slices, 14 `run_sql`, 18 projects read across 6 `get_project_text` calls; +6 map entries, +18 candidates; frontier `mapped 6/46 | mined 19/46 | unexplored 21/46`.
 - cp5 (2026-07-26) scope `"vector=15 (three named mined buckets, L1-weighted)"`: 16m wall (143s in MCP calls), 4 subagents over 3 slices, 39 `run_sql`, 21 projects read across 7 `get_project_text` calls; +3 map entries, +15 candidates; frontier `mapped 4/46 | mined 23/46 | unexplored 19/46`.
+- cp6 (2026-07-27) scope `"vector=20 (five mined-but-unmapped buckets; frontier-report partition NOT used - it partitions unexplored buckets, all of which are now small)"`: 17m wall (188s in MCP calls), 6 subagents over 5 slices, 38 `run_sql`, 35 projects read across 12 `get_project_text` calls; +5 map entries, +20 candidates; frontier `mapped 0/46 | mined 33/46 | unexplored 13/46`.
 
 **Reading order for a run:** `## Frontier` alone is enough to plan one (it says where we have not been). Read a section's candidates only when you are drafting from them. The whole file is never needed at once.
 
@@ -31,46 +32,46 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 
 | bucket | projects | status | map | seeds | bank |
 |---|---|---|---|---|---|
-| natural sciences / biological sciences | 8,057 | mined | - | vector-01, vector-12 | hyb-06, hyb-09, vec-01, vec-05 |
-| natural sciences / computer and information sciences | 7,654 | mined | m07 | vector-07, vector-34, vector-35, vector-36, vector-37, vector-38 | hyb-07, vec-01 |
-| natural sciences / physical sciences | 5,788 | mined | - | hybrid-10 | hyb-03, hyb-07, hyb-08, vec-04, vec-05 |
-| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | - | vector-05 | hyb-03, hyb-07, hyb-08, vec-01 |
-| engineering and technology / environmental engineering | 5,178 | mined | - | vector-11 | hyb-03, hyb-07, vec-05 |
-| social sciences / economics and business | 4,711 | mined | m08 | vector-10, vector-39, vector-40, vector-41, vector-42, vector-43 | hyb-09, vec-05 |
-| medical and health sciences / clinical medicine | 4,661 | mined | - | vector-06, vector-13 | vec-02 |
-| natural sciences / chemical sciences | 4,331 | mined | m09 | vector-44, vector-45, vector-46, vector-47, vector-48 | hyb-03, hyb-07, vec-05 |
+| natural sciences / biological sciences | 8,057 | mined | m10 | vector-01, vector-12, vector-49, vector-50, vector-51, vector-52 | hyb-06, hyb-09, vec-01, vec-05, vec-12, vec-13 |
+| natural sciences / computer and information sciences | 7,654 | mined | m07 | vector-07, vector-34, vector-35, vector-36, vector-37, vector-38 | hyb-07, vec-01, vec-06, vec-10, vec-14, vec-17 |
+| natural sciences / physical sciences | 5,788 | mined | m11 | hybrid-10, vector-53, vector-54, vector-55, vector-56 | hyb-03, hyb-07, hyb-08, vec-04, vec-05, vec-13 |
+| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | m12 | vector-05, vector-57, vector-58, vector-59, vector-60 | hyb-03, hyb-07, hyb-08, vec-01, vec-15, vec-17 |
+| engineering and technology / environmental engineering | 5,178 | mined | m13 | vector-11, vector-61, vector-62, vector-63, vector-64 | hyb-03, hyb-07, vec-05, vec-13, vec-15 |
+| social sciences / economics and business | 4,711 | mined | m08 | vector-10, vector-39, vector-40, vector-41, vector-42, vector-43 | hyb-09, vec-05, vec-07, vec-10, vec-14, vec-15, vec-17 |
+| medical and health sciences / clinical medicine | 4,661 | mined | m14 | vector-06, vector-13, vector-65, vector-66, vector-67, vector-68 | vec-02 |
+| natural sciences / chemical sciences | 4,331 | mined | m09 | vector-44, vector-45, vector-46, vector-47, vector-48 | hyb-03, hyb-07, vec-05, vec-08, vec-12, vec-13 |
 | medical and health sciences / basic medicine | 4,252 | mined | m01 | vector-15, vector-16, vector-17, vector-18 | hyb-06 |
-| social sciences / sociology | 3,802 | mined | m02 | vector-19, vector-20, vector-21 | hyb-07 |
-| engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05 |
-| (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03 |
-| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, hyb-07, vec-05 |
+| social sciences / sociology | 3,802 | mined | m02 | vector-19, vector-20, vector-21 | hyb-07, vec-07, vec-09, vec-10, vec-11, vec-15 |
+| engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05, vec-12, vec-17 |
+| (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03, vec-15, vec-17 |
+| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, hyb-07, vec-05, vec-12, vec-13, vec-15 |
 | medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05 |
 | engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, hyb-06, hyb-08, vec-05 |
-| natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05 |
-| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | hyb-09, vec-05 |
-| social sciences / political sciences | 1,795 | mapped | m03 | vector-22, vector-23, vector-24 | - |
-| humanities / history and archaeology | 1,669 | mapped | m04 | vector-08, vector-25, vector-26, vector-27 | - |
+| natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05, vec-14, vec-15 |
+| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | hyb-09, vec-05, vec-12 |
+| social sciences / political sciences | 1,795 | mined | m03 | vector-22, vector-23, vector-24 | vec-10, vec-11, vec-15 |
+| humanities / history and archaeology | 1,669 | mined | m04 | vector-08, vector-25, vector-26, vector-27 | vec-07, vec-11, vec-12, vec-15 |
 | engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03, hyb-06 |
 | medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02 |
-| social sciences / social geography | 870 | mapped | m06 | vector-31, vector-32, vector-33 | - |
-| social sciences / law | 866 | mapped | m05 | vector-28, vector-29, vector-30 | - |
-| engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05 |
+| social sciences / social geography | 870 | mined | m06 | vector-31, vector-32, vector-33 | vec-10, vec-17 |
+| social sciences / law | 866 | mined | m05 | vector-28, vector-29, vector-30 | vec-11, vec-15 |
+| engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05, vec-10 |
 | social sciences / psychology | 636 | unexplored | - | - | - |
 | engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05 |
-| humanities / philosophy, ethics and religion | 627 | unexplored | - | vector-04 | - |
+| humanities / philosophy, ethics and religion | 627 | mined | - | vector-04 | vec-15 |
 | engineering and technology / industrial biotechnology | 613 | mined | - | - | hyb-09 |
-| humanities / arts | 552 | unexplored | - | hybrid-08 | - |
+| humanities / arts | 552 | mined | - | hybrid-08 | vec-14 |
 | humanities / languages and literature | 490 | unexplored | - | - | - |
 | engineering and technology / medical engineering | 472 | unexplored | - | - | - |
-| social sciences / other social sciences | 417 | unexplored | - | - | - |
+| social sciences / other social sciences | 417 | mined | - | - | vec-15 |
 | agricultural sciences / animal and dairy science | 402 | unexplored | - | - | - |
 | social sciences / educational sciences | 308 | unexplored | - | - | - |
 | engineering and technology / chemical engineering | 288 | unexplored | - | - | - |
 | engineering and technology / environmental biotechnology | 286 | mined | - | - | hyb-09 |
-| social sciences / media and communications | 177 | unexplored | - | - | - |
-| humanities / other humanities | 164 | unexplored | - | - | - |
+| social sciences / media and communications | 177 | mined | - | - | vec-06 |
+| humanities / other humanities | 164 | mined | - | - | vec-15 |
 | agricultural sciences / agricultural biotechnology | 104 | unexplored | - | - | - |
-| social sciences / (top-level only) | 46 | unexplored | - | - | - |
+| social sciences / (top-level only) | 46 | mined | - | - | vec-15 |
 | medical and health sciences / other medical sciences | 32 | unexplored | - | - | - |
 | humanities / (top-level only) | 19 | unexplored | - | - | - |
 | agricultural sciences / veterinary sciences | 15 | unexplored | - | - | - |
@@ -78,7 +79,7 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 | medical and health sciences / (top-level only) | 13 | unexplored | - | - | - |
 | engineering and technology / (top-level only) | 2 | unexplored | - | - | - |
 
-`mapped 4/46 | mined 23/46 | unexplored 19/46`
+`mapped 0/46 | mined 33/46 | unexplored 13/46`
 
 No bucket is `mapped` yet: the map is new at cp3 and no region has a `## Corpus map` entry. 18 buckets are `mined` (a bank question was drawn from them, traced through `gold_project_ids`), and a further 4 carry cp1/cp2 candidate seeds with no bank question yet - the `seeds` column keeps that history, but seeds are not a map, so those buckets still read `unexplored`.
 
@@ -204,6 +205,66 @@ Append-only: entries are added as buckets are explored, never rewritten. Format:
   good for: Narrow single-project vector questions, because distinctive method phrases really are unique here - 'thermophilic microbial', 'composite solid electrolyte' and 'relativistic quantum chemistry' each match exactly 1 project corpus-wide. Also small 2-4 project clusters around named chemistries (chiral phosphoric acid 2, carbon nitride 4) that are enumerable as gold.
   thin for: Broad chemistry questions: head terms like catalysis, battery or CO2 conversion return hundreds of projects spread across engineering and energy buckets and cannot be enumerated. Also weak for quantitative chemistry questions - yields, conversions and temperatures live only in free text, never in a column.
   mapped: cp5
+
+- region: m10
+  bucket: natural sciences / biological sciences
+  slice: a project has a euroscivoc row where split_part(euroSciVocPath,'/',2) = 'biological sciences'
+  size: 8057 projects  (SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='biological sciences' -> 8057)
+  about: Life-science research at every scale and in every institutional shape, held together by the tag rather than by a subject: the largest member is HBP SGA3 (945539), the 150M EUR Human Brain Project flagship building the EBRAINS research infrastructure out of neuroinformatics, simulation and neuromorphic computing, and the second largest is ERA4TB (853989), an 89.8M EUR industry consortium profiling ~20 tuberculosis drug candidates towards combination regimens. Below those, the bulk is single-fellow MSCA work on mechanism - EVREP (101032596) on KNOX1 and C3HDZ control of sporophyte and sporogenous-cell formation in basal land plants, MecHA-Nano (101031744) on Hippo-pathway mechanosensing during cell-nanoparticle interaction. The tag also reaches well outside biology proper: MACC-III (633080) is the Copernicus atmosphere service for air quality and stratospheric ozone, and QUALIGRAIN (651788) is an SME instrument project on mycotoxin contamination in stored maize and durum wheat.
+  texture: Enormous spread of contribution (50,000 EUR SME-1 feasibility studies up to 150,000,000 EUR flagship) and of genre: flagship infrastructures, industry drug consortia, ERC mechanism grants, MSCA-IF postdoc fellowships and SME food-processing projects all carry the same second-level tag. Text style follows the instrument - MSCA-IF objectives are hypothesis-and-workpackage prose naming genes and pathways; SME objectives are company- and regulation-first and often never state a biological mechanism.
+  read: 945539, 853989, 633080, 651788, 101032596, 101031744, 734434, 851705, 817842
+  read first: 945539, 853989, 633080, 651788, 101032596, 101031744
+  good for: organism- and mechanism-level topical vector questions (sensory biology, symbiosis, colony organisation, extremophile survival, phage biology)
+  thin for: questions assuming the tag means "basic biology" - a sizeable minority are atmospheric, food-industry or engineering projects; also thin for clean single-project topics, since most themes recur across several fellowships
+  mapped: cp6
+
+- region: m11
+  bucket: natural sciences / physical sciences
+  slice: EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID = p.id AND split_part(e.euroSciVocPath,'/',2) = 'physical sciences')
+  size: 5788 projects  (SELECT count(DISTINCT projectID) FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='physical sciences' -> 5788)
+  about: The bucket's centre of mass is instrumentation and measurement rather than pen-and-paper physics: quantum sensors, clocks, lasers and detectors, plus large shared research infrastructures. Its largest single member is EUROfusion (633053, EUR 678.8m), which is not a physics experiment at all but the coordination programme implementing the European roadmap to fusion electricity by 2050 around ITER and DEMO; the largest members tagged optics and theoretical physics are GN4-2 (731122) and GN4-1 (691567), the GEANT pan-European research and education network projects, and the largest astronomy member is EPOS IP (676564), a solid-Earth geoscience data infrastructure. At the small end sit single-researcher MSCA fellowships that are physics only by method - MecHA-Nano (101031744, newest start 2023-04-01) synthesises silica nanoparticles and uses super-resolution microscopy to study the Hippo mechanosensing pathway in cells.
+  texture: Third-level split (one query, 15 values): optics 2664, astronomy 1135, electromagnetism and electronics 1057, theoretical physics 961, condensed matter physics 476, quantum physics 440, classical mechanics 435, acoustics 241, atomic physics 124, thermodynamics 105, nuclear physics 101, relativistic mechanics 47, molecular and chemical physics 40, plasma physics 40, empty 9. The tag is unreliable at the top of the contribution distribution - three of the four largest members are infrastructure or networking projects wearing a physics leaf - and unreliable at the bottom, where MSCA fellowships get a physics leaf for a technique. Reliable mid-band themes are metrology-flavoured: optical clocks, atom interferometry, frequency combs, attosecond science, gravitational waves, neutrinos. Fusion-machine vocabulary is nearly absent despite EUROfusion: tokamak/stellarator/divertor matches 2 projects corpus-wide.
+  read: 633053, 101031744, 676564, 731122, 691567, 755371, 660081, 748826
+  read first: 633053, 101031744, 676564, 731122, 691567
+  good for: Vector L2/L3 topical questions on precision-measurement communities (optical clocks, atom interferometers, antimatter gravity, muon imaging); paraphrase questions where the device and the physics have different names
+  thin for: Fusion-engineering questions (2 projects name a tokamak/stellarator/divertor); plasma physics (40) and molecular/chemical physics (40) too thin for spread; SQL/aggregate questions, since the tag does not describe the largest members
+  mapped: cp6
+
+- region: m12
+  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering
+  slice: EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID = p.id AND split_part(e.euroSciVocPath,'/',2) = 'electrical engineering, electronic engineering, information engineering')
+  size: 5566 projects  (SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering' -> 5566)
+  about: Two thirds of this bucket sits under the third-level node electronic engineering (4,276 of 5,566); information engineering holds 1,492 and electrical engineering only 527. Read topic-blind, the region is dominated at the top by very large platform grants only nominally about electronics - the biggest by EC contribution are GAM AIR 2018 (EUR 160,974,883.59, a Clean Sky aeronautics demonstrator programme) and HBP SGA3 (EUR 150,000,000, the Human Brain Project's EBRAINS infrastructure, tagged here through neuromorphic computing and HPC) - while the newest members are single-fellow MSCA device-physics projects such as DReM-PCM, an all-dielectric reconfigurable metasurface switched in situ with GeSbTe phase-change material. The middle of the bucket is component- and device-level: metasurfaces and photonics, phase-change and memristive materials, sensors, RF and optical links, and aircraft and rail systems electronics.
+  texture: Device-physics objectives are dense with specific material and structure names (GeSbTe, chalcogenide, nanoresonator, crossbar microheater), which makes exact-term retrieval easy and paraphrase questions rare. The tag travels far outside electronics: the same second-level label sits on the Human Brain Project and on a Herculaneum papyrus edition project (GreekSchools) that uses terahertz imaging as an instrument, so tag membership alone is a poor guide to what a project is about. Start dates run 2014-01-01 (SYS GAM 2018) to 2023-01-30 (DReM-PCM).
+  read: 945539, 896937, 807081, 705960, 732642
+  read first: 945539, 896937, 807081
+  good for: Device- and material-specific vector questions (phase-change metasurfaces, memristive and spiking hardware, quantum-secure optical links); cross-domain instrument questions where an electronics technique is applied in a humanities or biomedical project
+  thin for: Paraphrase-only questions - most members name their own technology verbatim in the objective; also thin for pure electrical-power engineering, only 527 projects
+  mapped: cp6
+
+- region: m13
+  bucket: engineering and technology / environmental engineering
+  slice: EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID = p.id AND split_part(e.euroSciVocPath,'/',2) = 'environmental engineering')
+  size: 5178 projects  (SELECT count(DISTINCT projectID) FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='environmental engineering' -> 5178)
+  about: Despite the label, the biggest single third-level node here is energy and fuels (3,329 of 5,178), and the bucket's largest and oldest members are Clean Sky 2 aviation Joint Undertaking grants - LPA GAM 2018 (807097, EUR 184,973,049.81, advanced wings and empennages design, hybrid laminar airflow wing developments) and SYS GAM 2018 (807081, started 2014-01-01, power management, cockpit, wing and landing gear demonstrators) - tagged environmental engineering because their goal is aircraft environmental performance, not because they are pollution-control research. The genuinely environmental-engineering core sits in the smaller nodes: waste management (645), water treatment processes (416), air pollution engineering (346), carbon capture engineering (56). A typical member of that core is SPONGE (101028018, newest start 2022-11-11), an MSCA fellowship quantifying microplastics and pharmaceutical contaminants in urban runoff used for aquifer recharge under the sponge city strategy.
+  texture: Two populations sharing one tag: a handful of very large multi-hundred-million-euro industrial and aviation programme grants (Clean Sky GAMs) at one end, and a long tail of MSCA fellowships and SME-instrument projects on water, waste and emissions at the other. SME texts read like business plans (EBBR, 673683: market size, licensees, TRL7 prototypes); MSCA texts read like research plans with host-institution detail. Circular-economy vocabulary - valorisation, recovery, recycling of nutrients and metals - is pervasive across the waste and water nodes.
+  read: 807097, 807081, 101028018, 673683, 668128, 763909
+  read first: 807097, 807081, 101028018
+  good for: water and wastewater treatment technologies; nutrient and material recovery from waste streams; landfill and leachate and mining residues; CO2 capture and conversion to fuels; urban groundwater and runoff quality
+  thin for: environmental impact assessment, environmental law and policy, soil geotechnics (geological engineering 9, geotechnics 8 - too few members to sustain question families)
+  mapped: cp6
+
+- region: m14
+  bucket: medical and health sciences / clinical medicine
+  slice: a project has a euroscivoc row where split_part(euroSciVocPath,'/',2) = 'clinical medicine'
+  size: 4661 projects  (SELECT count(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',2)='clinical medicine' -> 4661)
+  about: Read topic-blind: the two largest-budget members are pan-European anti-tuberculosis clinical-trial platforms (UNITE4TB, EUR 92.5M, redesigning phase-2 TB regimen trials with adaptive multi-arm designs; ERA4TB, EUR 89.8M), the oldest is an SME point-of-care multiplex PCR cartridge for MRSA screening in hospitals (PoC-Cycle, 2014-09-01), and the newest is EVREP, a land-plant embryo-evolution MSCA fellowship that carries a clinical-medicine tag only through the embryology leaf. So the region is dominated less by clinical practice research than by three strands: very large industry-academic trial and drug-development consortia, small-company diagnostic and device projects, and single-PI molecular disease-mechanism fellowships such as StopWaste on tumour-driven adipose wasting and BARINAFLD on metabolic surgery and fatty liver.
+  texture: Third-level nodes are heavily skewed: oncology 2075, then surgery 500, cardiology 498, endocrinology 474, psychiatry 316, physiotherapy 233, pneumology 181, obstetrics 177, transplantation 168, ophthalmology 163, embryology 163, down to odontology 28. The embryology leaf carries visible tag noise (EVREP is plant developmental biology). Members are multiply tagged - BARINAFLD sits under surgery, endocrinology/diabetes, oncology and hepatology at once. Care-delivery topics are often written in device and market language rather than clinical vocabulary, and a condition is frequently named by a synonym rather than its textbook label.
+  read: 101007873, 652303, 101032596, 949017, 803526
+  read first: 101007873, 652303, 101032596
+  good for: specific disease or intervention topics with 2-11 members corpus-wide; paraphrase questions where the condition appears under a synonym; home-therapy and device-for-a-condition clusters (peritoneal dialysis, pressure-injury prevention); metabolic-surgery and cachexia mechanism clusters
+  thin for: single-project L1 seeds - most clinical terms land at 3-11 corpus-wide, not 1; rare specialties (odontology 28, anaesthesiology 31, dermatology 36, emergency medicine 38) too small for stable subtopic clusters; anything assuming the embryology leaf is on-topic
+  mapped: cp6
 
 ## Structural findings
 
@@ -619,6 +680,186 @@ Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
   axes: subfield=physical chemistry/photocatalysis; material=metal-free CNX semiconductor
   why: Read MFreePEC: it grows carbon nitride and CNX (X=P,B,S) layers as metal-free PEC semiconductors for solar hydrogen; the other three sit in solar-fuel (SolTIME, METHASOL) and 2D-electronics settings, a tight enumerable cluster.
 
+- id: vector-49
+  topic: anhydrobiosis / desiccation survival - organisms and cells that survive drying out
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 4 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / biological sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%tardigrad%' OR p.objective ILIKE '%anhydrobio%' OR p.objective ILIKE '%cryptobio%' OR p.objective ILIKE '%desiccation tolerance%'` -> 4 ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='biological sciences') SELECT COUNT(*) n, string_agg(p.id::VARCHAR||':'||p.acronym,', ') ids FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%tardigrad%' OR p.objective ILIKE '%anhydrobio%' OR p.objective ILIKE '%cryptobio%' OR p.objective ILIKE '%desiccation tolerance%'` -> 4; 734434:DRYNET, 747087:BIOSTASIS, 898203:FLINDIP, 838945:Desiccation Survival ; `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%desiccation tolerance%' OR p.title ILIKE '%desiccation tolerance%'` -> 1
+  axes: branch=natural-sciences bucket=biological-sciences topic=desiccation-survival term_style=paraphrase satisfying=4
+  why: Paraphrase-friendly - the plain label "desiccation tolerance" matches only 1 project while the theme covers 4. DRYNET (734434, read) never uses the label, describing "water subtraction to induce a reversible block of metabolism ... (anhydrobiosis)" for dry biobanking of cells and germplasm.
+
+- id: vector-50
+  topic: how animals sense the Earth's magnetic field to navigate (magnetoreception)
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 4 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / biological sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%magnetorecept%' OR p.objective ILIKE '%animal navigation%' OR p.objective ILIKE '%magnetic sense%' OR p.objective ILIKE '%migratory birds%navigat%'` -> 4 ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='biological sciences') SELECT COUNT(*) n, string_agg(p.id::VARCHAR||':'||p.acronym,', ') ids FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%magnetorecept%' OR p.objective ILIKE '%animal navigation%' OR p.objective ILIKE '%magnetic sense%' OR p.objective ILIKE '%migratory birds%navigat%'` -> 3; 810002:QuantumBirds, 741298:MagneticMoth, 948728:NeuroMagMa ; `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%magnetorecept%' OR p.title ILIKE '%magnetorecept%'` -> 3
+  axes: branch=natural-sciences bucket=biological-sciences topic=magnetoreception term_style=mixed satisfying=4
+  why: Small, crisp sensory-biology cluster spanning birds, moths and mammals; the fenced count (3) is lower than the corpus-wide count (4), which is exactly the fence error this run is guarding against.
+
+- id: vector-51
+  topic: colony life in social insects - division of labour, castes and collective organisation in ants and bees
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 34 corpus-wide, 34 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / biological sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%eusocial%' OR p.objective ILIKE '%social insect%' OR p.objective ILIKE '%ant colon%' OR p.objective ILIKE '%honeybee colon%'` -> 34 ; `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%eusocial%'` -> 9 ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='biological sciences') SELECT COUNT(*) n FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%eusocial%' OR p.objective ILIKE '%social insect%' OR p.objective ILIKE '%ant colon%' OR p.objective ILIKE '%honeybee colon%'` -> 27
+  axes: branch=natural-sciences bucket=biological-sciences topic=social-insect-colonies term_style=paraphrase satisfying=34
+  why: The paraphrase-friendly large seed for this slice. The topic's own technical label "eusocial" matches only 9 of the 34 projects the theme covers, so a question phrased as "which projects study how ant or bee colonies divide up work" cannot be answered by matching its own words. MechAnt (851705, read) describes leaf-cutter colony division of labour, worker size castes and colony ergonomics in biomechanical language. Sample members: 851705:MechAnt, 851523:EPIDEMIC, 834164:Division, 690817:FourCmodelling, 101033168:CloneInvasion, 948181:COGNITIVE CONTROL.
+
+- id: vector-52
+  topic: bacteriophage therapy - using viruses to treat bacterial infections
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 11 corpus-wide, 11 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / biological sciences
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%phage therapy%' OR p.title ILIKE '%phage therapy%'` -> 11 ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='biological sciences') SELECT COUNT(*) n FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%phage therapy%' OR p.title ILIKE '%phage therapy%'` -> 11
+  axes: branch=natural-sciences bucket=biological-sciences topic=phage-therapy term_style=exact satisfying=11
+  why: Antimicrobial-resistance response cluster; all 11 sit inside this bucket, so the fence costs nothing here and the theme is stable. Member read: CoPathoPhage (817842) frames itself as phage biology rather than clinical therapy, which a drafter should check when fixing gold. Other members: 811749:PhagoPROD, 896441:ERA, 773567:VIROPLANT, 656647:MicroEcoEvol, 958645:PhageFire.
+
+- id: vector-53
+  topic: antihydrogen - producing and measuring the properties of anti-atoms
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 3 corpus-wide, 3 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / physical sciences
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%antihydrogen%'` -> 3 ; `SELECT count(*) FROM project p JOIN (SELECT DISTINCT projectID FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='physical sciences') b ON b.projectID=p.id WHERE p.objective ILIKE '%antihydrogen%'` -> 3 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%antihydrogen%' ORDER BY p.id` -> 721559 AVA; 748826 ANGRAM; 101019414 QUARTET
+  axes: branch=natural-sciences bucket=physical-sciences topic=antihydrogen term_style=exact satisfying=3
+  why: ANGRAM (748826) objective read - measures the gravitational acceleration of antihydrogen with a rotating three-grating moire deflectometer to test the weak equivalence principle for antimatter. All three sit in the physical-sciences bucket; the broader word antimatter matches 36 further projects that are not anti-atom work, so the theme is genuinely small and separable.
+
+- id: vector-54
+  topic: muon tomography / muography - imaging the inside of large opaque objects with cosmic-ray muons
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / physical sciences
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%muography%' OR p.objective ILIKE '%muon tomography%' OR p.objective ILIKE '%muon radiograph%'` -> 2 ; `SELECT count(*) FROM project p JOIN (SELECT DISTINCT projectID FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='physical sciences') b ON b.projectID=p.id WHERE p.objective ILIKE '%muography%' OR p.objective ILIKE '%muon tomography%' OR p.objective ILIKE '%muon radiograph%'` -> 1 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%muography%' OR p.objective ILIKE '%muon tomography%' OR p.objective ILIKE '%muon radiograph%' ORDER BY p.id` -> 755371 CHANCE; 822185 INTENSE ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%muon%' OR p.title ILIKE '%muon%'` -> 36
+  axes: branch=natural-sciences bucket=physical-sciences topic=muon-imaging term_style=paraphrase satisfying=2
+  why: CHANCE (755371) objective read - it is a radioactive-waste characterisation project, and muon tomography is one of its three non-destructive assay techniques for large conditioned waste packages, so the muon-imaging content is buried inside a waste-management project rather than announced by its framing. Bare muon matches 36 particle-physics projects. One of the two members sits outside the bucket, the fence effect the corpus-wide count is meant to catch.
+
+- id: vector-55
+  topic: atom (matter-wave) interferometry as a precision inertial and gravity sensor
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 6 corpus-wide, 6 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / physical sciences
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%atom interferomet%' OR p.title ILIKE '%atom interferomet%'` -> 6 ; `SELECT count(*) FROM project p JOIN (SELECT DISTINCT projectID FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='physical sciences') b ON b.projectID=p.id WHERE p.objective ILIKE '%atom interferomet%' OR p.title ILIKE '%atom interferomet%'` -> 5 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%atom interferomet%' OR p.title ILIKE '%atom interferomet%' ORDER BY p.id` -> 660081 MWGRAV; 691156 Q-Sense; 704672 QBAS; 739651 SEQ; 804815 MEGANTE; 101031712 Dommigs ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%matter-wave interferomet%' OR p.objective ILIKE '%matter wave interferomet%'` -> 4
+  axes: branch=natural-sciences bucket=physical-sciences topic=atom-interferometry term_style=paraphrase satisfying=6
+  why: The paraphrase-friendly large seed for this slice. The phrase a user would naturally reach for - matter-wave interferometry - matches only 4 projects against 6 for the theme filter, so neither vocabulary covers the set and a verbatim-term question would silently miss members. MWGRAV (660081) objective read - atom interferometers as inertial sensors for gravimetry, gradiometry, metrology and gravitational-wave detection, calling the same devices matter-wave gravitation sensors in the same paragraph. One member (804815 MEGANTE) is outside the bucket.
+
+- id: vector-56
+  topic: optical atomic clocks and next-generation frequency standards
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 9 corpus-wide, 9 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: natural sciences / physical sciences
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%optical clock%' OR p.title ILIKE '%optical clock%'` -> 9 ; `SELECT count(*) FROM project p JOIN (SELECT DISTINCT projectID FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='physical sciences') b ON b.projectID=p.id WHERE p.objective ILIKE '%optical clock%' OR p.title ILIKE '%optical clock%'` -> 9 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%optical clock%' OR p.title ILIKE '%optical clock%' ORDER BY p.id` -> 691156 Q-Sense; 707864 Mobiclock; 757386 quMercury; 772126 TICTOCGRAV; 820404 iqClock; 860579 MoSaiQC; 856415 ThoriumNuclearClock; 965124 FEMTOCHIP; 101019987 FunClocks ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%atomic clock%' OR p.title ILIKE '%atomic clock%'` -> 20
+  axes: branch=natural-sciences bucket=physical-sciences topic=optical-clocks term_style=exact satisfying=9
+  why: All 9 sit inside the physical-sciences bucket, so the set is clean and fully enumerable for gold. The acronyms (iqClock, MoSaiQC, ThoriumNuclearClock, FunClocks, Mobiclock) show a coherent European clock-metrology community rather than scattered mentions, and the broader atomic clock phrasing matches 20, so the question has to pin the optical-clock generation specifically.
+
+- id: vector-57
+  topic: terahertz imaging used as an investigative technique
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%'` -> 2 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%' ORDER BY p.id` -> 660783 TERA-NANO; 885222 GreekSchools ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%'` -> 1
+  axes: branch=engineering bucket=electrical-engineering topic=terahertz-imaging term_style=exact satisfying=2
+  why: Two projects corpus-wide in completely different fields. GreekSchools (885222), read directly, is a Greek philosophy papyrus edition listing terahertz imaging alongside SWIR hyperspectral imaging, OCT and XRF as its reading methods. A user can ask which projects use terahertz imaging without knowing either is electronics-tagged; only one of the two is in the bucket.
+
+- id: vector-58
+  topic: metasurfaces tuned with chalcogenide phase-change materials
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%metasurface%' AND (p.objective ILIKE '%phase-change%' OR p.objective ILIKE '%phase change%')` -> 2 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%metasurface%' AND (p.objective ILIKE '%phase-change%' OR p.objective ILIKE '%phase change%') ORDER BY p.id` -> 705960 SGPCM; 896937 DReM-PCM ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%metasurface%' AND (p.objective ILIKE '%phase-change%' OR p.objective ILIKE '%phase change%')` -> 2
+  axes: branch=engineering bucket=electrical-engineering topic=phase-change-metasurfaces term_style=exact satisfying=2
+  why: Both objectives read. SGPCM (705960) proposes switchable phase-change materials to make graphene-plasmon metasurfaces non-volatile and ultrafast; DReM-PCM (896937) builds all-dielectric metasurfaces with GeSbTe switched in situ by an integrated microheater and a crossbar. Exactly two corpus-wide and an easy natural question.
+
+- id: vector-59
+  topic: quantum key distribution links
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 8 corpus-wide, 8 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%'` -> 8 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%' ORDER BY p.id` -> 754509 WASPSNEST; 792557 GENIUS; 817021 EQUALITY; 840691 SatCV; 857156 OPENQKD; 899814 Qurope; 101004341 QUANGO; 101025664 QESPEM ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%'` -> 4
+  axes: branch=engineering bucket=electrical-engineering topic=quantum-key-distribution term_style=exact satisfying=8
+  why: Eight corpus-wide but only 4 inside this bucket - the other half is filed under physics or computing, exactly the fence effect the standard warns about. Spread runs satellite versus terrestrial-fibre links and device physics versus the Europe-wide OPENQKD testbed, and the natural question needs no tag knowledge.
+
+- id: vector-60
+  topic: hardware that computes with spikes (brain-inspired event-driven chips)
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 17 corpus-wide, 17 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering
+  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%spiking neural%' OR p.objective ILIKE '%spiking neuron%' OR p.title ILIKE '%spiking%'` -> 17 ; `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%spiking neural network%' OR p.title ILIKE '%spiking neural network%'` -> 9 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%spiking neural%' OR p.objective ILIKE '%spiking neuron%' OR p.title ILIKE '%spiking%' ORDER BY p.id` -> 658479 SpikeControl; 679253 HIRESMEMMANIP; 714291 CONNEXIO; 732642 ULPEC; 715872 NANOINFER; 753470 NEPSpiNN; 780848 Fun-COMP; 794425 STRoNA; 824162 SYNCH; 826655 ChipAI; 828841 TEMPO; 871501 NeurONN; 876925 ANDANTE; 101016041 RESERVIST; 101001899 RENEW; 101032806 NeuralFieldTheoriES; 101030918 AutoMIND ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%spiking neural%' OR p.objective ILIKE '%spiking neuron%' OR p.title ILIKE '%spiking%'` -> 7 ; `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%neuromorphic%' OR p.title ILIKE '%neuromorphic%'` -> 78
+  axes: branch=engineering bucket=electrical-engineering topic=spiking-hardware term_style=paraphrase satisfying=17
+  why: The paraphrase-friendly large seed for this slice. As a user would phrase it there is no single shared term: the label ILIKE returns 9, the theme filter 17, and the neighbouring word neuromorphic 78, so any one label under- or over-shoots. ULPEC (732642), read in full, describes a spiking neural network with memristive synapses driven by an event-based camera - the electronics content is in how it computes, not in a shared phrase. 17 corpus-wide against 7 in the bucket.
+
+- id: vector-61
+  topic: direct air capture of CO2 as feedstock for synthetic fuels
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / environmental engineering
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%'` -> 2 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%' ORDER BY p.id` -> 763909 KEROGREEN; 101006701 EcoFuel ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 2
+  axes: branch=engineering bucket=environmental-engineering topic=direct-air-capture term_style=exact satisfying=2
+  why: Read KEROGREEN (763909) - plasma-driven CO2 dissociation plus Fischer-Tropsch to jet-grade kerosene, with CO2 emitted on fuel use recirculated as feedstock by direct air capture. Both members sit in the bucket's carbon capture engineering node (56 projects); a tight, nameable pair.
+
+- id: vector-62
+  topic: managed aquifer recharge - deliberately replenishing groundwater with treated or captured surface water
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 3 corpus-wide, 3 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / environmental engineering
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%'` -> 3 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%' ORDER BY p.id` -> 689450 AquaNES; 814066 MARSoluT; 101028018 SPONGE ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 3
+  axes: branch=engineering bucket=environmental-engineering topic=aquifer-recharge term_style=mixed satisfying=3
+  why: Read SPONGE (101028018) - safe recharge of urban aquifers expanding the sponge city strategy, collecting runoff both to reduce waterlogging and to recharge stressed aquifers, with microplastics and emerging contaminants as the quality risk. AquaNES combines natural and engineered treatment components; MARSoluT is a training network on the same practice. Askable in plain language.
+
+- id: vector-63
+  topic: recovering fertiliser nutrients (phosphorus, nitrogen) from waste streams - manure, sewage, ashes - instead of mining them
+  recommend: route=vector level=L3 subtype=topical-survey
+  counts: 21 corpus-wide, 21 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / environmental engineering
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%struvite%' OR p.objective ILIKE '%phosphorus recovery%' OR p.objective ILIKE '%nutrient recovery%' OR p.title ILIKE '%struvite%'` -> 21 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%struvite%'` -> 2 ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%struvite%' OR p.objective ILIKE '%phosphorus recovery%' OR p.objective ILIKE '%nutrient recovery%' OR p.title ILIKE '%struvite%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 15 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%struvite%' OR p.objective ILIKE '%phosphorus recovery%' OR p.objective ILIKE '%nutrient recovery%' OR p.title ILIKE '%struvite%' ORDER BY p.id LIMIT 8` -> 642904 TreatRec; 652171 Poul-AR; 662476 Mubic; 668128 NewFert; 706642 TASAB; 730285 RUN4LIFE; 792021 SUSFERT; 818470 NUTRIMAN
+  axes: branch=engineering bucket=environmental-engineering topic=nutrient-recovery term_style=paraphrase satisfying=21
+  why: The paraphrase-friendly large seed for this slice. The chemistry term a specialist names the topic with, struvite, appears in only 2 objectives while the theme covers 21, so a question phrased the way a user asks it - which projects make fertiliser out of waste instead of mined phosphate rock - is not answerable by matching the topic's own label. Read NewFert (668128): turning ashes of different origins and livestock effluents into a new generation of fertilisers, increasing nutrient recovery ratios and replacing non-renewable fossil nutrients. 6 of the 21 sit outside this bucket, filed under agriculture.
+
+- id: vector-64
+  topic: constructed wetlands as low-energy water treatment
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 6 corpus-wide, 6 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / environmental engineering
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%constructed wetland%' OR p.title ILIKE '%constructed wetland%'` -> 6 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%constructed wetland%' OR p.title ILIKE '%constructed wetland%' ORDER BY p.id` -> 642190 iMETland; 689450 AquaNES; 701542 UMIC; 773351 ZIRONITRO; 858375 WATERAGRI; 894525 ELECTRAMMOX ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%constructed wetland%' OR p.title ILIKE '%constructed wetland%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 5
+  axes: branch=engineering bucket=environmental-engineering topic=constructed-wetlands term_style=mixed satisfying=6
+  why: Read iMETland (642190) - a full-scale eco-friendly device treating urban wastewater from small communities at zero-energy operation cost, a microbial electrochemical wetland. UMIC (701542) uses natural or constructed wetlands against uranium in drinking water, ZIRONITRO against agricultural nitrate. One member is tagged outside this field, so corpus-wide 6 exceeds the fenced 5.
+
+- id: vector-65
+  topic: cancer cachexia - tumour-driven wasting of muscle and adipose tissue
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 4 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: medical and health sciences / clinical medicine
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%cachexia%' OR p.title ILIKE '%cachexia%'` -> 4 ; `SELECT count(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',2)='clinical medicine' AND (p.objective ILIKE '%cachexia%' OR p.title ILIKE '%cachexia%')` -> 4 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%cachexia%' OR p.title ILIKE '%cachexia%' ORDER BY p.id` -> 683658 LIFEOMEGA, 741888 CSI-Fun, 897735 REBOOST, 949017 StopWaste ; `SELECT p.id FROM project p WHERE p.id=949017 AND p.objective ILIKE '%futile substrate cycling in adipocytes%'` -> 949017
+  axes: branch=medical bucket=clinical-medicine topic=cachexia term_style=exact satisfying=4
+  why: Read 949017 StopWaste - cachexia as an irreversible metabolic wasting disorder killing 30% of cancer patients, attacked through adipose futile substrate cycling rather than muscle atrophy. Four projects corpus-wide spanning ERC mechanism work and nutritional-intervention products; a small enumerable answer set.
+
+- id: vector-66
+  topic: bariatric / metabolic surgery as a treatment lever
+  recommend: route=vector level=L2 subtype=topical-multi
+  counts: 4 corpus-wide, 4 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: medical and health sciences / clinical medicine
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%bariatric surgery%' OR p.title ILIKE '%bariatric surgery%'` -> 4 ; `SELECT count(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',2)='clinical medicine' AND (p.objective ILIKE '%bariatric surgery%' OR p.title ILIKE '%bariatric surgery%')` -> 4 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%bariatric surgery%' OR p.title ILIKE '%bariatric surgery%' ORDER BY p.id` -> 704779 Fit-The-Fat, 715662 EnteroBariatric, 780659 Drug the bug, 803526 BARINAFLD ; `SELECT p.id FROM project p WHERE p.id=803526 AND p.objective ILIKE '%weight-loss independent%'` -> 803526
+  axes: branch=medical bucket=clinical-medicine topic=bariatric-surgery term_style=exact satisfying=4
+  why: Read 803526 BARINAFLD - bariatric surgery used as a probe of gut-liver metabolic signalling in NAFLD (Egr1, one-carbon metabolism), not as surgical outcomes research. All four members use the operation as a mechanistic lever, giving a clean small-set question.
+
+- id: vector-67
+  topic: peritoneal dialysis - home and portable kidney replacement therapy
+  recommend: route=vector level=L3 subtype=topical-multi
+  counts: 8 corpus-wide, 8 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: medical and health sciences / clinical medicine
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%peritoneal dialysis%' OR p.title ILIKE '%peritoneal dialysis%'` -> 8 ; `SELECT count(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',2)='clinical medicine' AND (p.objective ILIKE '%peritoneal dialysis%' OR p.title ILIKE '%peritoneal dialysis%')` -> 6 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%peritoneal dialysis%' OR p.title ILIKE '%peritoneal dialysis%' ORDER BY p.id` -> 733108 TheraPD, 733169 WEAKID, 812699 IMPROVE-PD, 827951 IPUD, 827984 LPPDS, 873986 Warrick X1, 874316 IPUD, 945207 CORDIAL
+  axes: branch=medical bucket=clinical-medicine topic=peritoneal-dialysis term_style=exact satisfying=8
+  why: Eight projects corpus-wide build or study peritoneal dialysis - portable and wearable dialysis units (IPUD, WEAKID, Warrick X1, LPPDS), fluid and therapy improvement (TheraPD, CORDIAL), and an ITN on PD outcomes. Enumerable answer set, and a concrete case where the bucket fence would have cost 2 of 8 members.
+
+- id: vector-68
+  topic: prevention and treatment of pressure injuries (bedsores) in immobile patients
+  recommend: route=vector level=L3 subtype=topical-survey
+  counts: 11 corpus-wide, 11 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: medical and health sciences / clinical medicine
+  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%pressure ulcer%' OR p.title ILIKE '%pressure ulcer%' OR p.objective ILIKE '%bedsore%' OR p.title ILIKE '%bedsore%' OR p.objective ILIKE '%decubitus%' OR p.title ILIKE '%decubitus%' OR p.objective ILIKE '%pressure injur%' OR p.title ILIKE '%pressure injur%' OR p.objective ILIKE '%pressure sore%' OR p.title ILIKE '%pressure sore%'` -> 11 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%pressure ulcer%' OR p.title ILIKE '%pressure ulcer%'` -> 7 ; `SELECT count(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',2)='clinical medicine' AND (p.objective ILIKE '%pressure ulcer%' OR p.title ILIKE '%pressure ulcer%' OR p.objective ILIKE '%bedsore%' OR p.title ILIKE '%bedsore%' OR p.objective ILIKE '%decubitus%' OR p.title ILIKE '%decubitus%' OR p.objective ILIKE '%pressure injur%' OR p.title ILIKE '%pressure injur%' OR p.objective ILIKE '%pressure sore%' OR p.title ILIKE '%pressure sore%')` -> 7 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%pressure ulcer%' OR p.title ILIKE '%pressure ulcer%' OR p.objective ILIKE '%bedsore%' OR p.title ILIKE '%bedsore%' OR p.objective ILIKE '%decubitus%' OR p.title ILIKE '%decubitus%' OR p.objective ILIKE '%pressure injur%' OR p.title ILIKE '%pressure injur%' OR p.objective ILIKE '%pressure sore%' OR p.title ILIKE '%pressure sore%' ORDER BY p.id` -> 696939 i-LiveRest, 709595 JUMPAIR, 735302 Qone, 783594 JUMPAIR, 811965 STINTS, 815769 LYSADERM, 830134 LiveRest, 834049 PODIUM, 845756 BIOCONTACT, 868392 Dignum, 869943 DERMAREP ; `SELECT p.id FROM project p WHERE p.id=830134 AND p.objective ILIKE '%Pressure Injury%' AND p.objective NOT ILIKE '%pressure ulcer%'` -> 830134
+  axes: branch=medical bucket=clinical-medicine topic=pressure-injury term_style=paraphrase satisfying=11
+  why: The paraphrase-friendly large seed for this slice. Read 830134 LiveRest - a wheelchair-embedded impedance, pressure and temperature sensing system predicting tissue-viability risk in spinal-cord-injury patients, written throughout as Pressure Injury (PI) and never as pressure ulcer. The textbook label matches 7 projects while the theme filter matches 11, so a question phrased as bedsores or pressure sores cannot be answered by exact-term matching. 4 of the 11 fall outside the clinical-medicine tag.
+
 ## Hybrid
 
 10 candidate seeds for `/draft-hybrid-question` (cp2 run), each a **topic x filter** combo whose TRUE survivor count - a real `COUNT(DISTINCT project.id)` re-executed in the merge pass - lands in a drafting window. Subtypes follow the bank's bounds: `filter-read` (L1, |gold|=1, 2-10 survivors), `filter-synthesize` (L2, ~5-20), `filter-compare` (L3, 2-4 contrastable), `filter-survey` (L3, >=5). Spread: all four filter dimensions used (country x3, date-range x2, fundingScheme x4, funding-percentile x1); level mix 3 L1 / 3 L2 / 4 L3; all four subtypes present. Every `evidence` line shows BOTH the topic's unfiltered total and the filtered survivor count, so the filter's pruning power (the structural bar for a hybrid question - projects must exist that satisfy the text but fail the filter) is visible; the textual answer (what the survivors do / found / how) lives only in free text, never in a stored column.
@@ -779,4 +1020,14 @@ The run deliberately left the frontier's largest-unexplored order and went after
 What the 15 seeds can be drafted into: the corpus-wide counts give 9 L1 (satisfying=1), 4 L2 (vector-37=2, vector-47=2, vector-42=4, vector-48=4) and 2 L3 (vector-38=5, vector-43=6). That was the intended L1 weighting and it more than covers the 4 open L1 slots; it means cp5 alone cannot feed an L3 quota - two seeds is the whole supply, and one of them (vector-38, differential privacy) sits right on the L2/L3 boundary at 5.
 
 The `read_first` mechanism worked as designed - each explorer fixed its pre-probe reads by budget/date extremes before any topic probe. It bit hardest on s02, where none of the three pre-probe projects became a candidate. On s03 (chemical sciences) only 1 of 3 pre-probe reads stayed outside the candidate set: PYROCO2 (101037009) and CSE-LBATTS (101021759) both became vector-44 and vector-45. Judged on the ordering, this is not a repeat of cp4 - the reads preceded the probes, so the `about:` was not written from search results. Judged on breadth, chemical sciences is still the thinnest of the three descriptions: its 4,331-project `about:` and two of its L1 seeds rest on the same pair of projects, so a later run should treat that entry's coverage claims as the weakest and re-read it from a different angle before drafting broadly from it.
+
+**cp6 (2026-07-27)**
+
+cp6 read five large euroSciVoc buckets that had already been mined for seeds but never mapped: biological sciences (8,057), physical sciences (5,788), electrical/electronic/information engineering (5,566), environmental engineering (5,178) and clinical medicine (4,661). All five slices RETURNED and VERIFIED with a map entry each and 4 candidates each - 20/20 against a target of 20, 161 evidence checks re-executed, 0 FAIL. Only the vector section ran; sql, hybrid, adversarial, ambiguous and distributions were skipped by scope and remain exactly as cp5 left them.
+
+The run's three aims were met. Counts split exactly 10 at corpus-wide 2-4 (vector-49, -50, -53, -54, -57, -58, -61, -62, -65, -66) and 10 at >= 5 (vector-51, -52, -55, -56, -59, -60, -63, -64, -67, -68), with no seed at 1, so nothing here feeds a vector-L1 cell. Every count was taken with `topic_filter` alone and the fenced count recorded beside it, and the gap is real and repeatedly non-trivial: quantum key distribution 8 corpus-wide vs 4 in-bucket, spiking hardware 17 vs 7, nutrient recovery 21 vs 15, pressure injury 11 vs 7. Seeds drawn from cp4/cp5 fenced counts should be assumed to under-state their level; these should not.
+
+Paraphrase supply improved but is narrower than the headline suggests. Of the 20, 10 are `term_style=exact`, 7 paraphrase, 3 mixed. At >= 5 - the band that can reach vector-L3 - 5 are paraphrase (vector-51 social-insect colonies 34, -55 atom interferometry 6, -60 spiking hardware 17, -63 nutrient recovery 21, -68 pressure injury 11) and one mixed. But only two seeds are recommended `topical-survey` (vector-63 and -68); the other eighteen are `topical-multi`. So the EMPTY vector-L3-survey-paraphrase cell is served by two candidates, not ten, and two of the paraphrase large seeds (34 and 21 members) will cost a drafter a heavy gold enumeration.
+
+Branch spread is the run's weakest axis: 8 candidates engineering, 8 natural sciences, 4 medical, and zero from social sciences, humanities or agricultural sciences - by design, since all five assigned buckets were STEM. Every seed varies on topic and term style only; no seed is built on funding scheme, country, date range or activity type, so drafting the whole of cp6 gives twenty questions of one shape ("which projects work on X"). The electrical-engineering map entry states its own limit plainly - device objectives name their technology verbatim, so paraphrase seeds are scarce there - and physical sciences flags fusion (2 projects naming tokamak/stellarator/divertor), plasma physics (40) and molecular/chemical physics (40) as too thin to mine.
 
