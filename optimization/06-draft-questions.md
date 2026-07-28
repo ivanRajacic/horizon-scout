@@ -143,11 +143,13 @@ Do not draft fewer than asked without saying so, and do not reuse a topic to fil
 `eval/drafts/draft-bank-*.jsonl` and does not recurse, so it cannot see a batch that has not
 staged its file yet. That is exactly why ids must be handed out centrally, once, here.
 
-**Probe the servers.** One `search_corpus("probe", k=1, snippet_chars=0)`. If the embedder
-(:8080) or reranker (:8082) is down, say so and launch nothing - the launch commands are
-pinned in `src/config.py`. Expect the first call after a server start to take minutes while
-models load; that is not an outage, and the probe should be given a long window rather than
-killed and retried.
+**Probe the servers - and start them if they are down.** If the embedder (:8080) or
+reranker (:8082) is not running, the launcher starts it itself with the exact pinned
+commands from `src/config.py` (decided 2026-07-28: the user should never have to be told
+"turn on the server"). Then one `search_corpus("probe", k=1, snippet_chars=0)`. Expect the
+first call after a server start to take minutes while models load; that is not an outage,
+and the probe should be given a long window rather than killed and retried. Only a server
+that will not come up even after being started stops the run.
 
 **Show the plan and wait.** A plain list: each slot with its cell, its chosen topic and its
 id, grouped by tab. Then ask. Nothing launches before you approve.
@@ -238,5 +240,6 @@ human gate is ticking `[x] APPROVE` and running `promote-drafts`, and it stays t
    should show up as setup work that happens once instead of three times, and as a big
    orchestrator whose own context stays small all run.
 4. **The failure paths, deliberately:** kill a tab mid-run and confirm it is reported as
-   dead rather than waited on; run it with the embedder stopped and confirm nothing
-   launches; ask for more questions than there are topics and confirm it stops and says so.
+   dead rather than waited on; run it with the embedder stopped and confirm it starts the
+   server itself and only stops if the server will not come up; ask for more questions than
+   there are topics and confirm it stops and says so.

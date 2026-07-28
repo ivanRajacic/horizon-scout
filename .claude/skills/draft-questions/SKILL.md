@@ -74,13 +74,21 @@ the group subdirectories - which is exactly why ids are handed out here, once, b
 tab exists, and why an orchestrator in packet mode never calls `next-ids` itself. Assign
 one id per slot. Failed slots leave id gaps; that is harmless and normal.
 
-### 5. Probe the servers
+### 5. Probe the servers - and start them yourself if they are down
 
-One `mcp__horizon-draft__search_corpus("probe", k=1, snippet_chars=0)`. The first call
-after a server start takes minutes while the embedder and reranker load - that is a cold
-start, not an outage; give it a long window rather than killing and retrying. If the probe
-returns an error (or hangs long past ~5 minutes), the embedder (:8080) or reranker (:8082)
-is down: **say so and launch nothing.** The launch commands are pinned in `src/config.py`.
+First check what is listening: the embedder is :8080, the reranker :8082
+(`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health`, same for 8082).
+
+**If either is not running, start it yourself - do not ask the user to.** The launch
+commands are `SERVER_LAUNCH_CMD` (embedder) and `RERANK_SERVER_LAUNCH_CMD` (reranker) in
+`src/config.py` - use them EXACTLY as written; the flags are load-bearing. Run each as a
+background process so it outlives your tool call.
+
+Then one `mcp__horizon-draft__search_corpus("probe", k=1, snippet_chars=0)`. The first
+call after a server start takes minutes while the models load - that is a cold start, not
+an outage; give it a long window rather than killing and retrying. Only if the probe
+returns an error, or a server you started dies again, or it hangs long past ~5 minutes:
+**say what you tried and what failed, and launch nothing.**
 
 ### 6. Show the plan and WAIT
 
@@ -168,7 +176,8 @@ and steers them, and the user will tell you when they are done.
 - You write exactly two kinds of file: packets and launch scripts, both under
   `eval/drafts/<group>/`. Never `eval/bank.jsonl`, never skills, never agents, never the
   corpus profile.
-- Every stop in the procedure is a real stop: not enough topics, servers down, and the
-  approval gate all end the turn with a plain-text message to the user.
+- Every stop in the procedure is a real stop: not enough topics, servers that will not
+  come up even after you start them, and the approval gate all end the turn with a
+  plain-text message to the user.
 - The order is the user's. Never plan more questions than asked, and never quietly plan
   fewer.
