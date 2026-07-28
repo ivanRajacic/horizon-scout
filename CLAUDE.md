@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation study (M5) measuring routing strategies against a hand-authored question bank (`eval/bank.jsonl`, 21 of a planned ~97).
+Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation study (M5) measuring routing strategies against a hand-authored question bank (`eval/bank.jsonl`, 40 of a planned ~97).
 
 Where the decisions live, in reading order:
 
