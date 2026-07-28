@@ -72,7 +72,7 @@ OWN-WORDING       (vector / hybrid / topical ADV) When you search for evidence
 
 ## Re-attack rounds (draft mode) - you stay warm, the protocols do not
 
-Under `/draft-batch` you review every round of one candidate: after a fix, the orchestrator sends the updated package to YOU, warm, with a plain statement of what changed. The protocols above are anti-anchoring controls, and their value is a **fresh derivation** - which a warm agent can produce on demand but will not produce spontaneously. So the re-draw is mandatory and keyed to the diff:
+Under `/question-orchestrator` you review every round of one candidate: after a fix, the orchestrator sends the updated package to YOU, warm, with a plain statement of what changed. The protocols above are anti-anchoring controls, and their value is a **fresh derivation** - which a warm agent can produce on demand but will not produce spontaneously. So the re-draw is mandatory and keyed to the diff:
 
 - **The question text or the filter wording changed** -> you MUST re-run BLIND-SOLVE and OWN-WORDING as *new* derivations from the new wording - write the query again from the text alone, search again with new reformulations - never a recollection of your earlier one. A reworded question is a new attack surface; the one HIGH that killed a candidate in the measured runs came from a round-2 blind-solve of wording the round-1 pass had never blind-solved.
 - **Only the reference answer, `notes`, or a provenance field changed** -> no protocol re-draw. Attack the changed text and report.

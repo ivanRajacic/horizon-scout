@@ -486,7 +486,7 @@ def cmd_validate_bank(args):
 
 
 def cmd_validate_record(args):
-    """Schema-validate ONE drafted record - the /draft-batch slot-close gate.
+    """Schema-validate ONE drafted record - the /question-orchestrator slot-close gate.
 
     Reads one JSON object from a file (or stdin with `-`); prints every
     violation and exits 1, or prints OK and exits 0."""
@@ -599,7 +599,7 @@ def cmd_batch_crosscheck(args):
 
 
 def cmd_journal_append(args):
-    """Append one slot transition to a /draft-batch working journal.
+    """Append one slot transition to a /question-orchestrator working journal.
 
     The payload (fields to set, JSON object) comes from a file or stdin with
     `-` - quoted-heredoc it, the same pattern as validate-record, so quotes
@@ -647,7 +647,7 @@ def cmd_journal_append(args):
 
 
 def cmd_write_batch(args):
-    """Render the two canonical /draft-batch outputs from the journal."""
+    """Render the two canonical /question-orchestrator outputs from the journal."""
     from src.eval.batch import BatchError, write_batch
 
     try:
@@ -776,7 +776,7 @@ def cmd_agent_trace(args):
 
 
 def cmd_promote_drafts(args):
-    """Append the APPROVE-ticked questions of a /draft-batch report to the
+    """Append the APPROVE-ticked questions of a /question-orchestrator report to the
     bank. Deterministic: parses the report's decision boxes, validates the
     combined bank before writing, refuses loudly on any problem."""
     from src.eval.bank import bank_summary, load_bank
@@ -980,7 +980,7 @@ def main():
     bc.set_defaults(fn=cmd_batch_crosscheck)
 
     ja = sub.add_parser("journal-append",
-                        help="append one slot transition to a /draft-batch "
+                        help="append one slot transition to a /question-orchestrator "
                              "working journal; payload merged over the "
                              "slot's latest line, envelope enforced")
     ja.add_argument("journal")
@@ -997,7 +997,7 @@ def main():
 
     wb = sub.add_parser("write-batch",
                         help="render the staged draft jsonl + review report "
-                             "from a /draft-batch working journal")
+                             "from a /question-orchestrator working journal")
     wb.add_argument("journal")
     wb.add_argument("--output-dir", default=None,
                     help="default: the journal's own directory")
@@ -1072,7 +1072,7 @@ def main():
     at.set_defaults(fn=cmd_agent_trace)
 
     pd = sub.add_parser("promote-drafts",
-                        help="append APPROVE-ticked /draft-batch drafts "
+                        help="append APPROVE-ticked /question-orchestrator drafts "
                              "to the bank")
     pd.add_argument("report", help="draft-report .md with ticked decision boxes")
     pd.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))

@@ -2,7 +2,7 @@
 
 **Kind:** prompt assets only. `.claude/agents/question-reviewer.md`,
 `.claude/agents/question-judge.md`, `.claude/skills/{review,judge}-question/SKILL.md`,
-`.claude/skills/draft-batch/SKILL.md`.
+`.claude/skills/question-orchestrator/SKILL.md`.
 **Status:** IMPLEMENTED 2026-07-26 (commits `048d777`, `1db32de`). Verified by the measured re-run: pending.
 **Depends on:** nothing.
 
@@ -13,7 +13,7 @@ The judge is already near-optimal - 12 tool calls across 9 invocations, no MCP t
 design, and it holds all the authority. **Do not add tools to the judge.**
 
 The cost is in the critic, and specifically in the four post-fix re-attacks. Every fix round
-today dispatches a **fresh** critic (`draft-batch/SKILL.md:80`). Ledger:
+today dispatches a **fresh** critic (`question-orchestrator/SKILL.md:80`). Ledger:
 
 | round | tokens | what it produced |
 |---|---|---|
@@ -40,7 +40,7 @@ is precisely the churn we are trying to remove, seen from the other side.
 
 ## Item 1 - Warm the critic, but make freshness follow the diff
 
-**Files:** `.claude/skills/draft-batch/SKILL.md:80` (the "fresh critic per round" rule and
+**Files:** `.claude/skills/question-orchestrator/SKILL.md:80` (the "fresh critic per round" rule and
 the "Who reads what" table at :73-78); `.claude/agents/question-reviewer.md`;
 `.claude/skills/review-question/SKILL.md` (the two mandatory protocols, :49-71).
 
@@ -57,7 +57,7 @@ State the reason in the skill so it is not re-litigated: the protocols are anti-
 controls (`review-question/SKILL.md:51`), and their value is a fresh derivation, which a
 warm agent can produce on demand but will not produce spontaneously.
 
-**Update the "Who reads what" table** (`draft-batch/SKILL.md:73-78`). The critic's "Never
+**Update the "Who reads what" table** (`question-orchestrator/SKILL.md:73-78`). The critic's "Never
 sees" column currently includes "prior rounds' findings"; that is no longer true for its own
 findings. It must still never see **the budget** or **what the judge wants** - those are the
 severity-calibration hazards, and they are the real content of the isolation rule. Say so
@@ -74,7 +74,7 @@ larger critic saving is item 4.
 ## Item 2 - A "recorded and accepted" finding state
 
 **Files:** `.claude/skills/judge-question/SKILL.md`, `.claude/agents/question-judge.md`,
-and the journal schema in `draft-batch/SKILL.md:115-119`.
+and the journal schema in `question-orchestrator/SKILL.md:115-119`.
 
 Today a MID the judge deliberately lets ride into the report is invisible to later rounds, so
 a subsequent critic re-discovers it and the judge must re-rule on it. Observed twice:
@@ -95,7 +95,7 @@ reported.
 
 ## Item 3 - Rewrite the within-candidate stop-rule trigger
 
-**File:** `.claude/skills/draft-batch/SKILL.md` stop-rules table (~:221-225), and
+**File:** `.claude/skills/question-orchestrator/SKILL.md` stop-rules table (~:221-225), and
 `judge-question/SKILL.md` where the judge enforces it.
 
 Current trigger: "the same defect `class` upheld twice on one candidate". Intent: *a fix that
@@ -136,7 +136,7 @@ filter, hyb-09 c1's from re-deriving the filter independently. Those must stay f
 
 ## Item 5 - Relay the lesson on candidate advance
 
-**File:** `.claude/skills/draft-batch/SKILL.md`, step 5's ABANDON branch (~:190).
+**File:** `.claude/skills/question-orchestrator/SKILL.md`, step 5's ABANDON branch (~:190).
 
 When hyb-09 advanced to its fallback, the orchestrator passed the abandoned candidate's
 **lesson** ("check where your topic sits in the euroSciVoc path before wording the scope;
@@ -155,7 +155,7 @@ Plan 02 item 2 makes the one-reading lesson permanent in the skill, so this rule
 
 ## Item 6 - `evidence_carried_forward` on fix rounds
 
-**Files:** `.claude/agents/question-drafter.md:20`, `.claude/skills/draft-batch/SKILL.md`
+**Files:** `.claude/agents/question-drafter.md:20`, `.claude/skills/question-orchestrator/SKILL.md`
 step 5's FIX branch (~:189).
 
 hyb-11's drafter did not re-run its pooled searches after a text edit, because
@@ -174,7 +174,7 @@ the critic.
 
 Prompt-asset changes; verify behaviourally.
 
-1. **Consistency sweep.** After editing, re-read `draft-batch/SKILL.md` end to end. Items 1,
+1. **Consistency sweep.** After editing, re-read `question-orchestrator/SKILL.md` end to end. Items 1,
    2, 3, 5 and 6 all touch it, and the "Who reads what" table, the graph at :42-65, the
    per-slot loop at :171-190 and the stop-rules table must agree with each other. This file
    is the one with the most cross-references in the repo.

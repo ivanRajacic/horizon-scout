@@ -1,4 +1,4 @@
-"""/draft-batch's deterministic nodes: allocation parsing, id assignment, the
+"""/question-orchestrator's deterministic nodes: allocation parsing, id assignment, the
 gap report, the batch cross-check, and the writer.
 
 The load-bearing test here is the round-trip: a report the writer produced,

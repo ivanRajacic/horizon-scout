@@ -12,7 +12,7 @@ calls are counted from its own transcript, never guessed from a time window
 over the shared MCP log (which cannot tell two concurrent agents apart).
 
 A transcript is also cut into STEPS. An agent that stays warm across rounds -
-the /draft-batch drafter through a fix round, the critic through a re-attack,
+the /question-orchestrator drafter through a fix round, the critic through a re-attack,
 the judge across every round of its slot - receives a new instruction by
 SendMessage and then sits idle until the next one arrives. One number per
 agent cannot tell work from waiting: the hyb-09 judge of the 2026-07-25 batch
@@ -418,7 +418,7 @@ def _tool_cell(spend: Spend) -> str:
             if spend.tools else "-")
 
 
-# A /draft-batch agent works one slot, and its spawn description names it:
+# A /question-orchestrator agent works one slot, and its spawn description names it:
 # "Draft hyb-09 candidate 2 viticulture", "Attack draft hyb-09 round 4",
 # "Judge slot hyb-09". That is what lets the cost of a question be added up
 # across the three agents that made it.

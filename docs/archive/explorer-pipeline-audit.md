@@ -54,7 +54,7 @@ The whole mechanism is **one status table over one pre-existing partition**. No 
 - **`## Corpus map`** - append-only region entries carrying `about:` / `texture:` / `good for:` / `thin for:`. Written from text that was READ, never from the tag: cp1 established that euroSciVoc leaf labels lie on interdisciplinary and MSCA projects (`ethnomycology` on an aquatic-fungi ecology project; `sustainable architecture` on district heating). An entry that paraphrases its own tag is worthless.
 - **`## Structural findings`** - open list, no denominator, for the non-topical material (trap pairs, absences, dual-encoded facts, value inventories) that serves the SQL / Adversarial / Ambiguous routes. Seeded with `sf-01` (the leading-slash bug) and `sf-02` (the branch-level vocabulary).
 
-Two properties beyond bookkeeping: **slice assignment now comes from the frontier**, so a run cannot re-explore where it has been; and **diversity is mechanical** - "prefer `mapped`-but-not-`mined`" is a column filter, not a judgment call, in both the explorer and `/draft-batch`.
+Two properties beyond bookkeeping: **slice assignment now comes from the frontier**, so a run cannot re-explore where it has been; and **diversity is mechanical** - "prefer `mapped`-but-not-`mined`" is a column filter, not a judgment call, in both the explorer and `/question-orchestrator`.
 
 **State at cp3:** `mapped 0/46 | mined 18/46 | unexplored 28/46`. 18 buckets carry cp1/cp2 candidate seeds but no map entry, so they read `unexplored` - seeds are not a map. Mapping them is the next run's first job.
 
@@ -73,11 +73,11 @@ Two properties beyond bookkeeping: **slice assignment now comes from the frontie
 
 ## Decision 3 - drafting side (minimum touch)
 
-`/draft-batch` step 2 now reads `frontier` alongside the route sections, **prefers candidates from `mapped`-but-not-`mined` buckets**, and passes the bucket's map entry (`good for:` / `thin for:` / `texture:`) to the drafter with the candidate block. That is the region knowledge exploration paid for, reaching the drafter so it knows what shape of question the region can support before it starts grounding. No change to the draft -> review -> fix loop.
+`/question-orchestrator` step 2 now reads `frontier` alongside the route sections, **prefers candidates from `mapped`-but-not-`mined` buckets**, and passes the bucket's map entry (`good for:` / `thin for:` / `texture:`) to the drafter with the candidate block. That is the region knowledge exploration paid for, reaching the drafter so it knows what shape of question the region can support before it starts grounding. No change to the draft -> review -> fix loop.
 
 ## Files changed
 
-`src/retrieval/schema_docs.md` (sd2), `src/retrieval/sql_path.py` (q2-pilot), `src/config.py` (both version bumps, cp3), `src/eval/mcp_server.py` + `tests/test_mcp_server.py` (the only code change), `.claude/agents/corpus-explorer.md`, `.claude/skills/explore-corpus/SKILL.md`, `.claude/skills/draft-batch/SKILL.md`, `src/retrieval/corpus_profile.md` (cp3 sections), `working-plan.md`.
+`src/retrieval/schema_docs.md` (sd2), `src/retrieval/sql_path.py` (q2-pilot), `src/config.py` (both version bumps, cp3), `src/eval/mcp_server.py` + `tests/test_mcp_server.py` (the only code change), `.claude/agents/corpus-explorer.md`, `.claude/skills/explore-corpus/SKILL.md`, `.claude/skills/question-orchestrator/SKILL.md`, `src/retrieval/corpus_profile.md` (cp3 sections), `working-plan.md`.
 
 ## Not changed, and why
 
@@ -87,7 +87,7 @@ Two properties beyond bookkeeping: **slice assignment now comes from the frontie
 
 ## Decisions taken (2026-07-25) - deterministic nodes + typed state, IMPLEMENTED
 
-Second pass, opened after the same lens that produced the `/draft-batch` four-node re-architecture was turned on the explorer. The cp3 pass fixed **efficiency**; it did not touch **who does what**, so all three defects that re-architecture diagnosed on the drafting side were still here:
+Second pass, opened after the same lens that produced the `/question-orchestrator` four-node re-architecture was turned on the explorer. The cp3 pass fixed **efficiency**; it did not touch **who does what**, so all three defects that re-architecture diagnosed on the drafting side were still here:
 
 1. **Expensive nodes doing work that has a right answer.** The Opus orchestrator recomputed the frontier, built the orientation block, assigned ids, dedupped, checked the width rule, sampled two queries per section as its only correctness net, counted telemetry out of a log file, and hand-wrote the insertions.
 2. **Untyped state.** Subagents returned markdown; the orchestrator held every block through merge, spot-check *and* write, then re-emitted it - the context-bloat leak, and the failure mode the 2026 orchestrator-worker literature names (payload re-reads, ~15x a chat turn).
@@ -133,4 +133,4 @@ All five are regression-tested.
 
 - [ ] Run `/explore-corpus map=6` - the first run of the new design, and the new baseline. Confirm: no orientation re-derivation in `draft_mcp.jsonl`, frontier advances `mapped 0/46 -> 6/46`, every map entry carries real `read:` ids, `## Coverage notes` written by the critic, telemetry line present, and a deliberate mid-run kill leaves completed slices intact in the journal.
 - [ ] Decide whether `## Distributions` should be filled in the same run (it serves Study 0.5 and would make the orientation block free thereafter).
-- [ ] Still deferred from the drafting pass: **P2** incremental checkpointing in `/draft-batch` - now demonstrated on the explorer side, so the pattern to copy exists.
+- [ ] Still deferred from the drafting pass: **P2** incremental checkpointing in `/question-orchestrator` - now demonstrated on the explorer side, so the pattern to copy exists.

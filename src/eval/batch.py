@@ -1,4 +1,4 @@
-"""Deterministic nodes of the /draft-batch pipeline.
+"""Deterministic nodes of the /question-orchestrator pipeline.
 
 Everything in the batch loop that has a right answer lives here rather than in
 an Opus subagent: what the allocation table says, which ids are free, whether
@@ -37,7 +37,7 @@ from src.llm import fingerprint
 PLAN_DOC_PATH = ROOT / "horizon-scout.md"
 DRAFTS_DIR = ROOT / "eval" / "drafts"
 
-# Routes /draft-batch can fill, and their id prefixes. The other allocation
+# Routes /question-orchestrator can fill, and their id prefixes. The other allocation
 # rows (ambiguous, adversarial, compositional) are interactive-only.
 ROUTE_PREFIX = {"sql": "sql", "vector": "vec", "hybrid": "hyb"}
 ID_RE = re.compile(r"^(sql|vec|hyb)-(\d+)$")
@@ -205,7 +205,7 @@ def next_ids(counts: dict[str, int], bank_path: Path = BANK_PATH,
     for route, n in counts.items():
         prefix = ROUTE_PREFIX.get(route)
         if prefix is None:
-            raise BatchError(f"route {route!r} has no id prefix; /draft-batch "
+            raise BatchError(f"route {route!r} has no id prefix; /question-orchestrator "
                              f"fills {', '.join(ROUTE_PREFIX)} only")
         start = highest[prefix]
         assigned[route] = [f"{prefix}-{start + i:02d}"
@@ -263,7 +263,7 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
         cells.append(f"{f}+{s}/{row.get('total', '?')}")
         out.append(f"| {route} | " + " | ".join(cells) + " |")
 
-    out += ["", "interactive only - NOT draftable by /draft-batch:"]
+    out += ["", "interactive only - NOT draftable by /question-orchestrator:"]
     for route in ("ambiguous", "adversarial", "compositional"):
         row = targets.get(route, {})
         if route == "adversarial":

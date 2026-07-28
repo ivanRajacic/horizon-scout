@@ -1,4 +1,4 @@
-"""promote-drafts tests: the deterministic bridge from a ticked /draft-batch
+"""promote-drafts tests: the deterministic bridge from a ticked /question-orchestrator
 report to eval/bank.jsonl. Every refusal class fails LOUDLY and leaves the
 bank byte-identical; only a fully decided, fully valid report appends."""
 

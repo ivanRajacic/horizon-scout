@@ -1,7 +1,7 @@
 # Plan 05 - Per-question workspace store
 
 **Kind:** code (architecture). `src/eval/mcp_server.py`, `src/eval/batch.py`,
-`.claude/skills/draft-batch/SKILL.md`, all three agent files.
+`.claude/skills/question-orchestrator/SKILL.md`, all three agent files.
 **Status: PROPOSAL - not approved. Decide before starting.**
 **Relationship to other plans:** supersedes plan 04 item 1 (`journal-append`). Plans 01, 02,
 03 and plan 04 items 2-4 are independent and stay valid either way.
@@ -34,7 +34,7 @@ Give the nodes somewhere to write and all three problems close at once:
   candidate is live. Small messages, nothing to re-type, nothing to corrupt, nothing blocking
   the other three slots.
 - `write-batch` generates the report from the workspace instead of from a hand-assembled
-  journal - which it already does in spirit (`draft-batch/SKILL.md:231`: both canonical
+  journal - which it already does in spirit (`question-orchestrator/SKILL.md:231`: both canonical
   outputs are "written by `write-batch`, never by you").
 - The drafter's fix round reads its own recorded adjudications instead of carrying the whole
   grounding transcript. Fix rounds are **51% of drafter spend** (541,041 of 1,058,094 tokens
@@ -54,7 +54,7 @@ Keyed by `question_id` + candidate index + round:
 - findings, rulings, dispositions
 - the drafter's checklist, why-good, history
 
-Essentially today's journal `slot` schema (`draft-batch/SKILL.md:99-125`), but written by the
+Essentially today's journal `slot` schema (`question-orchestrator/SKILL.md:99-125`), but written by the
 node that produced each part rather than transcribed by the bus.
 
 ## The constraint that must not be broken
@@ -109,7 +109,7 @@ If that trade is not acceptable, do plan 04 item 1 instead and stop here.
    `write-batch` and `src/eval/batch.py` change; keeping both means two sources of truth,
    which is worse than either.
 3. **Lifecycle.** The journal is "disposable after promote"
-   (`draft-batch/SKILL.md:129`). Same for the workspace? What happens to it on a failed slot,
+   (`question-orchestrator/SKILL.md:129`). Same for the workspace? What happens to it on a failed slot,
    and is it a crash-recovery layer (the journal is) or just a cache?
 4. **Concurrency.** Four slots writing at once to one DuckDB file - check what the write path
    does under contention, given the corpus connection is already a single stdio process.

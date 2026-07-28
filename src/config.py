@@ -144,7 +144,7 @@ DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 # cannot drift between them. Same versioning discipline as schema_docs: bump
 # on any meaningful edit; the content hash (src.llm.fingerprint) catches
 # silent ones. bb1 (2026-07-25) is the first version, written with the
-# four-node re-architecture of /draft-batch. bb2 (2026-07-25) added section 7
+# four-node re-architecture of /question-orchestrator. bb2 (2026-07-25) added section 7
 # (Seeds), the standard for the upstream corpus-explorer: it decides which
 # seeds the other three nodes ever see, so it is held to the same definition of
 # good. `frontier-report` pastes that section into every explorer spawn prompt.

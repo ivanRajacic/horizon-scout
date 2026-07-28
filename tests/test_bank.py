@@ -55,7 +55,7 @@ def test_valid_records_load(tmp_path):
 
 
 def test_validate_record_accepts_a_clean_record():
-    # The single-record gate /draft-batch runs at slot close.
+    # The single-record gate /question-orchestrator runs at slot close.
     assert validate_record(VALID_SQL) == []
     assert validate_record(VALID_VECTOR) == []
 

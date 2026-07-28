@@ -15,7 +15,7 @@ This skill authors `route=sql` questions at levels L1-L3 only. ADV, vector, hybr
 
 ## Orchestrated mode (question-drafter subagents only)
 
-When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
+When this skill is followed by a `question-drafter` subagent under `/question-orchestrator` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
 - **Read `src/eval/bank_brief.md` first.** It is the shared standard the drafter, the critic, and the judge all work from - what the bank is for, what "good" means, the route/level/subtype reference, and the role boundaries. The most useful thing in it for you: a defective question does not produce a wrong answer, it produces a wrong finding in a study.
 - **The precheck gate.** Before you may emit a package, call `precheck_record(<your finished RECORD>)` and get `ok: true`. It re-executes the mechanical claims - gold SQL runs and is non-empty, every `answer_column` is really in the result, the recorded `schema_docs_hash` is the live one. A FAIL is a fact; fix the draft and call again. Include the passing result in your package as the `PRECHECK` section.

@@ -1,6 +1,6 @@
-"""Promote approved /draft-batch drafts into the live bank.
+"""Promote approved /question-orchestrator drafts into the live bank.
 
-/draft-batch stages accepted drafts as eval/drafts/draft-bank-<date>.jsonl plus
+/question-orchestrator stages accepted drafts as eval/drafts/draft-bank-<date>.jsonl plus
 a review report carrying a `Draft-bank-file:` header and one machine-parsable
 decision line per staged question (`Decision: [x] APPROVE  [ ] REJECT`). This
 module parses the ticked boxes, validates existing-bank-plus-approved as a

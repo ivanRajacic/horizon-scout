@@ -6,7 +6,7 @@
 
 ## Context
 
-The 2026-07-25 `/draft-batch` run cost 1,961,828 subagent tokens over 1 h 37 m for 4
+The 2026-07-25 `/question-orchestrator` run cost 1,961,828 subagent tokens over 1 h 37 m for 4
 questions. Two of its biggest cost events were things a machine could have settled:
 
 - Candidate hyb-09 c1 cost **~519k tokens** across two drafter passes, two critic rounds
@@ -76,7 +76,7 @@ candidate seeds - a FAIL would forbid a legitimate 25-survivor synthesize. This 
 adding WARN to the check-status vocabulary (currently PASS/FAIL/N-A). Because `ok` filters
 on `"FAIL"` (~:849), WARN is a no-op for the gate - which is the point. The WARN travels in
 the returned CHECKLIST, which both the critic and the judge see
-(`draft-batch/SKILL.md:76-77`).
+(`question-orchestrator/SKILL.md:76-77`).
 
 ### `GOLD-BOUNDS`
 
@@ -92,7 +92,7 @@ the returned CHECKLIST, which both the critic and the judge see
 
 FAIL is correct here - `validate-record` already enforces it (`bank.py:309-317`), so the
 gain is *earliness*: the failure moves inside the drafter's own loop, before it emits,
-instead of at slot close where it costs a pass (`draft-batch/SKILL.md:183`).
+instead of at slot close where it costs a pass (`question-orchestrator/SKILL.md:183`).
 
 ### While here
 
@@ -170,7 +170,7 @@ useless without "where".
 > runs over the promoted bank forever. A CORDIS title legitimately carrying `&` would make
 > the bank permanently unloadable by a check that is really about a transcription hazard.
 > `src/cli.py:458` is exactly the boundary the run log identifies as unguarded -
-> `draft-batch/SKILL.md:176-183` pipes the drafter's raw returned text into this command on
+> `question-orchestrator/SKILL.md:176-183` pipes the drafter's raw returned text into this command on
 > stdin - and it fires while the drafter is still warm and messageable.
 
 Zero occurrences in `eval/bank.jsonl` or any staged draft today, so nothing breaks.

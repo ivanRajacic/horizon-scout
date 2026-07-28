@@ -1,6 +1,6 @@
 # Pipeline optimization - execution plans
 
-*Opened 2026-07-26, from analysis of the 2026-07-25 four-node `/draft-batch` A/B run
+*Opened 2026-07-26, from analysis of the 2026-07-25 four-node `/question-orchestrator` A/B run
 (`eval/drafts/ab-run-log-2026-07-25.md`). Successor to the proposals in
 `docs/archive/drafting-pipeline-audit.md`, which called for "tighter upstream vetting so dead
 candidates are caught before a drafter is spawned" - this folder measures that problem
@@ -106,7 +106,7 @@ Considered and decided against - recorded so they are not re-proposed.
   `pooling_evidence.index_fingerprint` (`draft-vector-question/SKILL.md:71`); the
   orchestrator's setup probe is a dispatch-time gate, not a 97-minute liveness guarantee
   (this run had a cold-start hang *and* three `ENOTFOUND` deaths mid-run); and it triggers
-  the outage path at `draft-batch/SKILL.md:194`, which deliberately does not consume a
+  the outage path at `question-orchestrator/SKILL.md:194`, which deliberately does not consume a
   candidate. Its waste is the payload, not the call - fixed by plan 01 item 1.
 - **A hard re-scope cap on the drafter.** Would not have blocked hyb-09 c1 (which
   re-scoped exactly once), does not price the actual cost (crossing from the S<=20
@@ -131,7 +131,7 @@ Considered and decided against - recorded so they are not re-proposed.
 ./.venv/Scripts/python.exe -m src.cli validate-bank     # must still pass
 ```
 
-The real measurement is an end-to-end `/draft-batch` re-run on hybrid cells, compared
+The real measurement is an end-to-end `/question-orchestrator` re-run on hybrid cells, compared
 against the four baseline numbers above. `data/logs/draft_mcp.jsonl` gives the per-channel
 breakdown; the `search_corpus` entry-count x mean-chunk-length product is the direct check
 on plan 01.

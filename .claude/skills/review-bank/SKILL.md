@@ -7,7 +7,7 @@ argument-hint: [output_path]
 # /review-bank
 
 > **STALE - do not run without fixing this file first (noted 2026-07-25).** The
-> `question-reviewer` node was reframed as a pure critic by the /draft-batch
+> `question-reviewer` node was reframed as a pure critic by the /question-orchestrator
 > re-architecture: it no longer emits a `VERDICT` line and no longer uses
 > `SOUND` / `FATAL-RECOVERABLE` / `FATAL-DEAD`, nor the older `FLAWED` /
 > `BROKEN` and `MAJOR` / `NOTE` vocabularies this file's report format still

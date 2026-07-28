@@ -1,7 +1,7 @@
 # Plan 04 - Orchestrator throughput
 
 **Kind:** code (`src/eval/batch.py`, `src/cli.py`) + prompt assets
-(`.claude/skills/draft-batch/SKILL.md`).
+(`.claude/skills/question-orchestrator/SKILL.md`).
 **Status:** IMPLEMENTED 2026-07-26 (commits `0e3472e`, `1db32de`). Verified by the measured re-run: pending.
 **Depends on:** nothing.
 **Note:** plan 05 (workspace store) would supersede **item 1 only**. Items 2-4 survive it
@@ -13,7 +13,7 @@ This plan is about **wall clock**, not tokens.
 
 The 2026-07-25 run took **1 h 37 m 26 s** of wall clock against **86 minutes of total
 agent-time**. That comparison is the finding: with a concurrency cap of 6 MCP-touching
-agents (`draft-batch/SKILL.md:167`) and only 4 slots, four independent drafter→critic→judge
+agents (`question-orchestrator/SKILL.md:167`) and only 4 slots, four independent drafter→critic→judge
 chains should have overlapped heavily. Summing per-invocation durations into per-slot chains:
 
 | slot | chain duration |
@@ -41,7 +41,7 @@ lockstep.
 
 **Files:** `src/eval/batch.py` (implementation), `src/cli.py` (subcommand registration
 alongside the existing `gap-report` / `next-ids` / `validate-record` / `batch-crosscheck` /
-`write-batch` at ~:817-857), `.claude/skills/draft-batch/SKILL.md` (the per-slot loop, and
+`write-batch` at ~:817-857), `.claude/skills/question-orchestrator/SKILL.md` (the per-slot loop, and
 the permissions block at :16-25).
 
 > **Skip this item if plan 05 is going ahead** - the workspace store removes payload
@@ -57,11 +57,11 @@ python -m src.cli journal-append <journal> --id hyb-08 --status REVIEWING [--fin
 Requirements:
 
 - **Payload on stdin via a quoted heredoc**, the pattern `validate-record` already uses
-  (`draft-batch/SKILL.md:176-183`) - so a payload containing quotes or `$` cannot break the
+  (`question-orchestrator/SKILL.md:176-183`) - so a payload containing quotes or `$` cannot break the
   shell.
 - **Enforce the typed envelope.** `kind`, `question_id`, `status` and `cell` must be present
   and well-formed on every line; `record` stays **opaque** and may be schema-invalid mid-run.
-  That distinction is deliberate (`draft-batch/SKILL.md:127`) - preserve it exactly.
+  That distinction is deliberate (`question-orchestrator/SKILL.md:127`) - preserve it exactly.
 - **Latest-line-wins per `question_id`** is the existing read semantics; the appender must
   not break `write-batch`'s expectations. Read `write-batch` / `src/eval/batch.py` before
   designing the interface.
@@ -75,7 +75,7 @@ hand-written append, and add it to the permissions block at :16-25.
 
 ## Item 2 - Warm-up before the health probe
 
-**File:** `.claude/skills/draft-batch/SKILL.md:161-163` (step 4).
+**File:** `.claude/skills/question-orchestrator/SKILL.md:161-163` (step 4).
 
 The first `search_corpus("probe", k=1)` **hung past the 120 s tool timeout**, had to be
 backgrounded, then stopped with `TaskStop` and re-issued; the retry returned promptly with
@@ -93,7 +93,7 @@ Pairs well with plan 01 item 1: the probe should also pass `snippet_chars=0`.
 
 ## Item 3 - Document resume-from-transcript as the preferred retry
 
-**Files:** `.claude/skills/draft-batch/SKILL.md:186` (the critic retry bound) and the
+**Files:** `.claude/skills/question-orchestrator/SKILL.md:186` (the critic retry bound) and the
 `Bounded everything` standing rule at :235.
 
 Three agents - the hyb-08 fix drafter, the hyb-09 critic and the hyb-11 critic - died
@@ -114,7 +114,7 @@ when the transcript is unusable.**
 
 ## Item 4 - Make concurrent dispatch explicit
 
-**File:** `.claude/skills/draft-batch/SKILL.md:165-167`.
+**File:** `.claude/skills/question-orchestrator/SKILL.md:165-167`.
 
 The cap is 6 MCP-touching agents; with 4 slots the cap was never the binding constraint. What
 was missing is an instruction to **dispatch all slots' drafters before handling any return**,
@@ -151,10 +151,10 @@ reranker, are the things to watch.
 
 ## Do not
 
-- Add automatic resume to the journal. `draft-batch/SKILL.md:129` states resume is manual by
+- Add automatic resume to the journal. `question-orchestrator/SKILL.md:129` states resume is manual by
   design; the journal is a disposable working file, not a canonical output.
 - Let the orchestrator adjudicate anything it appends. It is a message bus
-  (`draft-batch/SKILL.md:29`, :232); `journal-append` must not compute, compare or judge -
+  (`question-orchestrator/SKILL.md:29`, :232); `journal-append` must not compute, compare or judge -
   only marshal.
 - Write `eval/bank.jsonl` from any of this. The two canonical outputs come from `write-batch`
   and promotion stays a separate human-gated step.

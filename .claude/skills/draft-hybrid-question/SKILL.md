@@ -15,7 +15,7 @@ This skill authors `route=hybrid` questions at levels L1-L3 only. SQL questions 
 
 ## Orchestrated mode (question-drafter subagents only)
 
-When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
+When this skill is followed by a `question-drafter` subagent under `/question-orchestrator` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
 - **Read `src/eval/bank_brief.md` first.** It is the shared standard the drafter, the critic, and the judge all work from - what the bank is for, what "good" means, the route/level/subtype reference, and the role boundaries. The most useful thing in it for you: a defective question does not produce a wrong answer, it produces a wrong finding in a study.
 - **The precheck gate.** Before you may emit a package, call `precheck_record(<your finished RECORD>)` and get `ok: true`. On this route it re-executes `filter_sql` and requires the live survivor set to match `survivor_ids` exactly, gold to sit inside it, every gold project to carry text, and the recorded `filter_evidence.schema_docs_hash` to be the live one. A FAIL is a fact; fix the draft and call again. Include the passing result in your package as the `PRECHECK` section.

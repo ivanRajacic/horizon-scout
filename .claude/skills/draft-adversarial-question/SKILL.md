@@ -15,7 +15,7 @@ This skill authors `level=ADV` questions on any route. L1-L3 questions belong to
 
 ## Orchestrated mode (question-drafter subagents only)
 
-When this skill is followed by a `question-drafter` subagent under `/draft-batch` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
+When this skill is followed by a `question-drafter` subagent under `/question-orchestrator` (the prompt says so and carries a pre-assigned `question_id` plus a corpus-profile candidate block):
 
 - The candidate block is the subject and the batch order fixes subtype/route - skip every propose-and-wait step. All grounding, absence-proof execution, reference, and reviewer steps run unchanged and in full.
 - Use the pre-assigned `question_id`, never "next free".

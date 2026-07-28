@@ -247,7 +247,7 @@ Prompt-asset changes cannot be unit-tested. Verify by:
    by `BANK_BRIEF_VERSION` / `SCHEMA_DOCS_VERSION` / `CORPUS_PROFILE_VERSION` in
    `src/config.py`, and bump what applies. The drafting skills themselves are not currently
    versioned - if that is still true, note it rather than inventing a scheme.
-3. **Single-slot smoke run.** Run `/draft-batch` for **one** hybrid slot and read
+3. **Single-slot smoke run.** Run `/question-orchestrator` for **one** hybrid slot and read
    `data/logs/draft_mcp.jsonl` for that run. Expect: fewer total calls than the 19-27
    baseline, no `get_bank_questions` call, `snippet_chars` present on every `search_corpus`
    call, and the fit-gate queries appearing in the first 3-4 calls.
@@ -263,7 +263,7 @@ Prompt-asset changes cannot be unit-tested. Verify by:
 - Cap first-round tool calls (see item 3).
 - Remove the per-drafter `search_corpus` probe - it feeds the vector route's required
   `pooling_evidence.index_fingerprint` and triggers the outage path at
-  `draft-batch/SKILL.md:194`. Fix its payload (item 5), not the call.
+  `question-orchestrator/SKILL.md:194`. Fix its payload (item 5), not the call.
 - Add a re-scope counter. Plan 01's `SURVIVOR-WINDOW` expresses that constraint as a number.
   hyb-09 c1's re-scope was *correct*; what was missing was noticing that 46 survivors no
   longer fit a `filter-synthesize` cell.
