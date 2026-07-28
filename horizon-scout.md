@@ -128,18 +128,20 @@ Single file/schema. Labels are columns; each metric script filters on which labe
 | | L1 | L2 | L3 | route total |
 |---|---|---|---|---|
 | SQL | 7 | 11 | 5* | 23 |
-| Vector | 7 | 10 | 7 | 24 |
+| Vector | 12 | 16 | 12 | 40 |
 | Hybrid | 6 | 10 | 7 | 23 |
 | Ambiguous-route | — spread — | | | 10 |
 | Adversarial (zero-match, false-presup., data-absent) | | | | 14 |
 | Compositional | | | | 3 |
-| **Total** | | | | **~97** |
+| **Total** | | | | **~113** |
 
 \* conditional on the pilot smoke test.
 
 Skew rationale: L2 is modal everywhere (realistic + router-fair). **L1-SQL and L1-vector stay fat — they are RQ1's clean-route cells, where the v4 tie prediction is tested; under-populating them makes a tie indistinguishable from noise.** Adversarial+ambiguous do double duty (route-quality analysis + refusal-overlay cells). With a capable generator, the trap/value-grounded/L3/adversarial cells carry the discrimination — weight authoring effort there.
 
 **v4 rebalance — RESOLVED (2026-07-23, before any cell filled past v3 counts):** the modest shift toward the discriminating cells is adopted; the table above is the binding allocation. Deltas vs v3 (in git history): SQL L1 8→7, L2 10→11 (the extra is value-grounded), L3 4→5 (the extra is a trap); vector L1 8→7; hybrid L1 7→6; adversarial 12→14 (~4–5 per subtype). Rationale: Haiku is expected near ceiling on clean cells, so marginal L1 questions carry little information, while trap/value-grounded/adversarial are where H1 predicts any real gap AND are the cheapest cells to author (execution-verified, no pooling). Clean-cell aggregate drops only 36→35, so the tie stays measurable at the route/tier level where magnitude claims live. No further stripping of L1 — beyond this, a tie becomes indistinguishable from noise.
+
+**Vector raised to 40 - RESOLVED (2026-07-28, user's decision, at vector 24 filled):** the vector route goes 24 -> 40, split 12 / 16 / 12 across L1 / L2 / L3 - the v4 proportions held and scaled, so the L2-modal shape and the fat L1 that RQ1's tie prediction needs both survive. Reason: vector is the route the retrieval study actually measures - the four conditions are only separable on topical questions, and 24 was sized for a bank that would carry its weight in SQL and hybrid. Bank total ~97 -> ~113. Nothing else in the table moves.
 
 **term_style balance (added 2026-07-23):** RQ2's crossover table needs both legs — aim ~50/50 exact-term/paraphrase WITHIN vector and WITHIN hybrid, tracked in the drafting gap report; a drift past ~60/40 in either route gets corrected by the next questions authored, never by relabeling.
 
