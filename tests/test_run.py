@@ -547,19 +547,37 @@ def test_no_judge_skips_phase_b_but_keeps_the_case_for_later(tmp_path):
 
 def test_a_judge_exception_marks_one_record_not_the_batch(tmp_path):
     bank = bank_of(tmp_path, VEC_Q, HYB_Q)
-    ask = FakeAsk({"vec-01": {"text": VEC_Q["text"],
-                              "result": FakeAskResult("vector",
-                                                      chunks=[chunk(101)])},
-                   "hyb-01": {"text": HYB_Q["text"],
-                              "result": FakeAskResult("scoped",
-                                                      chunks=[chunk(201)])}})
+    results = {"vec-01": {"text": VEC_Q["text"],
+                          "result": FakeAskResult("vector",
+                                                  chunks=[chunk(101)])},
+               "hyb-01": {"text": HYB_Q["text"],
+                          "result": FakeAskResult("scoped",
+                                                  chunks=[chunk(201)])}}
+    runs = tmp_path / "runs"
     pool = FakePool({"vec-01": RuntimeError("ragas exploded")})
-    meta = run_bank(bank, ["router"], runs_dir=tmp_path / "runs",
-                    ask=ask, pool=pool)
+    meta = run_bank(bank, ["router"], run_id="r1", runs_dir=runs,
+                    ask=FakeAsk(results), pool=pool)
     records = {r["question_id"]: r for r in read_records(meta["records_path"])}
     assert records["vec-01"]["score"]["passed"] is None
     assert "ragas exploded" in records["vec-01"]["score"]["reason"]
     assert records["hyb-01"]["score"]["passed"] is True
+
+    # The errored question stays `executed`, still owed a verdict - a judge
+    # crash is retryable, not terminal.
+    assert records["vec-01"]["status"] == "executed"
+    assert needs_judge(records["vec-01"])
+    assert meta["n_unjudged"] == 1
+
+    # --resume retries exactly that question's judging, paying for nothing else.
+    second = FakeAsk(results)
+    meta = run_bank(bank, ["router"], run_id="r1", runs_dir=runs, resume=True,
+                    ask=second, pool=FakePool())
+    assert second.calls == []                    # generation never re-ran
+    finished = {r["question_id"]: r for r in read_records(meta["records_path"])}
+    assert finished["vec-01"]["status"] == "judged"
+    assert finished["vec-01"]["score"]["passed"] is True
+    assert finished["hyb-01"]["spend"]["judge"]["calls"] == 1   # not re-judged
+    assert meta["n_unjudged"] == 0
 
 
 # --- run mechanics ---

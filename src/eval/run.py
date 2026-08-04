@@ -121,8 +121,10 @@ def needs_judge(record: dict) -> bool:
     """Is there judging still owed on this record?
 
     True for a topical question that executed but has no verdict yet - whether
-    it was killed mid-judging or deliberately left unjudged by --no-judge. This
-    is the one predicate --resume decides on, so it lives in one place.
+    it was killed mid-judging, deliberately left unjudged by --no-judge, or its
+    judge attempt errored (a judge error keeps status `executed` so it is
+    retried, never buried). This is the one predicate --resume decides on, so
+    it lives in one place.
     """
     return (record.get("status") == STATUS_EXECUTED
             and bool(record.get("judge_case")))
@@ -358,6 +360,7 @@ def judge_pending(records: list[dict], pool, *, records_path: Path,
 
     started = time.perf_counter()
     landed: list[dict] = []
+    landed_ids: set[str] = set()
     write_failures: list[Exception] = []
 
     def on_verdict(case, verdict) -> None:
@@ -365,9 +368,14 @@ def judge_pending(records: list[dict], pool, *, records_path: Path,
         if record is None:                       # not ours; cannot happen
             return
         qid = record["question_id"]
+        landed_ids.add(qid)
         record.setdefault("spend", {})["judge"] = _spend_dict(usage.take(qid))
         apply_verdict(record, verdict)
-        record["status"] = STATUS_JUDGED
+        # A judge error stays `executed`: judge_case is still on the record, so
+        # needs_judge holds and --resume retries this question instead of
+        # skipping past it. Only a real verdict is terminal.
+        record["status"] = (STATUS_EXECUTED if isinstance(verdict, Exception)
+                            else STATUS_JUDGED)
         # Judging is concurrent, so per-question judge wall clock is not
         # measurable. What IS measurable is how far into the batch this verdict
         # landed, which is the honest version of the same number.
@@ -388,16 +396,16 @@ def judge_pending(records: list[dict], pool, *, records_path: Path,
     elapsed = time.perf_counter() - started
 
     # A verdict that never landed means judge_batch broke its own contract of
-    # one result per case. Say so on the record rather than leaving it looking
-    # merely unjudged.
+    # one result per case. Say so on the record - and leave it `executed`, the
+    # same as a judge error, so --resume retries it rather than moving on.
     for record in pending:
-        if record.get("status") != STATUS_JUDGED:
-            record["status"] = STATUS_JUDGED
-            record["score"] = {"method": "judge", "passed": None,
-                               "reason": "judge returned no verdict for this "
-                                         "case"}
-            checkpoint(records_path, record, meta)
-            landed.append(record)
+        if record["question_id"] in landed_ids:
+            continue
+        record["score"] = {"method": "judge", "passed": None,
+                           "reason": "judge returned no verdict for this "
+                                     "case"}
+        checkpoint(records_path, record, meta)
+        landed.append(record)
 
     if write_failures:
         raise write_failures[0]
