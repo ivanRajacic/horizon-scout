@@ -4,7 +4,10 @@ build_fts_index() (re)builds a `chunk_fts` table whose indexed `search_text`
 concatenates the project acronym, project title, and the clean chunk text, so a
 distinctive acronym like "EBOVAC" matches lexically even when it appears only in
 the project title. The index is created with the configured Porter stemmer and
-English stopword list.
+English stopword list, and a sidecar meta file next to the database (same
+pattern as the FAISS index_meta.json) records what the build used - stemmer,
+stopwords, row count - so fts_index_is_fresh() can tell a current index from a
+stale one without opening the database for writing.
 
 LexicalRetriever serves searches over a READ-ONLY connection and returns the
 SAME SearchResult shape as the dense VectorSearcher, carrying the CLEAN chunk
@@ -16,10 +19,18 @@ Score is the BM25 relevance returned by DuckDB's match_bm25 macro (higher =
 better); per the base.py contract only list order is meaningful.
 """
 
+import json
+from pathlib import Path
+
 import duckdb
 
 from src import config
 from src.retrieval.base import SearchResult
+
+
+def fts_meta_path(db_path=config.DB_PATH) -> Path:
+    """The sidecar meta file for db_path's FTS index (horizon.fts-meta.json)."""
+    return Path(db_path).with_suffix(".fts-meta.json")
 
 
 def build_fts_index(db_path=config.DB_PATH):
@@ -27,7 +38,9 @@ def build_fts_index(db_path=config.DB_PATH):
 
     Opens a WRITE connection (create_fts_index cannot run read-only). The
     indexed text is `acronym || ' ' || title || ' ' || chunk.text`; the clean
-    `text` column is kept alongside so searches return it verbatim.
+    `text` column is kept alongside so searches return it verbatim. Writes the
+    sidecar meta file last, so a build that dies midway leaves the old meta
+    behind and the index still reads as stale.
     """
     con = duckdb.connect(str(db_path))
     try:
@@ -45,7 +58,45 @@ def build_fts_index(db_path=config.DB_PATH):
             "PRAGMA create_fts_index('chunk_fts', 'chunk_id', 'search_text', "
             f"stemmer='{config.FTS_STEMMER}', "
             f"stopwords='{config.FTS_STOPWORDS}', overwrite=1)")
-        return n
+    finally:
+        con.close()
+    fts_meta_path(db_path).write_text(json.dumps(
+        {"stemmer": config.FTS_STEMMER, "stopwords": config.FTS_STOPWORDS,
+         "n_rows": n}), encoding="utf-8")
+    return n
+
+
+def fts_index_is_fresh(db_path=config.DB_PATH) -> bool:
+    """True when chunk_fts covers the chunk table exactly and the sidecar meta
+    says it was built with the configured stemmer and stopwords.
+
+    Opens the database read-only, so it is safe while other processes (e.g. a
+    horizon-draft MCP server) hold the file. Anything missing or mismatched -
+    no meta file, a config change, a count drift - reads as stale, and the
+    caller rebuilds. The stemmer/stopwords comparison is what makes the check
+    honest: a bare row-count match cannot see a config change.
+    """
+    try:
+        meta = json.loads(fts_meta_path(db_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if (meta.get("stemmer") != config.FTS_STEMMER
+            or meta.get("stopwords") != config.FTS_STOPWORDS):
+        return False
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        tables = {r[0] for r in con.execute(
+            "SELECT table_name FROM information_schema.tables").fetchall()}
+        if not {"chunk", "chunk_fts"} <= tables:
+            return False
+        has_index = con.execute(
+            "SELECT count(*) FROM information_schema.schemata "
+            "WHERE schema_name = 'fts_main_chunk_fts'").fetchone()[0]
+        if not has_index:
+            return False
+        n_chunks = con.execute("SELECT count(*) FROM chunk").fetchone()[0]
+        n_fts = con.execute("SELECT count(*) FROM chunk_fts").fetchone()[0]
+        return meta.get("n_rows") == n_fts == n_chunks
     finally:
         con.close()
 
