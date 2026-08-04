@@ -32,6 +32,15 @@ VEC_A = {
 }
 
 
+ADV_A = {
+    "question_id": "adv-90", "text": "What score did the widget project get?",
+    "expected_route": "sql", "level": "ADV", "subtype": "data-absent",
+    "absence_evidence": [
+        {"sql": "SELECT 1 AS x WHERE 1 = 0", "expect": "zero",
+         "key_result": "no score facet anywhere"}],
+}
+
+
 def make_files(tmp_path, drafts, decisions, bank_records=(),
                draft_file_line=None):
     """Write a bank, a draft jsonl, and a report with the given decisions.
@@ -90,6 +99,13 @@ def test_appends_after_existing_entries_without_trailing_newline(tmp_path):
                     encoding="utf-8")
     promote(report, bank)
     assert bank_ids(bank) == ["sql-90", "vec-90"]
+
+
+def test_adv_heading_recognized_and_promoted(tmp_path):
+    report, bank, _ = make_files(tmp_path, [ADV_A], {"adv-90": "approve"})
+    res = promote(report, bank)
+    assert res.promoted == ["adv-90"]
+    assert bank_ids(bank) == ["adv-90"]
 
 
 def test_all_rejected_is_a_no_op(tmp_path):

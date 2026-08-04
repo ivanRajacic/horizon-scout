@@ -24,7 +24,7 @@ class PromoteError(Exception):
 
 
 DRAFT_FILE_RE = re.compile(r"^Draft-bank-file:\s*(?P<path>.+?)\s*$")
-HEADING_ID_RE = re.compile(r"^##\s+((?:sql|vec|hyb)-\d+)\b")
+HEADING_ID_RE = re.compile(r"^##\s+((?:sql|vec|hyb|adv)-\d+)\b")
 DECISION_RE = re.compile(
     r"^Decision:\s*\[(?P<approve>[ xX])\]\s*APPROVE\s+"
     r"\[(?P<reject>[ xX])\]\s*REJECT\s*$")
