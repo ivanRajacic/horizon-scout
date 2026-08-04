@@ -4,6 +4,9 @@ How to execute the question bank against the system and read what comes back.
 The runner is `src/eval/run.py`, driven by `python -m src.cli run-bank`. This is
 the real Study-2 runner; it is also what the smoke tests use, at a smaller size.
 
+Study 1 has its own runner, `run-retrieval`, which varies the retriever instead
+of the router. It is the last section of this file.
+
 ## Before you start
 
 Two things must be up:
@@ -161,3 +164,93 @@ A `claude -p` call is a whole Claude Code session, so every call also spends a
 little Haiku on the harness's own overhead. That is why a Sonnet-judged run
 shows a small Haiku figure in the by-model breakdown. It is real, and it is not
 a role violation.
+
+## The retrieval ladder (`run-retrieval`) - a diagnostic, not a study
+
+**Status (2026-08-03): this already ran, on 2026-07-29, and its job is done.**
+Retrieval is no longer measured (`horizon-scout.md` §2). The ladder picked
+`hybrid_rerank` (recall@20 0.875, best of four), that is pinned at
+`config.RUNTIME_RETRIEVER`, and the run is reported as the pilot that selected
+the stack rather than as a result. `run-retrieval` stays in the codebase because
+it is cheap and it is the evidence the choice rests on - but re-running it
+changes nothing, and changing the stack it chose invalidates every run recorded
+against it.
+
+`run-retrieval` is the other runner, `src/eval/retrieval_run.py`. It puts the
+bank's vector questions through four retrieval conditions - lexical (BM25),
+dense (FAISS), hybrid (RRF fusion of the two), and hybrid plus cross-encoder
+rerank - generates an answer per condition, and scores each condition's ranking.
+
+### Before you start
+
+- the **embedder** (:8080) for dense, hybrid and hybrid_rerank. A
+  `--conditions lexical` run does not need it and does not check for it.
+- the **reranker** (:8082) for hybrid_rerank only.
+- the **Claude CLI** always, for generation and judging.
+- the **FTS index** must be built, for anything with a lexical side. If it is
+  missing, `LexicalRetriever` says so with the fix; the fix is
+  `./.venv/Scripts/python.exe -m src.cli build-fts`.
+
+All four are proven up before the first answer is generated.
+
+### Fetch once, reuse everywhere
+
+Per question there is exactly one FTS query, one embed call plus one FAISS
+search, one rerank call, and four generator calls. All four conditions are
+assembled from those same two deep lists, so the only thing that differs between
+the rows of the ladder is the fusion and the rerank, never which chunks happened
+to come back on that particular fetch.
+
+At the default `--depth 100` the hybrid condition assembled this way is
+identical to the shipped `HybridRetriever`, which is what makes the measurement
+one of the real stack. `--k-gen 10` is what the generator sees; the ranking
+metrics are scored off the full depth-100 list, so a gold project at rank 15
+counts as found even though no generator saw it.
+
+### Cost
+
+4 conditions x 40 questions = 160 answers. Fully judged that is roughly $120
+priced (Max subscription, so about EUR 0 billed - the same caveat as above).
+Judging is the expensive half, so the normal shape is two stages: run phase A,
+read the answers, then pay for verdicts.
+
+### The commands you will actually type
+
+One question, no judging, to prove the wiring:
+
+```bash
+./.venv/Scripts/python.exe -m src.cli run-retrieval \
+    --ids vec-01 --no-judge --run-id ladder-smoke
+```
+
+The full ladder, judged:
+
+```bash
+./.venv/Scripts/python.exe -m src.cli run-retrieval --run-id ladder
+```
+
+Or the two-stage version of the same thing:
+
+```bash
+./.venv/Scripts/python.exe -m src.cli run-retrieval --run-id ladder --no-judge
+# read data/runs/ladder/report.md, then:
+./.venv/Scripts/python.exe -m src.cli run-retrieval --run-id ladder --resume
+```
+
+`--resume` behaves as it does for `run-bank`, keyed on (condition, question)
+rather than question alone: it re-runs only the conditions a question is
+missing, and judges whatever is still owed without paying for generation twice.
+Narrowing works the same way too: `--ids`, `--limit`, `--conditions`.
+`--routes` defaults to `vector` because that is the cell Study 1 measures.
+
+### What to read afterwards
+
+`data/runs/<run-id>/records.jsonl` and `report.md`, same as `run-bank`, with one
+line per (condition, question) instead of one per question. Every record carries
+its own `params`, deep-list `ranking` block and `retrieved_project_ids`, so
+every number in the report can be recomputed from the records alone.
+
+The ranking ladder at the top of the report is the headline - it is what picks
+the stack for Study 2. The exact-term against paraphrase table below it is RQ2's
+real result: where the lexical row crosses the dense row between the two halves
+is the finding, not the overall winner.

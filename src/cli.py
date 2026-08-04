@@ -27,6 +27,12 @@
                              [--bank eval/bank.jsonl] [-k 10] [--no-judge]
                              [--ids sql-01 ...] [--routes vector hybrid]
                              [--limit N] [--run-id NAME] [--resume]
+  python -m src.cli run-retrieval [--conditions lexical dense hybrid
+                                                hybrid_rerank]
+                                  [--bank eval/bank.jsonl] [--depth 100]
+                                  [--k-gen 10] [--no-judge] [--ids vec-01 ...]
+                                  [--routes vector] [--limit N]
+                                  [--run-id NAME] [--resume]
 """
 
 import argparse
@@ -36,8 +42,8 @@ import sys
 import textwrap
 from pathlib import Path
 
-from src.config import (CHUNK_TARGET, CLAUDE_CONCURRENCY, JUDGE_DEFAULT,
-                        ROOT, SPLIT_OVERLAP)
+from src.config import (CHUNK_TARGET, CLAUDE_CONCURRENCY, FUSE_CANDIDATES,
+                        JUDGE_DEFAULT, ROOT, SPLIT_OVERLAP)
 
 # Transcription-boundary guard: agent-returned packages have arrived with
 # HTML entities (&lt; &gt; &amp;) where the source text had < > &. Unnoticed,
@@ -883,6 +889,60 @@ def cmd_run_bank(args):
         sys.exit(1)
 
 
+def cmd_run_retrieval(args):
+    """Study 1: the four-condition retrieval ladder over the bank's vector
+    questions - fetch once per question, assemble four conditions from it,
+    generate and judge each, then write the ladder report."""
+    from src.embed_client import check_server as check_embed
+    from src.eval.retrieval_run import (CONDITIONS, ConsoleProgress,
+                                        build_components, run_retrieval)
+    from src.llm import check_generator
+
+    bad = [c for c in args.conditions if c not in CONDITIONS]
+    if bad:
+        print(f"unknown condition(s) {bad}; choose from {list(CONDITIONS)}")
+        sys.exit(2)
+    if args.resume and not args.run_id:
+        print("--resume needs --run-id: it resumes a specific run directory.")
+        sys.exit(2)
+
+    # Every server this run depends on is proven up before the first paid
+    # generation. Four conditions x forty questions is 160 answers; finding out
+    # at answer 41 that the reranker is down is the expensive way to learn it.
+    check_generator()                    # generation goes through `claude -p`
+    reranker = None
+    if any(c in ("dense", "hybrid", "hybrid_rerank") for c in args.conditions):
+        check_embed()
+    if "hybrid_rerank" in args.conditions:
+        from src.retrieval.rerank import RerankClient
+        reranker = RerankClient()
+        reranker.check_server()          # raises with the relaunch command
+
+    try:
+        # Built here rather than inside the run so the lexical retriever's own
+        # "FTS index not found - run build-fts" failure also lands before
+        # anything is spent. That check is not re-implemented here: it is
+        # LexicalRetriever.__init__'s, surfaced.
+        components = build_components(args.conditions, reranker=reranker)
+    except (RuntimeError, ValueError) as e:
+        print(f"\n{e}")
+        sys.exit(2)
+
+    try:
+        meta = run_retrieval(Path(args.bank), args.conditions,
+                             depth=args.depth, k_gen=args.k_gen,
+                             judge=not args.no_judge, ids=args.ids,
+                             routes=args.routes, limit=args.limit,
+                             run_id=args.run_id, judge_model=args.model,
+                             resume=args.resume, components=components,
+                             progress=ConsoleProgress())
+    except ValueError as e:
+        print(f"\n{e}")
+        sys.exit(2)
+    if meta["n_errors"]:
+        sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="python -m src.cli")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1124,6 +1184,52 @@ def main():
     rb.add_argument("--model", choices=["haiku", "sonnet"],
                     default=JUDGE_DEFAULT, help="judge model")
     rb.set_defaults(fn=cmd_run_bank)
+
+    rr = sub.add_parser("run-retrieval",
+                        help="the four-condition retrieval ladder - one fetch "
+                             "per question, four conditions assembled from it, "
+                             "judged and reported. DIAGNOSTIC ONLY: RQ2 was "
+                             "dropped as a study 2026-08-03; the 07-29 ladder "
+                             "run is the recorded evidence for picking "
+                             "config.RUNTIME_RETRIEVER, and the study now runs "
+                             "that one stack via run-bank")
+    rr.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    rr.add_argument("--conditions", nargs="+",
+                    default=["lexical", "dense", "hybrid", "hybrid_rerank"],
+                    help="lexical | dense | hybrid | hybrid_rerank "
+                         "(default: all four)")
+    rr.add_argument("--depth", type=int, default=FUSE_CANDIDATES,
+                    help=f"how deep each of lexical and dense is fetched ONCE "
+                         f"per question; every condition is assembled from "
+                         f"those two lists and the ranking metrics are "
+                         f"computed off the full list, not off the chunks the "
+                         f"generator saw. Default {FUSE_CANDIDATES} because it "
+                         f"equals FUSE_CANDIDATES, which makes the hybrid "
+                         f"condition identical to the shipped HybridRetriever")
+    rr.add_argument("--k-gen", type=int, default=10,
+                    help="chunks handed to the generator per condition")
+    rr.add_argument("--no-judge", action="store_true",
+                    help="phase A only - execute and trace, spend nothing on "
+                         "judging. The judge cases are still saved, so "
+                         "--resume can judge them later without re-running "
+                         "generation")
+    rr.add_argument("--ids", nargs="+", default=None,
+                    help="run only these question ids, in this order")
+    rr.add_argument("--routes", nargs="+", default=["vector"],
+                    help="run only these expected_routes (default: vector - "
+                         "Study 1 is the vector cell)")
+    rr.add_argument("--limit", type=int, default=None)
+    rr.add_argument("--run-id", default=None,
+                    help="name the run directory (default: "
+                         "retrieval_<timestamp>)")
+    rr.add_argument("--resume", action="store_true",
+                    help="continue the run named by --run-id: skip "
+                         "(condition, question) pairs already executed, and "
+                         "judge any still owed a verdict without paying for "
+                         "generation again")
+    rr.add_argument("--model", choices=["haiku", "sonnet"],
+                    default=JUDGE_DEFAULT, help="judge model")
+    rr.set_defaults(fn=cmd_run_retrieval)
 
     args = ap.parse_args()
     args.fn(args)
