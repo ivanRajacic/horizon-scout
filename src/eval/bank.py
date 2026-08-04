@@ -27,6 +27,15 @@ Schema decisions (locked 2026-07-22):
   `gold_project_ids`, `term_style`, `pooling_evidence` (the SCOPED pooled
   record), and `filter_evidence` (executed filter SQL, enumerated survivor
   ids + true count, schema_docs hash); gold must be a subset of survivors.
+- v2.3 (2026-08-04): ADV entries are born verified too, on the same terms.
+  `absence_evidence` is the typed, re-executable proof - a list of
+  {sql, expect, key_result} in the shape `explore.py` already uses, so
+  `precheck_record` can re-run every claim instead of reading a paragraph
+  of `notes`. `twin_id` names the answerable bank question the adversarial
+  one was derived from: it is the control a refusal-only set cannot supply,
+  and its gold is the near-miss proof (it returns rows, the perturbation
+  returns none). Required for zero-match and false-presupposition, optional
+  for data-absent, forbidden for unanswerable, which derives from nothing.
 
 Route vocabulary follows the plan doc (sql | vector | hybrid | ambiguous);
 the runtime router calls the hybrid mode "scoped" - ROUTE_TO_MODE is the one
@@ -67,6 +76,11 @@ HYBRID_SUBTYPE_LEVELS = {
 ADV_SUBTYPES = ("zero-match", "false-presupposition", "data-absent",
                 "unanswerable")
 
+# ADV subtypes that must name the answerable question they were derived from.
+# data-absent may carry one (same subject, missing facet) but need not;
+# unanswerable derives from nothing and must not.
+TWINNED_ADV_SUBTYPES = ("zero-match", "false-presupposition")
+
 # Gold-count bounds per hybrid subtype (hybrid level is defined by what the
 # filter does to the evidence problem, so the bound hangs off the subtype,
 # not the level). Value = (min, max); None = unbounded.
@@ -83,12 +97,34 @@ POOLING_EVIDENCE_KEYS = ("conditions_run", "k", "pooled_candidate_count",
 FILTER_EVIDENCE_KEYS = ("filter_sql", "survivor_count", "survivor_ids",
                         "schema_docs_hash")
 
+# Required keys of one ADV absence-proof entry, and what an entry may claim:
+# "zero" = this query must come back empty, "rows" = it must come back full.
+# Same {sql, key_result} shape as explore.py's evidence, for the same reason:
+# a claim nothing can re-execute is a claim nobody checked. A "zero" query may
+# be written either way - no rows, or a single-cell COUNT returning 0; both
+# read as empty to precheck_record, and nothing else does.
+ABSENCE_EVIDENCE_KEYS = ("sql", "expect", "key_result")
+ABSENCE_EXPECTATIONS = ("zero", "rows")
+
+# The minimum each ADV subtype's proof must contain. zero-match and
+# data-absent turn on something being empty; false-presupposition turns on the
+# refuting result being FULL (the data says X, the premise says not-X - "the
+# data is silent" is data-absent wearing the wrong label). unanswerable has no
+# single shape: its probes are per-interpretation, so only non-emptiness holds.
+ADV_ABSENCE_REQUIRED = {
+    "zero-match": ("zero",),
+    "data-absent": ("zero",),
+    "false-presupposition": ("rows",),
+    "unanswerable": (),
+}
+
 # Only these keys may appear in a bank record - typos never pass silently.
 KNOWN_FIELDS = frozenset({
     "question_id", "text", "expected_route", "acceptable_routes",
     "level", "subtype", "specification", "term_style", "compositional",
     "gold_sql", "sql_comparison", "answer_columns", "level_evidence",
     "gold_project_ids", "pooling_evidence", "filter_evidence",
+    "twin_id", "absence_evidence",
     "reference_answer", "schema_docs_hash", "reviewer_override", "notes",
 })
 
@@ -120,6 +156,8 @@ class BankQuestion:
     gold_project_ids: list[int] | None = None
     pooling_evidence: dict | None = None
     filter_evidence: dict | None = None
+    twin_id: str | None = None
+    absence_evidence: list | None = None
     reference_answer: str | None = None
     schema_docs_hash: str | None = None
     reviewer_override: bool = False
@@ -176,6 +214,73 @@ def _validate_subtype(route, level, subtype, bad):
         elif level not in allowed:
             bad(f"hybrid subtype {subtype!r} is only legal at "
                 f"{'/'.join(allowed)}, got {level}")
+
+
+def _validate_adversarial(obj, qid, level, subtype, bad):
+    """The two ADV-only fields, both level-scoped so the ladder is untouched.
+
+    Whether `twin_id` actually resolves to a question is a cross-record check
+    and lives in `load_bank` - one record cannot see the rest of the bank.
+    """
+    adv = level == "ADV"
+
+    twin_id = obj.get("twin_id")
+    if twin_id is not None:
+        if not adv:
+            bad("twin_id is only legal on level=ADV questions")
+        if not isinstance(twin_id, str) or not twin_id.strip():
+            bad("twin_id must be a non-empty string when present")
+        elif twin_id == qid:
+            bad("twin_id must not point at the question itself")
+        if adv and subtype == "unanswerable":
+            bad("unanswerable questions carry no twin_id - there is no "
+                "answerable question they are a perturbation of")
+    elif adv and subtype in TWINNED_ADV_SUBTYPES:
+        bad(f"ADV subtype {subtype!r} requires twin_id - the answerable bank "
+            "question it was derived from, which is both the control and the "
+            "near-miss proof")
+
+    absence = obj.get("absence_evidence")
+    if absence is None:
+        if adv:
+            bad("ADV questions require absence_evidence - the typed, "
+                "re-executable proof; an absence in prose is an assertion")
+        return
+    if not adv:
+        bad("absence_evidence is only legal on level=ADV questions")
+    if not isinstance(absence, list) or not absence:
+        bad("absence_evidence must be a non-empty list of "
+            "{sql, expect, key_result} objects")
+        return
+
+    seen_expects = set()
+    for i, item in enumerate(absence):
+        at = f"absence_evidence[{i}]"
+        if not isinstance(item, dict):
+            bad(f"{at} must be an object")
+            continue
+        missing = [key for key in ABSENCE_EVIDENCE_KEYS if key not in item]
+        if missing:
+            bad(f"{at} missing keys: {', '.join(missing)}")
+        sql = item.get("sql")
+        if (not isinstance(sql, str) or not sql.strip()
+                or sql.strip().split()[0].upper() not in ("SELECT", "WITH")):
+            bad(f"{at}.sql must be a single SELECT (or WITH...SELECT)")
+        expect = item.get("expect")
+        if expect not in ABSENCE_EXPECTATIONS:
+            bad(f"{at}.expect must be one of {ABSENCE_EXPECTATIONS}, "
+                f"got {expect!r}")
+        else:
+            seen_expects.add(expect)
+        key_result = item.get("key_result")
+        if not isinstance(key_result, str) or not key_result.strip():
+            bad(f"{at}.key_result must be a non-empty string - what the query "
+                "is proving, in words, so a failure is readable cold")
+
+    for required in ADV_ABSENCE_REQUIRED.get(subtype, ()) if adv else ():
+        if required not in seen_expects:
+            bad(f"ADV subtype {subtype!r} requires at least one "
+                f"absence_evidence entry with expect={required!r}")
 
 
 def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | None:
@@ -378,6 +483,8 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
     elif hybrid_ladder:
         bad("hybrid questions require filter_evidence")
 
+    _validate_adversarial(obj, qid, level, subtype, bad)
+
     for key in ("reference_answer", "notes"):
         v = obj.get(key)
         if v is not None and (not isinstance(v, str) or not v.strip()):
@@ -399,6 +506,8 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
         gold_project_ids=gold_ids,
         pooling_evidence=pooling_evidence,
         filter_evidence=filter_evidence,
+        twin_id=obj.get("twin_id"),
+        absence_evidence=obj.get("absence_evidence"),
         reference_answer=obj.get("reference_answer"),
         schema_docs_hash=schema_docs_hash,
         reviewer_override=obj.get("reviewer_override", False),
@@ -410,8 +519,10 @@ def validate_record(obj: dict, where: str = "record") -> list[str]:
 
     The single-record entry point behind `python -m src.cli validate-record`,
     used to gate one drafted slot at close time. Same rules as `load_bank`
-    applies per line - only the cross-record checks (duplicate ids) are out of
-    scope, since one record cannot collide with itself.
+    applies per line - only the cross-record checks are out of scope, since one
+    record cannot collide with itself (duplicate ids) or see the question it
+    was derived from (whether `twin_id` resolves to a real, answerable entry).
+    Both are caught at promotion, where the whole bank is in hand.
     """
     if not isinstance(obj, dict):
         return [f"{where}: record must be a JSON object"]
@@ -449,6 +560,23 @@ def load_bank(path: str | Path) -> list[BankQuestion]:
             continue
         seen_ids.add(q.question_id)
         questions.append(q)
+
+    # Cross-record: an adversarial question's twin must be a real question in
+    # this bank, and an answerable one. A twin that is itself ADV is two
+    # refusals pointing at each other, which controls for nothing.
+    by_id = {q.question_id: q for q in questions}
+    for q in questions:
+        if q.twin_id is None:
+            continue
+        parent = by_id.get(q.twin_id)
+        if parent is None:
+            errors.append(f"[{q.question_id}]: twin_id {q.twin_id!r} is not a "
+                          "question in this bank")
+        elif parent.level == "ADV":
+            errors.append(f"[{q.question_id}]: twin_id {q.twin_id!r} is itself "
+                          "an ADV question - the twin is the answerable "
+                          "control, so it must be on the ladder")
+
     if errors:
         raise BankValidationError(errors)
     return questions
@@ -472,6 +600,8 @@ def bank_summary(questions: list[BankQuestion]) -> str:
         "gold_project_ids": sum(q.gold_project_ids is not None for q in questions),
         "pooling_evidence": sum(q.pooling_evidence is not None for q in questions),
         "filter_evidence": sum(q.filter_evidence is not None for q in questions),
+        "absence_evidence": sum(q.absence_evidence is not None for q in questions),
+        "twinned": sum(q.twin_id is not None for q in questions),
         "reference_answer": sum(q.reference_answer is not None for q in questions),
         "term_style": sum(q.term_style is not None for q in questions),
         "underspecified": sum(q.specification == "underspecified" for q in questions),

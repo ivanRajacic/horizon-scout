@@ -32,6 +32,22 @@ VALID_VECTOR = {
 }
 
 
+# An adversarial entry is born verified like every other: it names the
+# answerable question it perturbs (VALID_VECTOR) and carries the typed proof
+# of its own emptiness. Any bank written with it must contain the twin too.
+VALID_ADV = {
+    "question_id": "t-adv", "text": "Which projects cure dragons?",
+    "expected_route": "vector", "level": "ADV", "subtype": "zero-match",
+    "gold_project_ids": [], "twin_id": "t-02",
+    "absence_evidence": [
+        {"sql": "SELECT id FROM project WHERE title ILIKE '%dragon%'",
+         "expect": "zero", "key_result": "no project mentions dragons"},
+        {"sql": "SELECT id FROM project WHERE title ILIKE '%wyvern%'",
+         "expect": "zero", "key_result": "near-miss synonym is empty too"},
+    ],
+}
+
+
 def write_bank(tmp_path, records):
     p = tmp_path / "bank.jsonl"
     p.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
@@ -174,18 +190,92 @@ def test_acceptable_routes_only_on_ambiguous(tmp_path):
 
 
 def test_adv_level_takes_adv_subtypes_on_any_route(tmp_path):
-    ok = {"question_id": "t-adv", "text": "Which projects cure dragons?",
-          "expected_route": "vector", "level": "ADV",
-          "subtype": "zero-match", "gold_project_ids": []}
-    assert load_bank(write_bank(tmp_path, [ok]))[0].is_adversarial
+    qs = load_bank(write_bank(tmp_path, [VALID_VECTOR, VALID_ADV]))
+    assert qs[1].is_adversarial
     assert "level=ADV requires subtype" in errors_of(
-        tmp_path, [{**ok, "subtype": "lookup"}])
+        tmp_path, [VALID_VECTOR, {**VALID_ADV, "subtype": "lookup"}])
 
 
 def test_zero_match_must_have_empty_gold(tmp_path):
-    rec = {"question_id": "t-zm", "text": "q", "expected_route": "vector",
-           "level": "ADV", "subtype": "zero-match", "gold_project_ids": [1]}
-    assert "zero-match" in errors_of(tmp_path, [rec])
+    assert "zero-match" in errors_of(
+        tmp_path, [VALID_VECTOR, {**VALID_ADV, "gold_project_ids": [1]}])
+
+
+def test_adv_requires_absence_evidence(tmp_path):
+    rec = {k: v for k, v in VALID_ADV.items() if k != "absence_evidence"}
+    assert "require absence_evidence" in errors_of(
+        tmp_path, [VALID_VECTOR, rec])
+
+
+def test_absence_evidence_entries_are_checked(tmp_path):
+    def adv(evidence):
+        return [VALID_VECTOR, {**VALID_ADV, "absence_evidence": evidence}]
+
+    ok = VALID_ADV["absence_evidence"][0]
+    assert "must be a single SELECT" in errors_of(
+        tmp_path, adv([{**ok, "sql": "DROP TABLE project"}]))
+    assert "expect must be one of" in errors_of(
+        tmp_path, adv([{**ok, "expect": "maybe"}]))
+    assert "key_result must be a non-empty string" in errors_of(
+        tmp_path, adv([{**ok, "key_result": "  "}]))
+    assert "missing keys: key_result" in errors_of(
+        tmp_path, adv([{"sql": ok["sql"], "expect": "zero"}]))
+    assert "non-empty list" in errors_of(tmp_path, adv([]))
+
+
+def test_each_adv_subtype_demands_the_right_shape_of_proof(tmp_path):
+    # A zero-match whose proof contains no query that must come back empty is
+    # not proving the thing its label claims.
+    rows_only = [{"sql": "SELECT id FROM project", "expect": "rows",
+                  "key_result": "projects exist"}]
+    assert "expect='zero'" in errors_of(
+        tmp_path, [VALID_VECTOR,
+                   {**VALID_ADV, "absence_evidence": rows_only}])
+    # ...and a false-presupposition needs the refuting result to be FULL:
+    # "the data is silent" is data-absent wearing the wrong label.
+    fp = {**VALID_ADV, "question_id": "t-fp", "subtype": "false-presupposition"}
+    del fp["gold_project_ids"]
+    assert "expect='rows'" in errors_of(tmp_path, [VALID_VECTOR, fp])
+    ok = load_bank(write_bank(tmp_path, [
+        VALID_VECTOR, {**fp, "absence_evidence": rows_only}]))
+    assert ok[1].absence_evidence == rows_only
+
+
+def test_twin_id_is_required_forbidden_or_optional_by_subtype(tmp_path):
+    no_twin = {k: v for k, v in VALID_ADV.items() if k != "twin_id"}
+    assert "requires twin_id" in errors_of(tmp_path, [VALID_VECTOR, no_twin])
+
+    # unanswerable derives from nothing, so a twin is a contradiction.
+    una = {**VALID_ADV, "question_id": "t-un", "subtype": "unanswerable"}
+    del una["gold_project_ids"]
+    assert "carry no twin_id" in errors_of(tmp_path, [VALID_VECTOR, una])
+
+    # data-absent may carry one, and may not.
+    absent = {k: v for k, v in VALID_ADV.items()
+              if k not in ("twin_id", "gold_project_ids")}
+    absent |= {"question_id": "t-da", "subtype": "data-absent"}
+    assert len(load_bank(write_bank(tmp_path, [VALID_VECTOR, absent]))) == 2
+    assert len(load_bank(write_bank(
+        tmp_path, [VALID_VECTOR, {**absent, "twin_id": "t-02"}]))) == 2
+
+
+def test_twin_must_resolve_to_an_answerable_question(tmp_path):
+    assert "not a question in this bank" in errors_of(
+        tmp_path, [VALID_VECTOR, {**VALID_ADV, "twin_id": "t-nope"}])
+    # Two refusals pointing at each other control for nothing.
+    other_adv = {**VALID_ADV, "question_id": "t-adv2", "twin_id": "t-adv"}
+    assert "is itself an ADV question" in errors_of(
+        tmp_path, [VALID_VECTOR, VALID_ADV, other_adv])
+    assert "must not point at the question itself" in errors_of(
+        tmp_path, [VALID_VECTOR, {**VALID_ADV, "twin_id": "t-adv"}])
+
+
+def test_adv_only_fields_are_rejected_on_the_ladder(tmp_path):
+    assert "only legal on level=ADV" in errors_of(
+        tmp_path, [VALID_VECTOR, {**VALID_SQL, "twin_id": "t-02"}])
+    assert "only legal on level=ADV" in errors_of(
+        tmp_path, [{**VALID_SQL,
+                    "absence_evidence": VALID_ADV["absence_evidence"]}])
 
 
 def test_term_style_rejected_on_pure_sql(tmp_path):
@@ -317,11 +407,10 @@ def test_filter_evidence_shape_and_route(tmp_path):
 
 def test_adv_vector_needs_no_pooling_evidence(tmp_path):
     # ADV is off-ladder: zero-match has an empty gold set by definition and
-    # carries no pooled-verification requirement.
-    rec = {"question_id": "t-adv2", "text": "Which projects cure dragons?",
-           "expected_route": "vector", "level": "ADV",
-           "subtype": "zero-match", "gold_project_ids": []}
-    assert len(load_bank(write_bank(tmp_path, [rec]))) == 1
+    # carries no pooled-verification requirement. What it does carry is its
+    # own proof - absence_evidence - and the twin that proves the near miss.
+    rec = {**VALID_ADV, "question_id": "t-adv2"}
+    assert len(load_bank(write_bank(tmp_path, [VALID_VECTOR, rec]))) == 2
 
 
 def test_gold_sql_must_be_select(tmp_path):
