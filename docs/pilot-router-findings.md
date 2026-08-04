@@ -1,5 +1,12 @@
 # Pilot findings - the `pilot-router` run
 
+**Status (2026-08-03): the findings stand; the "Suggested order" section at the
+bottom is superseded by `horizon-scout.md` §8.** Two things it left open are now
+decided there: the threshold contradiction is settled in favour of reporting
+continuous scores with no pass gate (§5), and Part 2 fixes 1, 3 and 4 are
+scheduled before the baseline run rather than after it, because a baseline
+measured through them would not mean anything.
+
 What the first end-to-end bank run showed, and what to do about it.
 
 Run: `data/runs/pilot-router/` (records, report, progress log), executed

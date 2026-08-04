@@ -53,15 +53,15 @@ All hypotheses, sub-predictions, quadrant tables, and decision rules below are d
 - Key covariate: `rows/chunks passed to gen` per trace, ideally split into passed vs. plausibly-relevant (post-hoc judgeable on the topical subset).
 - Lineage: v3's H1 predicted a router accuracy win driven by weak-model distraction; that prediction is void with the generator swap and recorded as such in predictions.md.
 
-### RQ2 — Retrieval ladder (instrumentation; Study 1)
+### RQ2 — Retrieval ladder — **SCRATCHED (2026-08-03, user's decision)**
 
-*Which retrieval configuration — dense-only, BM25-only, RRF fusion, fusion+rerank — best retrieves relevant CORDIS projects, and do components contribute where the literature says?*
+The four-condition ladder is no longer a study. The whole study is now RQ1: where composition logic should live in a system that combines SQL and vector search. The retrieval stack is settled by decision, and `hybrid_rerank` runs everywhere - runtime, CLI checks, and every eval run - pinned at `config.RUNTIME_RETRIEVER`.
 
-**H2:** Fusion dominates overall (recall@k, MRR) because BM25 and dense fail on disjoint subsets — BM25 wins exact-term/acronym questions, dense wins paraphrase-distance questions. Rerank lifts **MRR/precision-at-top, not recall@20** (STaRK's shape; mechanically forced — a reranker can't add documents).
+**The choice is measured, not assumed.** The 2026-07-29 ladder run (`data/runs/ladder-2026-07-29/report.md`, 10 vector questions x 4 conditions, ranking metrics off `gold_project_ids`) put `hybrid_rerank` first at recall@20 0.875, against hybrid 0.842, dense 0.839, lexical 0.706. H2's crossover also showed up: lexical recall@20 falls 0.890 -> 0.522 from exact-term to paraphrase while dense holds 0.872 -> 0.807. That run is reported as a **pilot that selected the stack**, not as a result.
 
-- Sub-predictions: (1) the per-category crossover table is the real result — requires the `term_style` tag (exact-term | paraphrase) on topical questions, assigned at generation; (2) dense-only's characteristic failure is metadata-keyword contamination (STaRK Fig. 6) — depends on the chunk-metadata decision (§Freeze); (3) L3-vector (5+ gold projects) is where recall differences bite; this cell also feeds RQ1's force-vector prediction.
-- Surprise condition: dense-only matching fusion overall → authored questions reuse corpus vocabulary; itself a finding, one limitation sentence.
-- Epistemic role: freezing the *best* stack is what makes RQ1's result defensible — nobody can attribute an always-hybrid loss to bad retrieval. Scope guard: the ladder measures topical retrieval only; it says nothing about the SQL path (see Study 0.5).
+**Named limitation, one sentence in the write-up:** the stack was selected on a 10-question pilot ladder and not measured at bank scale, so an always-hybrid loss in RQ1 cannot be fully distinguished from a badly configured retriever - the objection the original epistemic role existed to close off.
+
+What survives: the `term_style` tag stays on topical questions (it is bank metadata and it feeds the pilot's crossover table); `bench-retrievers` and `run-retrieval` stay in the codebase as diagnostics; and the drafting pipeline keeps **pooled four-condition retrieval** for gold labelling and adversarial absence proofs, which serve authoring quality and never served RQ2. v3/v4's full RQ2 text lives in git history; revivable by running `run-retrieval` over the full bank (see §10).
 
 ### RQ3 — Generator-strength conditional — **SCRATCHED (v4)**
 
@@ -83,7 +83,7 @@ The interaction design required a genuinely weak generator (local Qwen3-8B) as i
 
 Judge validation required hand-grading, which is dropped along with manual review. The judge is now **fixed by decision, not selection**: Sonnet, frozen prompt and thresholds, and *unvalidated* — all judged results are reported as **"Sonnet-judged pass rates," never as accuracy**. Retained safeguards, all cheap: the judge stays blind to experimental condition; SQL-route references are execution-grounded (the gold query ran), so that entire route is anchored by construction; pure-SQL cells skip the judge entirely (execution accuracy IS the metric); surprising verdicts get eyeballed ad hoc when reading results — a habit, not a protocol. Named limitation: generator (Haiku), judge (Sonnet), and reference author (Opus) are separate models with separate roles but all Anthropic — the vendor-monoculture caveat is disclosed, not measured. v3's full RQ5 text lives in git history; revivable with a hand-graded sample (see §10).
 
-**RQ architecture (v4):** RQ2 builds the instrument · RQ1 asks the core question · RQ4 tests runtime composition. (RQ3/RQ5 scratched — tombstones above.)
+**RQ architecture (2026-08-03):** RQ1 IS the study - routing vs always-hybrid over a system that combines SQL and vector search · RQ4 tests runtime composition. The instrument is fixed by decision rather than measured: one retrieval stack (`config.RUNTIME_RETRIEVER` = `hybrid_rerank`), selected on the 07-29 pilot ladder. (RQ2/RQ3/RQ5 scratched - tombstones above.)
 
 ---
 
@@ -174,7 +174,7 @@ SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells). Arithmetic fixe
 - **d3 — Corpus exploration + category spec.**
 - **d4–6 — Bank v1.0 build** (~100 questions, labels per §1, verification per §2).
 - **d7 — Study 0.5: SQL path validation.** The ~30 gold-SQL questions through the SQL path alone, execution accuracy. Then **one pre-registered BIRD-endorsed fix, applied once:** value descriptions (enum meanings, formats, code conventions from the exploration doc) added to the SQL generation prompt. Before/after on the same 30. That is the entire SQL tuning budget — no iteration loop. Acceptable after (≥60–70% on L1–L2) → freeze and proceed. Catastrophic after → pre-registered scope decision point: RQ1 caveat or SQL-tier simplification. **v4 expectation:** Haiku is likely near-ceiling on L1–L2 *before* the fix, making the before/after a null — that's fine; the gate is a sanity check, not a study, and the interesting SQL failures are expected in the trap/value-grounded cells. *Write-up framing: both paths receive one bounded validation pass before the frozen stack — retrieval via the four-condition ladder, SQL via an execution-accuracy gate with one literature-endorsed intervention. The asymmetry (comparative study vs. validation gate) is stated once.*
-- **d8 — Study 1 (RQ2):** retrieval ladder on the topical subset, programmatic metrics, per-category crossover via `term_style`. **Freeze the winner** — the single coupling point. Full 188k index built before this (coverage matters from the first real measurement).
+- **d8 — Study 1 (RQ2) — DROPPED (2026-08-03).** The ladder ran once on 2026-07-29 over 10 vector questions and selected `hybrid_rerank`; that stands as the pilot that picked the stack, and the stack is now frozen at `config.RUNTIME_RETRIEVER`. No bank-scale ladder runs. Full 188k index was built 2026-07-22, so nothing downstream waits on this.
 - **d9–10 — References (v4):** Opus writes references from gold evidence via the drafting/reference skills (SQL references are the executed gold results, free). Judge is fixed — Sonnet, frozen prompt + thresholds — no selection study.
 - **d11 — Study 2 (RQ1):** full bank, all four static conditions, frozen stack.
 - **d12 — Results assembly + surprising-verdict pass:** skim judge verdicts that look wrong while reading results (a habit, not a grading protocol); anything systematic → note as a judge limitation.
@@ -187,10 +187,10 @@ SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells). Arithmetic fixe
 |---|---|---|
 | `predictions.md` | **before Study 1 (end of d7)** | All RQ hypotheses, quadrant tables, sub-predictions, decision rules, drop-order. Commit hash cited in write-up. |
 | Router prompt | end of pilot (d2) | Pilot-misroute fixes are wiring; anything later is tuning on the eval set. Versioned like the judge prompt. **Misroute rate reported as a first-class number beside RQ1's result.** |
-| Chunking + index config | before the 188k build (≤d7) | Chunk size from the 300–500 prior; **metadata-in-chunk decision made consciously now** — it is an input to RQ2's contamination prediction, whichever way it goes. |
+| Chunking + index config | frozen at the 188k build (2026-07-22) | Chunk size from the 300–500 prior; **metadata-in-chunk decision made consciously**. It was an input to RQ2's contamination prediction, which is void with RQ2 scratched; the config stays frozen because every index and every run is measured against it. |
 | End-to-end judged metric | before Study 2 (d10) | Rubric yields per-question pass/fail (adequate coverage AND no unsupported claims); cell scores are pass rates; sub-scores retained for failure analysis. Thresholds live in the versioned rubric doc. |
 | SQL prompt (post-Study-0.5) | d7 | After the single value-description intervention. |
-| Retrieval stack | d8 | Study 1's winner. |
+| Retrieval stack | **frozen 2026-08-03** | `config.RUNTIME_RETRIEVER` = `hybrid_rerank`, selected on the 07-29 pilot ladder (recall@20 0.875, best of four). One line to change, and changing it after this point invalidates every run recorded against it. |
 | Agentic scaffold | after the agent's pilot | Frozen thereafter so later runs stay comparable (and protects RQ3 revival if a second generator is ever added). |
 | Bank v1.0 | d6 | Append-only thereafter; expansion = v1.1+ with baseline re-runs. |
 
@@ -204,11 +204,11 @@ SQL gold answers: **~30** (feeds Study 0.5 and force-SQL cells). Arithmetic fixe
 
 ## 5. Experiments
 
-**A. Retrieval ladder (RQ2, 4 conditions):** dense-only → BM25-only (DuckDB FTS) → RRF fusion → fusion + cross-encoder rerank. Predictions in RQ2. Check reranker GGUF runs on llama-server **before** designing around it; CPU cross-encoder over top-50 is the fallback.
+**A. Retrieval ladder (RQ2, 4 conditions) — DROPPED as a study (2026-08-03).** It ran once, on 2026-07-29, over 10 vector questions, and its job now is to justify the one stack every other experiment uses (`run-retrieval` is kept as a diagnostic, not a study arm). See the RQ2 tombstone.
 
 **0.5. SQL path validation:** see d7. One measurement, one intervention, one gate.
 
-**B. Routing ablation (RQ1, rungs 1–3):** force-all-SQL vs force-all-vector vs router vs always-hybrid, per route × complexity, frozen stack.
+**B. Routing ablation (RQ1, rungs 1–3):** force-all-SQL vs force-all-vector vs router vs always-hybrid, per route × complexity, frozen stack. This is now the study. Note the word "hybrid" carries both its senses at once here: the always-hybrid condition is the SQL-filtered *scoped* path, and the retriever inside every topical condition is lexical+dense fusion with rerank.
 
 **Pre-registered prediction set for B (duplicated in predictions.md):**
 - Router ≈ ties always-hybrid on accuracy in clean-route L1–L2 cells; router wins clearly on latency/tokens/calls (v4 H1). Any accuracy gap concentrates in trap/value-grounded/adversarial cells.

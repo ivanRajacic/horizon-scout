@@ -2,7 +2,9 @@
 
 Five parallel web-research passes over recent (2024-2026) papers, leaderboards and engineering blogs, one per axis of the system: retrieval, text-to-SQL, routing/agentic orchestration, evaluation/LLM-judge, and chunking/indexing. Each claim below carries its measured number and source. The brief was big levers, not micro-tuning; everything judged not worth doing is listed too, with the evidence for skipping it.
 
-How to read this against the three-graph plan (GOALS.md): sections 1-3 are candidate changes for graph two (improve, re-benchmark), section 4 is the menu for graph three (agentic version), section 5 makes all three graphs more defensible, section 6 is what to skip, section 7 is what this research says about the write-ups.
+How to read this against the three rounds (`horizon-scout.md` §2 - the plan this was written against was `GOALS.md`, now folded in there): sections 1-3 are candidate changes for round two (improved), section 4 is the menu for round three (agentic), section 5 makes all three rounds more defensible, section 6 is what to skip, section 7 is what this research says about the write-ups.
+
+One thing here is now decided elsewhere: retrieval is not measured, so section 3's newer-embedder-and-reranker candidates would change a frozen artifact and need an explicit decision before anyone acts on them.
 
 ---
 
@@ -122,7 +124,7 @@ Three reasons this fits: (a) it dissolves the exact 0.75-threshold problem - par
 
 **Write-up 2 (explorer + drafter pipeline).** The comparison class is YourBench (https://arxiv.org/abs/2504.01833), DataMorgana (https://arxiv.org/pdf/2501.12789), and ARES's synthetic-judge-training idea (https://arxiv.org/abs/2311.09476). None of them have deterministic re-execution gates or split drafter/critic/judge authority - YourBench's citation scoring is itself model-judged, not executed. That is the honest differentiator to claim. The one idea worth adopting from them: report diversity metrics of the finished bank (route/level/bucket coverage plus lexical/semantic diversity, DataMorgana-style). ARES's prediction-powered inference (few human labels + many judge labels -> calibrated confidence intervals) is the published mechanism if judge calibration ever needs to be formal.
 
-**One honesty rule the eval literature reinforces** (already in GOALS.md): several proposed changes were found by staring at pilot failures; the write-up says so, and the paired statistics in section 5 are what keep the before/after graphs from quietly becoming circular.
+**One honesty rule the eval literature reinforces** (already in `horizon-scout.md` §2): several proposed changes were found by staring at pilot failures; the write-up says so, and the paired statistics in section 5 are what keep the before/after graphs from quietly becoming circular.
 
 ---
 

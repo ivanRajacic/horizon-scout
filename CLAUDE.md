@@ -4,14 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation study (M5) measuring routing strategies against a hand-authored question bank (`eval/bank.jsonl`, 40 of a planned ~113).
+Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation (M5) measuring the system against a hand-authored, execution-verified question bank (`eval/bank.jsonl`, 49 questions, target 60).
+
+**What is measured: three rounds - baseline, improved, agentic.** Rounds one and two each run two conditions, `router` and `always-hybrid`, which is the one comparison the architecture poses. Retrieval is NOT measured: one stack runs everywhere (`config.RUNTIME_RETRIEVER = "hybrid_rerank"`), chosen on the 2026-07-29 pilot ladder.
 
 Where the decisions live, in reading order:
 
-- `horizon-scout.md` - the research design (plan doc, v4). Why the study is shaped the way it is.
-- `working-plan.md` - execution state. What is done, what is next, what was rejected and why.
-- `optimization/` - numbered, self-contained plans for the drafting/exploration pipelines, each measured against the 2026-07-25 batch baseline in `optimization/README.md`. Plans 01-04 implemented; 05 is an unapproved proposal.
-- `docs/archive/` - the two pipeline audits (drafting, explorer) and the M2 milestone doc. Rationale, superseded by the plans above but still the record of *why*.
+- `horizon-scout.md` - **the plan, v5, and the only one.** What is measured, the bank, the judge, what was dropped and why, and the order of work. If an older doc disagrees with it, the older doc is wrong.
+- `working-plan.md` - execution state. What is done, what is next, what is open.
+- `optimization/` - numbered, self-contained plans for the drafting/exploration pipelines, each measured against the 2026-07-25 batch baseline in `optimization/README.md`. Plans 01-04 and 06 implemented; 05 is an unapproved proposal.
+- `docs/pilot-router-findings.md` and `docs/improvement-research-2026-07-27.md` - findings and improvement candidates, not plans.
+- `docs/archive/` - the four superseded plan docs (v4 research design, goals, ship plan, retrieval note), the two pipeline audits and the M2 milestone doc. The record of *why*, unedited.
 
 Read the first two before any M5/eval work. Decisions recorded there are locked unless the user changes them.
 
@@ -19,12 +22,12 @@ Read the first two before any M5/eval work. Decisions recorded there are locked 
 
 Always use the venv interpreter: `./.venv/Scripts/python.exe` (Git Bash syntax).
 
-- Tests: `./.venv/Scripts/python.exe -m pytest` (369 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
-- Bank: `validate-bank`, `validate-record <record.json|->`, `promote-drafts <report.md>`, `judge-file <cases.jsonl>`
+- Tests: `./.venv/Scripts/python.exe -m pytest` (475 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
+- Bank: `validate-bank`, `validate-record <record.json|->`, `promote-drafts <report.md>`, `archive-questions --ids ... --reason "<why>"` (the only way a question leaves the bank; `--dry-run` first), `judge-file <cases.jsonl>`
 - Runtime: `ask "<q>"`, `ask-sql`, `search`, `explore` (verbose REPL), `build-index`, `build-fts`, `smoke`, `smoke-sql`, `smoke-router`, `bench-retrievers`
 - `/question-orchestrator` nodes: `gap-report`, `next-ids`, `journal-append`, `batch-crosscheck`, `write-batch`
 - `/explore-corpus` nodes: `frontier-report`, `verify-evidence`, `explore-crosscheck`, `write-profile`
-- Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`
+- Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`. `run-retrieval` and `bench-retrievers` still work but are diagnostics now, not study arms - retrieval is not measured.
 - Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `src/eval/usage.py` records the dollars and tokens of every `claude -p` call at the one gate they all pass through
 
 Local model servers (llama-server; launch commands pinned in `src/config.py`, flags LOAD-BEARING - do not tune them):
@@ -48,7 +51,7 @@ Generation and judging run through `claude -p` (Claude CLI, Max subscription), n
 ### The bank (M5, `src/eval/`, `eval/`)
 
 - `bank.py` - schema v2 + a loud validator (reports every violation, not the first). Levels L1/L2/L3/ADV, route-scoped subtypes, SQL entries born verified (`answer_columns`, `level_evidence`, `schema_docs_hash`); vector levels are DEFINED by `|gold_project_ids|` (L1=1, L2=2-4, L3=5+)
-- `eval/bank.jsonl` - authored ONLY through the drafting skills, one question per pass, execution-verified. Two sanctioned append paths, both human-gated: the per-question confirm inside an interactive drafting skill, or `/question-orchestrator` staging to `eval/drafts/` followed by the user's ticked report and `promote-drafts` (`promote.py`). Never hand-edit, never bulk-import. `eval/archive/` holds the retired pre-skill smoke set
+- `eval/bank.jsonl` - authored ONLY through the drafting skills, one question per pass, execution-verified. Two sanctioned append paths, both human-gated: the per-question confirm inside an interactive drafting skill, or `/question-orchestrator` staging to `eval/drafts/` followed by the user's ticked report and `promote-drafts` (`promote.py`). Never hand-edit, never bulk-import. Questions LEAVE only through `archive-questions` (`archive.py`), which validates the bank that would remain before writing either file and stores each one as an envelope - provenance outside, the record unchanged inside - so it still validates and can be restored. `eval/archive/` holds the retired pre-skill smoke set and `bank-trimmed-2026-08-03.jsonl` (the 18 vector questions cut to the v5 allocation). **Archived ids stay permanently taken**: `batch.archived_ids` feeds both `next_ids` and `gap_report`, so a trimmed question's number is never reissued and its still-staged twin never reappears as pending work
 - `mcp_server.py` - the read-only `horizon-draft` MCP server (`.mcp.json`): `run_sql`, `get_schema_docs`, `get_bank_questions`, `search_corpus` (pooled/per-condition retrieval), `get_project_text` (field selection + char budget), `get_corpus_profile`, and two deterministic self-gates - `precheck_record` (re-executes a finished draft's gold SQL, gold text, filter survivors, survivor-window and gold-bounds, schema-docs freshness) and `precheck_candidate` (one rung upstream: re-executes a candidate's evidence against its recorded numbers before a drafter is ever spawned). Both live here rather than in the CLI because they run inside an agent's own loop and those agents have no shell. Deliberately no write tools; safety in code (SQL guard + read-only connection); SQL errors returned as results; every call logged to `data/logs/draft_mcp.jsonl`
 
 ### Authoring pipelines
@@ -74,7 +77,7 @@ Everything is authored by skills (`.claude/skills/`) driving read-only subagents
 - Tests fake external transports (llama servers, `claude -p`, RAGAS internals); nothing in the suite requires a running server. Keep it that way. One known wrinkle: `tests/test_lexical.py` builds the FTS index and so needs a **read-write** DuckDB handle - it errors while any `horizon-draft` MCP server from another session holds the file open. That is a lock conflict, not a regression.
 - `ragas==0.4.3` and `mcp` are version-pinned for documented reasons (see `requirements.txt`) - do not upgrade casually.
 - The plan docs say `sql|vector|hybrid|ambiguous`; the runtime calls the hybrid mode "scoped". `ROUTE_TO_MODE` in `src/eval/bank.py` is the one place that mapping lives.
-- Frozen artifacts (router prompt, bank, retrieval stack, judge thresholds) must never be edited after their freeze point in `working-plan.md`. Touching anything frozen needs the user's explicit say-so.
+- Freeze discipline is relaxed (`horizon-scout.md` §6): prompts and thresholds can move if the change is disclosed in the write-up. Three things stay genuinely frozen because every recorded number depends on them - the chunking and index config, the retrieval stack (`config.RUNTIME_RETRIEVER`), and the judge once chosen. The agentic scaffold freezes after its pilot. Touching any of those needs the user's explicit say-so.
 
 ## How to talk about this project
 
