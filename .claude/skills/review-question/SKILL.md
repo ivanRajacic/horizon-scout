@@ -91,7 +91,7 @@ What usually breaks, by route - advice on where to spend the three, not a checkl
 - **SQL** - the confusion pairs (`ecMaxContribution` vs `totalCost` vs organization `ecContribution`/`netEcContribution`; project vs participation grain; coordinator vs participant; H2020 vs all-programmes). A near-miss that runs cleanly, differs from gold, and is a reading the text does not rule out is an ambiguity. For `trap`: does the recorded wrong query still run and still differ?
 - **Vector** - read every gold project's text and adjudicate fresh: does it satisfy the question AS ASKED, not "related topic"? Then hunt satisfying projects OUTSIDE gold (OWN-WORDING). One genuine miss moves the level, because vector level IS `|gold|`. Also: can a stored column answer it?
 - **Hybrid** - re-adjudicate the survivors independently (exhaustively when S <= 20). Then attack the filter: search UNSCOPED for projects that satisfy the text but fail the filter. If none exist and none are recorded, the filter is decoration and this is a vector question mislabelled.
-- **ADV** - attack the absence hard. One genuine match kills a zero-match. A presupposition that verifies is not false. A "data-absent" fact that turns up in free text is present. An "unanswerable" question that any route answers is answerable.
+- **ADV** - attack the absence hard. One genuine match kills a zero-match. A presupposition that verifies is not false. A "data-absent" fact that turns up in free text is present. An "unanswerable" question that any route answers is answerable. Then attack the twin: re-run the parent's gold (its emptiness makes the question a near miss of nothing), and check the near-miss variants are actually in `absence_evidence` rather than only described in `notes` - a proof nothing re-executes is the failure mode this route exists to avoid.
 
 ## Findings
 
@@ -117,6 +117,11 @@ DEAD-TRAP           (SQL trap) the recorded wrong query now matches gold
 NON-DISCRIMINATING  no condition retrieves ANY gold member, even with
                     reasonable reformulations
 ADV-PREMISE-FALSE   the absence the ADV question rests on is not absent
+ADV-TWIN-BROKEN     (ADV) twin_id is missing, points at an ADV entry, or names
+                    a parent whose own gold no longer holds - the control is
+                    not a control
+ADV-PROOF-UNTYPED   (ADV) a proof the claim depends on lives only in notes,
+                    where nothing re-executes it (near-miss variants above all)
 TELEGRAPH           the text leaks the answer's shape, count, or content
 GENERIC-FACT        answerable from general knowledge without this corpus
 NEAR-DUPLICATE      close to an existing bank question (name the id)

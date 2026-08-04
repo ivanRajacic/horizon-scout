@@ -109,6 +109,20 @@ survivor set must be enumerable (true count <= 200).
 `false-presupposition`, `data-absent`, `unanswerable`. The gold is an absence,
 proven by execution. `zero-match` carries an empty `gold_project_ids`.
 
+Two things make that proof real rather than stated. `absence_evidence` is the
+typed record of it - `{sql, expect, key_result}` per claim, `expect: "zero"`
+for a query that must come back empty and `"rows"` for a refutation that must
+come back full, near-miss variants included. `precheck_record` re-runs all of
+it, so an absence that has stopped holding fails inside the drafter's own loop.
+
+`twin_id` names the answerable bank question the adversarial one was derived
+from - required for `zero-match` and `false-presupposition`, optional for
+`data-absent`, forbidden for `unanswerable`. It is the control (a bank of
+refusals alone cannot tell a calibrated system from one that refuses
+everything) and it is the near-miss proof (the parent's gold returns rows, the
+one-value perturbation returns none). The best ADV question differs from its
+parent by as little as the absence allows.
+
 **Ambiguous** - `expected_route: "ambiguous"` with >=2 `acceptable_routes`; no
 subtype vocabulary exists yet.
 

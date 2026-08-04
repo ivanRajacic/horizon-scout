@@ -148,8 +148,11 @@ DRAFT_MCP_LOG_PATH = ROOT / "data" / "logs" / "draft_mcp.jsonl"
 # (Seeds), the standard for the upstream corpus-explorer: it decides which
 # seeds the other three nodes ever see, so it is held to the same definition of
 # good. `frontier-report` pastes that section into every explorer spawn prompt.
+# bb4 (2026-08-04) records what makes an ADV proof real: absence_evidence as a
+# typed, re-executed record, and twin_id naming the answerable question the
+# adversarial one perturbs - the control a refusal-only set cannot supply.
 BANK_BRIEF_PATH = ROOT / "src" / "eval" / "bank_brief.md"
-BANK_BRIEF_VERSION = "bb3"
+BANK_BRIEF_VERSION = "bb4"
 
 # corpus_profile.md is the exploration agent's output (working-plan d3):
 # a CUMULATIVE map of the database - what each explored region is about and
