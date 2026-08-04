@@ -768,7 +768,12 @@ def test_report_renders_the_things_worth_reading(tmp_path):
         encoding="utf-8")
     assert "# Bank run" in report
     assert "priced" in report.lower()                  # the cost caveat
-    assert "1/3 passed" in report
+    # continuous scores, not pass rates (plan §5): the judged routes report
+    # the factual distribution; sql stays exact
+    assert "factual 0.550 (n=2" in report              # mean of 0.2 and 0.9
+    assert "sql exact 0/1" in report
+    assert "0.20 (n=1)" in report                      # vector L-cell mean
+    assert "## Judge health" in report
     assert "1/3 misrouted" in report and "hyb-01" in report   # routed to vector
     assert "## Retrieval (topical questions)" in report
     assert "SELECT wrong" in report                    # the failing SQL
@@ -783,3 +788,25 @@ def test_report_renders_the_things_worth_reading(tmp_path):
 
 def test_report_survives_an_empty_run():
     assert "Bank run x" in render_report([], {"run_id": "x", "conditions": []})
+
+
+def test_judge_parse_health_lands_in_meta_and_report(tmp_path):
+    """The api judge backend counts completions without parseable JSON
+    (DeepSeek loose-JSON watch); the run must carry those counters into its
+    meta and print them, never silently drop them."""
+    class StatsPool(FakePool):
+        def stats(self):
+            return {"model": "deepseek-v4-flash", "completions": 4,
+                    "unparseable_json": 1}
+
+    bank = bank_of(tmp_path, VEC_Q)
+    ask = FakeAsk({"vec-01": {"text": VEC_Q["text"],
+                              "result": FakeAskResult("vector",
+                                                      chunks=[chunk(101)])}})
+    meta = run_bank(bank, ["router"], runs_dir=tmp_path / "runs",
+                    ask=ask, pool=StatsPool())
+    assert meta["judge_health"]["unparseable_json"] == 1
+    report = (tmp_path / "runs" / meta["run_id"] / "report.md").read_text(
+        encoding="utf-8")
+    assert "## Judge health" in report
+    assert "without parseable JSON: 1" in report

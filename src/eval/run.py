@@ -737,6 +737,14 @@ def run_bank(bank_path: Path, conditions: list[str], *, k: int = 10,
     meta["ended"] = datetime.now().isoformat(timespec="seconds")
     meta["out_dir"] = str(out_dir)
     meta["records_path"] = str(records_path)
+    if pool is not None:
+        # Parse-health counters from the judge backend (api backend only):
+        # DeepSeek's loose JSON mode can fail silently inside ragas, so the
+        # count of unparseable completions goes on the run's own record.
+        stats = getattr(pool, "stats", None)
+        health = stats() if callable(stats) else {}
+        if health:
+            meta["judge_health"] = health
 
     # Rebuild from disk so the report always reflects the file, resumed rows
     # included - the report is a view of the record, never of memory.
@@ -786,6 +794,35 @@ def _pass_cell(records: list[dict]) -> str:
     return f"{passed}/{len(scored)}"
 
 
+def _score_cell(records: list[dict]) -> str:
+    """Mean factual_correctness (n) for a judged cell. Unscored rows - NaN
+    verdicts, judge errors, not-yet-judged - are counted beside the mean so
+    the cell cannot look healthier than it is."""
+    have = [(r.get("score") or {}).get("factual_correctness")
+            for r in records]
+    have = [v for v in have if v is not None]
+    if not records:
+        return "-"
+    if not have:
+        return f"- ({len(records)} unscored)"
+    cell = f"{sum(have) / len(have):.2f} (n={len(have)})"
+    if len(have) < len(records):
+        cell += f" +{len(records) - len(have)} unscored"
+    return cell
+
+
+def _dist(vals: list[float]) -> str:
+    """mean (n) with min/median/max, because a mean over a bimodal judge is
+    a lie of omission."""
+    if not vals:
+        return "- (n=0)"
+    vs = sorted(vals)
+    n = len(vs)
+    median = vs[n // 2] if n % 2 else (vs[n // 2 - 1] + vs[n // 2]) / 2
+    return (f"{sum(vs) / n:.3f} (n={n}, min {vs[0]:.2f}, "
+            f"median {median:.2f}, max {vs[-1]:.2f})")
+
+
 def _table(header: list[str], rows: list[list[str]]) -> list[str]:
     out = ["| " + " | ".join(header) + " |",
            "|" + "|".join("---" for _ in header) + "|"]
@@ -826,23 +863,56 @@ def render_report(records: list[dict], meta: dict) -> str:
 
     total_cost = _sum_cost(records)
     out += ["",
-            f"**Priced cost: {_money(total_cost)}** over "
-            f"{len(records)} record(s). This is what these `claude -p` calls "
-            "WOULD have cost on the API; on the Max subscription the marginal "
-            "spend is ~EUR 0. A priced figure, not a billed one.",
+            f"**Cost: {_money(total_cost)}** over "
+            f"{len(records)} record(s), computed from each call's token "
+            "counts and the prices pinned in src/config.py. External-API "
+            "calls (the v5 seats) are billed for real; `claude -p` rows are "
+            "priced, not billed - their marginal spend on the Max "
+            "subscription is ~EUR 0.",
             ""]
 
     ok = [r for r in records if not r.get("error")]
     broken = [r for r in records if r.get("error")]
 
     # --- headline -----------------------------------------------------------
-    out += ["## Result", ""]
-    scored = [r for r in ok if (r.get("score") or {}).get("passed") is not None]
-    passed = [r for r in scored if r["score"]["passed"]]
-    out += [f"**{len(passed)}/{len(scored)} passed**"
-            + (f"; {len(ok) - len(scored)} unscored"
-               if len(ok) > len(scored) else "")
-            + (f"; **{len(broken)} errored**" if broken else "") + ".", ""]
+    # Continuous scores, not a pass-rate gate (plan §5): the pilot's 0.75
+    # threshold failed 10 of 11 answers under every condition, so a pass rate
+    # cannot show a difference between conditions - means and spread can.
+    # sql stays exact (execution against gold is free and binary) and
+    # adversarial stays the rubric's refusal grade for the same reason.
+    out += ["## Result", "",
+            "Judged routes report the score distribution, not a pass rate; "
+            "sql is exact execution scoring and adversarial is the refusal "
+            "rubric, both binary by nature.", ""]
+    for condition in meta.get("conditions", []):
+        cond = [r for r in ok if r.get("condition") == condition]
+        if not cond:
+            continue
+        ragas = [r for r in cond
+                 if (r.get("score") or {}).get("judge_path") == "ragas"]
+        factual = [r["score"]["factual_correctness"] for r in ragas
+                   if r["score"].get("factual_correctness") is not None]
+        faith = [r["score"]["faithfulness"] for r in ragas
+                 if r["score"].get("faithfulness") is not None]
+        line = (f"**{condition}**: factual {_dist(factual)}; "
+                f"faithfulness {_dist(faith)}")
+        sql_exec = [r for r in cond
+                    if (r.get("score") or {}).get("method") == "execution"
+                    and r["score"].get("passed") is not None]
+        if sql_exec:
+            line += (f"; sql exact "
+                     f"{sum(1 for r in sql_exec if r['score']['passed'])}"
+                     f"/{len(sql_exec)}")
+        adv = [r for r in cond
+               if (r.get("score") or {}).get("judge_path") == "overlay"]
+        if adv:
+            line += (f"; adversarial "
+                     f"{sum(1 for r in adv if r['score']['passed'])}"
+                     f"/{len(adv)} refused correctly")
+        out.append(line)
+    if broken:
+        out.append(f"**{len(broken)} errored.**")
+    out.append("")
 
     for condition in meta.get("conditions", []):
         cond_records = [r for r in records if r.get("condition") == condition]
@@ -855,9 +925,13 @@ def render_report(records: list[dict], meta: dict) -> str:
                         if r.get("expected_route") == route]
             if not in_route:
                 continue
-            cells = [_pass_cell([r for r in in_route if r.get("level") == lvl])
+            # sql cells are exact pass fractions; judged cells are mean
+            # factual_correctness - a pass fraction there would resurrect
+            # the threshold the plan retired.
+            cell = _pass_cell if route == "sql" else _score_cell
+            cells = [cell([r for r in in_route if r.get("level") == lvl])
                      for lvl in ("L1", "L2", "L3")]
-            rows.append([route, *cells, _pass_cell(in_route)])
+            rows.append([route, *cells, cell(in_route)])
         adv = [r for r in cond_records if r.get("level") == "ADV"]
         if adv:
             rows.append(["adversarial", "-", "-", "-", _pass_cell(adv)])
@@ -877,6 +951,35 @@ def render_report(records: list[dict], meta: dict) -> str:
                 out.append(f"- router FELL BACK on: "
                            + ", ".join(f"`{r['question_id']}`" for r in fallbacks))
             out.append("")
+
+    # --- judge health --------------------------------------------------------
+    # Parse failures counted, never silent (plan §5): DeepSeek's loose JSON
+    # mode can hand ragas a completion it cannot parse, and the visible
+    # residue is a fix-format retry, a NaN score, or - worst - a silent 0.0
+    # from an empty claims list. Every layer of that is counted here.
+    ragas_judged = [r for r in ok
+                    if (r.get("score") or {}).get("judge_path") == "ragas"]
+    if meta.get("judged") and (ragas_judged or meta.get("judge_health")):
+        nan_factual = [r for r in ragas_judged
+                       if r["score"].get("factual_correctness") is None]
+        nan_faith = [r for r in ragas_judged
+                     if "faithfulness undefined"
+                     in (r["score"].get("detail") or "")]
+        errors = [r for r in ok
+                  if str((r.get("score") or {}).get("reason", ""))
+                  .startswith("judge error")]
+        out += ["## Judge health", ""]
+        health = meta.get("judge_health") or {}
+        if health:
+            out.append(f"- judge completions: {health.get('completions')}, "
+                       f"without parseable JSON: "
+                       f"{health.get('unparseable_json')} "
+                       f"(`{health.get('model')}`)")
+        out += [f"- factual_correctness undefined (NaN): {len(nan_factual)} "
+                f"of {len(ragas_judged)} ragas-judged",
+                f"- faithfulness undefined (NaN): {len(nan_faith)}",
+                f"- judge errors (exception; --resume retries them): "
+                f"{len(errors)}", ""]
 
     # --- retrieval ----------------------------------------------------------
     topical = [r for r in ok if r.get("retrieval")]
