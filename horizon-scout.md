@@ -39,7 +39,7 @@ authoring pipelines) carries over unchanged; the ceremony is dropped.
 
 **Three rounds, in order. Each is one graph.**
 
-1. **Baseline.** The 60-question bank against the current system.
+1. **Baseline.** The 58-question bank against the current system.
 2. **Improved.** Named fixes applied, same bank, same judge, same axes. The
    result is per-change before/after.
 3. **Agentic.** Runtime orchestration against the improved system - does
@@ -73,7 +73,7 @@ become circular.
 
 ## 3. The bank
 
-60 questions, every gold answer proven by execution at authoring time.
+58 questions, every gold answer proven by execution at authoring time.
 `eval/bank.jsonl`, schema v2 in `src/eval/bank.py`.
 
 ### Allocation
@@ -83,22 +83,21 @@ become circular.
 | SQL | 5 | 7 | 4 | 16 |
 | Vector | 7 | 9 | 6 | 22 |
 | Hybrid | 3 | 4 | 4 | 11 |
-| Ambiguous-route | | | | 3 |
-| Adversarial | | | | 5 |
-| Compositional | | | | 3 |
-| **Total** | | | | **60** |
+| Adversarial | | | | 9 |
+| **Total** | | | | **58** |
 
 `gap-report` parses this table live (`src/eval/batch.py:parse_allocation`), so it
-is the binding target and not a description. SQL and hybrid are set to what is
-already banked - those routes are done. Vector drops 40 -> 22 (see §3.3). The 11
-remaining are the only authoring work left.
+is the binding target and not a description. Every cell is at target as of
+2026-08-04: the three ladder routes were done on 2026-08-03, and the nine
+adversarial questions (three per costume route, three per subtype, each twinned
+to an answerable control) landed in batches K-M. Authoring is complete.
 
-Why each of the three small categories earns its place at n=3-5: **adversarial**
-is the write-up's distinctive claim (absence proven by execution) and has never
-run against real pipeline output, only four short synthetic cases;
-**ambiguous** is what stresses the router, which is the contrast rounds one and
-two measure; **compositional** is the only cell where the agentic round can show
-it buys capability rather than just cost.
+**Ambiguous and compositional are dropped (2026-08-04, user decision)** - the
+bank is the four routes only: sql, vector, hybrid, and adversarial worn over
+those routes. Adversarial overshot its original 5 to 9, which stands in for the
+dropped 6 in headcount. What the two cells would have bought, recorded in §6.
+**adversarial** remains the write-up's distinctive claim: absence proven by
+execution, with every entry twinned to the answerable question it perturbs.
 
 ### 3.1 Levels
 
@@ -231,7 +230,6 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   executing the generated query against the gold query, which is free and exact.
   Adversarial questions bypass RAGAS for a one-call refusal rubric, because
   claim-decomposition metrics are structurally blind to a correct refusal.
-  Compositional questions are scored with partial credit on set overlap.
 - **Role separation.** Opus authors questions and references, Haiku generates,
   the external judge scores. No model wears two hats and no model grades its own
   output. Generation stays on `claude -p`.
@@ -244,7 +242,7 @@ comparisons between conditions, never accuracy.
 
 ## 6. What is settled, and what is dropped
 
-Live: the three rounds, the router/always-hybrid contrast, the 60-question bank,
+Live: the three rounds, the router/always-hybrid contrast, the 58-question bank,
 one retrieval stack, a frozen cheap judge, the authoring pipeline.
 
 Dropped, with the reason, so none of it is re-litigated:
@@ -258,6 +256,8 @@ Dropped, with the reason, so none of it is re-litigated:
 | **The d1-d14 day plan and the freeze schedule** | a two-week pre-registered shape the project outgrew | v4 §3 |
 | **Study 2 as four static conditions** | force-sql and force-vector are floors, not the story | v4 §5B |
 | **Study 0.5 as a separate gate** | SQL execution accuracy is a column in every round, not its own study | v4 §5.0.5 |
+| **Ambiguous-route cell (n=3)** | dropped 2026-08-04 with the bank otherwise complete: underspecified questions are imprecise by construction, and the router-stress signal was judged not worth 3 hand-authored interactive-only questions | this table; §3 Allocation |
+| **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round; the agentic round now shows itself on the 58 (its cost/latency columns and failure buckets carry the story) | this table; §3 Allocation |
 
 Freeze discipline is relaxed: prompts and thresholds can move if the change is
 disclosed in the write-up. Three things stay genuinely frozen because every
@@ -305,9 +305,10 @@ retrieval stack chosen on a 10-question pilot; bank at the size it froze at, wit
 the vector trim and its selection rule stated; RAGAS 0.4.3 with a one-paragraph
 NLI amendment, not stock; generator, judge and reference author separated by role
 but two of the three are the same vendor family; scoped-provenance and SQL-scorer
-fixes landed before the baseline as wiring, not as improvements; no over-refusal
-check on answerable questions; no formal coverage argument for the bank's
-question distribution; compositional cells are n=3 diagnostics.
+fixes landed before the baseline as wiring, not as improvements; no formal coverage argument for the bank's
+question distribution; no ambiguous or compositional cells (dropped 2026-08-04,
+§6) - but over-refusal on answerable questions IS controlled, by the nine
+adversarial twins.
 
 ## 8. The order of work
 
@@ -319,8 +320,9 @@ Live state and what is next: `working-plan.md`.
    compares whole rows instead of `answer_columns`; judge calls have no retry on
    a ~20% failure class. All three are in `docs/pilot-router-findings.md` Part 2.
 3. **Swap the judge** and run the ~2 EUR calibration (§5).
-4. **Author the last 11 questions** - 5 adversarial, 3 ambiguous, 3
-   compositional. Bank hits 60.
+4. ~~**Author the last questions**~~ - **DONE 2026-08-04**: 9 adversarial
+   authored through `/question-orchestrator` (batches K-M), ambiguous and
+   compositional dropped (§6). Bank complete at 58.
 5. **Build the agentic condition.** Edge policies fixed before implementation:
    max steps, stop conditions, and the four failure buckets - planning error,
    execution drift, non-termination, recovery win. Bucket counts are the

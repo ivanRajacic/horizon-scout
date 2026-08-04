@@ -19,9 +19,11 @@ deterministic nodes and typed journals.
 re-architecture. `optimization/` holds the numbered plans, all implemented except
 `05-workspace-store.md`, which is an unapproved proposal.
 
-**Bank: 49 questions**, all execution-verified - sql 16, vector 22, hybrid 11,
-every one of those nine cells exactly at target. Nothing yet in adversarial,
-ambiguous or compositional, which is the remaining 11 to reach 60.
+**Bank: 58 questions, complete** (2026-08-04), all execution-verified - sql 16,
+vector 22, hybrid 11, every ladder cell exactly at target, plus 9 adversarial
+(three per costume route, three per subtype, each twinned to an answerable
+control) from `/question-orchestrator` batches K-M. Ambiguous and compositional
+are dropped for good (`horizon-scout.md` §6); no authoring work remains.
 
 **The vector trim ran 2026-08-03**: 40 -> 22, the 18 archived to
 `eval/archive/bank-trimmed-2026-08-03.jsonl` with a recorded reason each, through
@@ -76,10 +78,11 @@ The order is `horizon-scout.md` §8. Immediately:
    Flash, compare agreement with Sonnet and parse-failure rate, pick, pin it in
    `src/config.py`, and never change it again. Report generation also moves from
    pass rates to continuous scores here.
-4. **Author the last 11 questions** - 5 adversarial, 3 ambiguous, 3
-   compositional. Adversarial and ambiguous are marked interactive-only in
-   `gap-report`; flipping them into `/question-orchestrator` is worth doing for
-   the adversarial five. Compositional stays interactive by design. Bank hits 60.
+4. ~~**Author the last questions**~~ - **DONE 2026-08-04.** Adversarial was
+   flipped into `/question-orchestrator` (bank schema v2.3: born-verified ADV
+   with typed `absence_evidence` and `twin_id`) and 9 landed via batches K-M,
+   overshooting the original 5. Ambiguous and compositional dropped for good
+   (`horizon-scout.md` §6). Bank complete at 58.
 5. **Build the agentic condition.** Nothing exists yet - there is no `src/agent/`
    and `run.py:CONDITIONS` has only router / force-sql / force-vector /
    always-hybrid. It loops over capabilities that already exist
@@ -89,7 +92,7 @@ The order is `horizon-scout.md` §8. Immediately:
    (planning error / execution drift / non-termination / recovery win). Traced
    like everything else - versioned prompt, content hash, cost through
    `src/eval/usage.py`. Freeze the scaffold after its pilot.
-6. **The three rounds** (`horizon-scout.md` §2). Round one: 60 questions x
+6. **The three rounds** (`horizon-scout.md` §2). Round one: 58 questions x
    {router, always-hybrid}, `--no-judge` first, read the answers, then
    `--resume` for verdicts. Round two from what round one shows plus the
    candidates in `docs/improvement-research-2026-07-27.md`. Round three is the
