@@ -89,7 +89,8 @@ from src.eval import usage
 from src.eval.bank import ROUTE_TO_MODE, BankQuestion, load_bank
 from src.eval.metrics import METRICS, dedup_projects, score_ranking
 from src.llm import fingerprint
-from src.retrieval.sql_path import columns_match, rows_match
+from src.retrieval.sql_path import (columns_match, project_to_answer_columns,
+                                    rows_match)
 
 RUNS_DIR = ROOT / "data" / "runs"
 
@@ -155,10 +156,34 @@ def score_sql_question(q: BankQuestion, res, sql_path) -> dict:
         return {**common, "passed": False, "reason": "sql_failed",
                 "detail": res.trace.get("error", "")}
 
-    passed = rows_match(want_rows, res.rows, q.sql_comparison)
-    return {**common, "passed": passed, "reason": "" if passed else "rows_differ",
-            "got_rows": len(res.rows),
-            "columns_ok": columns_match(q.answer_columns, res.columns)}
+    # Compare what the bank pinned as the answer, not the whole result. A right
+    # answer carrying id and title alongside is right (pilot sql-02); a gold_sql
+    # returning more than it pins is normal too (sql-15), so both sides project.
+    want_projected, _ = project_to_answer_columns(
+        want_columns, want_rows, q.answer_columns)
+    if want_projected is None:
+        # The bank's own gold does not contain what the bank pinned. That is a
+        # defect in the entry, not a wrong answer - say so instead of failing
+        # the system for it. precheck_record gates this at authoring time.
+        return {**common, "passed": None,
+                "reason": "gold_answer_columns_absent",
+                "detail": f"answer_columns {q.answer_columns} not in gold "
+                          f"result columns {want_columns}"}
+
+    got_projected, how = project_to_answer_columns(
+        res.columns, res.rows, q.answer_columns)
+    scored = {**common, "got_rows": len(res.rows), "projection": how,
+              "columns_ok": columns_match(q.answer_columns, res.columns)}
+    if got_projected is None:
+        # Neither the names nor the counts line up, so which column holds the
+        # answer is unknowable. A different failure from a wrong value.
+        return {**scored, "passed": False, "reason": "columns_unmatched",
+                "detail": f"answer_columns {q.answer_columns} not in result "
+                          f"columns {res.columns}"}
+
+    passed = rows_match(want_projected, got_projected, q.sql_comparison)
+    return {**scored, "passed": passed,
+            "reason": "" if passed else "rows_differ"}
 
 
 def judge_case_for(q: BankQuestion, res) -> dict:
@@ -931,6 +956,7 @@ def render_report(records: list[dict], meta: dict) -> str:
             else:
                 out.append(f"reason: {score.get('reason')} "
                            f"(comparison={score.get('comparison')}, "
+                           f"projection={score.get('projection', '-')}, "
                            f"gold {score.get('gold_rows')} row(s), "
                            f"got {score.get('got_rows', '-')})")
                 if r.get("sql"):

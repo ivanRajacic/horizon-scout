@@ -39,6 +39,26 @@ SQL_RANK_Q = {
                        "value_note_dependencies": [], "trap_documented": False},
 }
 
+# sql-15's shape: the gold query returns a helper column the bank does not pin,
+# so the GOLD side is a superset too and has to be projected as well.
+SQL_WIDE_GOLD_Q = {
+    **SQL_Q, "question_id": "sql-03",
+    "text": "Average ERC project duration by scheme?",
+    "gold_sql": "SELECT fundingScheme, COUNT(*) AS n_projects, "
+                "AVG(days) AS avg_duration_days FROM project GROUP BY 1",
+    "answer_columns": ["fundingScheme", "avg_duration_days"],
+}
+
+# A bank defect, not a system failure: the entry pins a column its own gold
+# query does not return, and the counts differ so there is no as-is fallback.
+SQL_BAD_PIN_Q = {
+    **SQL_Q, "question_id": "sql-04",
+    "text": "How many projects were signed, and when?",
+    "gold_sql": "SELECT COUNT(*) AS n, MIN(ecSignatureDate) AS first "
+                "FROM project WHERE status = 'SIGNED'",
+    "answer_columns": ["signed_count"],
+}
+
 VEC_Q = {
     "question_id": "vec-01", "text": "Find the project about widget farming.",
     "expected_route": "vector", "level": "L1", "subtype": "identify",
@@ -126,7 +146,11 @@ class FakeAsk:
 class FakeSqlPath:
     """execute_trusted returns gold rows keyed by the SQL text."""
     GOLD = {SQL_Q["gold_sql"]: (["count"], [(2127,)]),
-            SQL_RANK_Q["gold_sql"]: (["acronym"], [("BIG",), ("SMALL",)])}
+            SQL_RANK_Q["gold_sql"]: (["acronym"], [("BIG",), ("SMALL",)]),
+            SQL_WIDE_GOLD_Q["gold_sql"]:
+                (["fundingScheme", "n_projects", "avg_duration_days"],
+                 [("ERC-COG", 40, 1461.0), ("ERC-STG", 60, 1826.0)]),
+            SQL_BAD_PIN_Q["gold_sql"]: (["n", "first"], [(7, "2021-01-01")])}
 
     def __init__(self, fail=False):
         self.fail = fail
@@ -276,12 +300,50 @@ def test_ordered_comparison_is_honoured(tmp_path):
     assert _one(tmp_path, SQL_RANK_Q, forwards)["score"]["passed"] is True
 
 
-def test_extra_column_is_flagged_beside_the_verdict_not_folded_into_it(tmp_path):
+def test_helpful_extra_columns_are_projected_away_not_failed(tmp_path):
+    """The pilot's sql-02: the right five projects in the right order, marked
+    wrong only because the query also returned id and title. answer_columns
+    says what the answer is made of; the rest is the generator being helpful."""
+    r = _one(tmp_path, SQL_RANK_Q,
+             FakeAskResult("sql", sql="SELECT id, acronym, title, ec ...",
+                           rows=[(1, "BIG", "t1", 100), (2, "SMALL", "t2", 50)],
+                           columns=["id", "acronym", "title",
+                                    "ecMaxContribution"]))
+    assert r["score"]["passed"] is True
+    assert r["score"]["projection"] == "by-name"
+    assert r["score"]["columns_ok"] is False     # the shape is still not pinned
+
+
+def test_gold_is_projected_too_when_it_returns_more_than_it_pins(tmp_path):
+    """sql-15's shape. The gold query carries a helper column the bank does not
+    pin, so projecting only the generated side would compare 2 against 3."""
+    r = _one(tmp_path, SQL_WIDE_GOLD_Q,
+             FakeAskResult("sql", sql="SELECT fundingScheme, AVG(days) ...",
+                           rows=[("ERC-COG", 1461.0), ("ERC-STG", 1826.0)],
+                           columns=["fundingScheme", "avg_duration_days"]))
+    assert r["score"]["passed"] is True
+    assert r["score"]["projection"] == "by-name"
+
+
+def test_a_bank_entry_pinning_a_column_its_gold_lacks_is_not_a_system_failure(
+        tmp_path):
+    r = _one(tmp_path, SQL_BAD_PIN_Q,
+             FakeAskResult("sql", sql="SELECT COUNT(*), MIN(...)",
+                           rows=[(7, "2021-01-01")], columns=["n", "first"]))
+    assert r["score"]["passed"] is None           # unscoreable, not wrong
+    assert r["score"]["reason"] == "gold_answer_columns_absent"
+
+
+def test_unalignable_columns_are_their_own_failure_not_a_wrong_answer(tmp_path):
+    """Nothing to project on: the pinned name is absent and the counts differ,
+    so which column holds the answer is unknowable. That is a different failure
+    from returning the wrong value, and the reason keeps them apart."""
     r = _one(tmp_path, SQL_Q,
-             FakeAskResult("sql", sql="SELECT COUNT(*), 1", rows=[(2127,)],
-                           columns=["n", "spare"]))
-    assert r["score"]["passed"] is True          # the answer is still right
-    assert r["score"]["columns_ok"] is False     # but the shape is not pinned
+             FakeAskResult("sql", sql="SELECT COUNT(*), 1",
+                           rows=[(2127, 1)], columns=["n", "spare"]))
+    assert r["score"]["passed"] is False
+    assert r["score"]["reason"] == "columns_unmatched"
+    assert r["score"]["projection"] == "unmatched"
 
 
 def test_sql_question_under_a_forced_topical_condition_scores_no_sql(tmp_path):

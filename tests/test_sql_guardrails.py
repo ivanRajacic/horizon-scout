@@ -7,6 +7,7 @@ import pytest
 from src.config import DB_PATH
 from src.retrieval.sql_path import (SqlGuardrailError, SqlPath, ensure_limit,
                                     columns_match, results_match,
+                                    project_to_answer_columns,
                                     results_match_ordered, rows_match,
                                     strip_fences, validate_sql)
 
@@ -167,6 +168,41 @@ def test_rows_match_dispatches_on_the_banks_comparison():
 def test_rows_match_rejects_an_unknown_comparison():
     with pytest.raises(ValueError, match="unknown sql_comparison"):
         rows_match([(1,)], [(1,)], "vibes")
+
+
+# --- project_to_answer_columns (what the bank pinned as THE answer) ---
+
+def test_projection_by_name_keeps_only_the_pinned_columns():
+    rows, how = project_to_answer_columns(
+        ["id", "acronym", "title"], [(1, "BIG", "t")], ["acronym"])
+    assert how == "by-name" and rows == [("BIG",)]
+
+
+def test_projection_by_name_follows_answer_columns_order():
+    rows, how = project_to_answer_columns(
+        ["a", "b"], [(1, 2)], ["b", "a"])
+    assert how == "by-name" and rows == [(2, 1)]
+
+
+def test_projection_falls_back_to_as_is_when_the_generator_aliased():
+    """A correct `SELECT SUM(ecMaxContribution)` returns a column named after
+    the expression, not the bank's `total_eu_funding`. Same count, so the values
+    decide - results_match ignores names for exactly this reason."""
+    rows, how = project_to_answer_columns(
+        ["sum(ecMaxContribution)"], [(42,)], ["total_eu_funding"])
+    assert how == "as-is" and rows == [(42,)]
+
+
+def test_projection_unmatched_when_neither_names_nor_counts_align():
+    rows, how = project_to_answer_columns(
+        ["n", "spare"], [(2127, 1)], ["count"])
+    assert how == "unmatched" and rows is None
+
+
+def test_projection_is_a_no_op_when_the_bank_pinned_nothing():
+    for pinned in (None, []):
+        rows, how = project_to_answer_columns(["n"], [(1,)], pinned)
+        assert how == "none" and rows == [(1,)]
 
 
 def test_columns_match_counts_not_names():

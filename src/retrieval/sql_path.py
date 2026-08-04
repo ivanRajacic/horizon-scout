@@ -234,6 +234,37 @@ def rows_match(want: list[tuple], got: list[tuple],
     return results_match(want, got)
 
 
+def project_to_answer_columns(columns, rows, answer_columns
+                              ) -> tuple[list[tuple] | None, str]:
+    """Narrow a result to the columns the bank pinned as THE answer.
+
+    Returns (rows, how). `how` records which alignment was possible, because a
+    run wants to report how many questions passed only after projection:
+
+      "none"      nothing pinned; rows come back untouched
+      "by-name"   every pinned name is present; those positions are kept, in
+                  answer_columns order
+      "as-is"     names do not align but the counts do - the generator aliased,
+                  which it is free to do, so the values decide (same reason
+                  results_match ignores column names)
+      "unmatched" neither: which column holds the answer is unknowable, rows None
+
+    Both sides go through this. The gold result is a superset too - sql-15 pins
+    two columns out of a three-column gold_sql - so projecting only the
+    generated side would compare different shapes.
+    """
+    if not answer_columns:
+        return list(rows), "none"
+    names = list(columns or [])
+    index = {name: i for i, name in enumerate(names)}
+    if all(name in index for name in answer_columns):
+        keep = [index[name] for name in answer_columns]
+        return [tuple(row[i] for i in keep) for row in rows], "by-name"
+    if len(names) == len(answer_columns):
+        return list(rows), "as-is"
+    return None, "unmatched"
+
+
 def columns_match(answer_columns, got_columns) -> bool | None:
     """Does the generated query return the shape the bank pinned?
 
