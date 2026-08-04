@@ -1,0 +1,425 @@
+{
+  "kind": "packet",
+  "output_dir": "eval/drafts/batchK/",
+  "order": "3 adversarial questions, one wearing each costume route (sql, vector, hybrid), each derived from a parent of that same route; ADV subtypes spread one per slot",
+  "siblings": "none - this is the only tab in the run",
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd2",
+      "content_hash": "f8c001e8cc8f"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "adv-01",
+      "cell": {
+        "route": "sql",
+        "level": "ADV",
+        "subtype": "false-presupposition"
+      },
+      "parents": [
+        {
+          "twin_id": "sql-04",
+          "record": {
+            "question_id": "sql-04",
+            "text": "Which organisation is the coordinator of the AQUAEXCEL3.0 project?",
+            "expected_route": "sql",
+            "level": "L2",
+            "subtype": "join-lookup",
+            "specification": "well-specified",
+            "gold_sql": "SELECT o.name FROM organization o JOIN project p ON o.projectID = p.id WHERE p.acronym = 'AQUAEXCEL3.0' AND o.role = 'coordinator';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "name"
+            ],
+            "level_evidence": {
+              "join_count": 1,
+              "non_trivial_where_count": 2,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The AQUAEXCEL3.0 project is coordinated by INSTITUT NATIONAL DE RECHERCHE POUR L'AGRICULTURE, L'ALIMENTATION ET L'ENVIRONNEMENT.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on organization JOIN project (projectID=id). Acronym AQUAEXCEL3.0 verified unique (n=1); schema guarantees exactly one coordinator per project, so single-row answer. Filter role='coordinator'. Gold executed this pass -> single row INSTITUT NATIONAL DE RECHERCHE POUR L'AGRICULTURE, L'ALIMENTATION ET L'ENVIRONNEMENT (FR). Not value-grounded: role enum self-describing. sql_comparison=set."
+          }
+        },
+        {
+          "twin_id": "sql-01",
+          "record": {
+            "question_id": "sql-01",
+            "text": "How much EU funding did the AQUACOMBINE project receive?",
+            "expected_route": "sql",
+            "level": "L1",
+            "subtype": "lookup",
+            "specification": "well-specified",
+            "gold_sql": "SELECT ecMaxContribution FROM project WHERE acronym = 'AQUACOMBINE';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "ecMaxContribution"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 1,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The AQUACOMBINE project received 9789883.64 in EU funding (its committed EC contribution).",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on project table. Acronym AQUACOMBINE verified unique (n=1); acronyms are not globally unique in this DB (e.g. AQUATIC appears twice), so a verified-unique key was chosen. EU funding = ecMaxContribution per schema note (not totalCost). Gold executed this pass -> single row 9789883.64."
+          }
+        },
+        {
+          "twin_id": "sql-02",
+          "record": {
+            "question_id": "sql-02",
+            "text": "Which five Horizon 2020 projects received the most EU funding?",
+            "expected_route": "sql",
+            "level": "L1",
+            "subtype": "rank",
+            "specification": "well-specified",
+            "gold_sql": "SELECT acronym, ecMaxContribution FROM project ORDER BY ecMaxContribution DESC LIMIT 5",
+            "sql_comparison": "ordered",
+            "answer_columns": [
+              "acronym",
+              "ecMaxContribution"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 0,
+              "has_group_by": false,
+              "has_order_by_limit": true,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The five best-funded H2020 projects, in order, are EUROfusion with 678800000.0, followed by LPA GAM 2018 at 184973049.81, H2020 at 178169171.0, GAM-2020-LPA at 173872776.94, and ENG GAM 2018 at 171920071.33. EUROfusion's commitment is more than triple the next-largest.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on project table, single table, no join. EU funding = ecMaxContribution per schema note (not totalCost). Gold executed this pass -> 5 rows: EUROfusion 678800000.0, LPA GAM 2018 184973049.81, H2020 178169171.0, GAM-2020-LPA 173872776.94, ENG GAM 2018 171920071.33. Tie check: LIMIT 6 boundary row5=171920071.33 vs row6 (GAM AIR 2018)=160974883.59, distinct, no tie at cutoff; sql_comparison=ordered. L1 rank = bare ORDER BY+LIMIT, no join."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-02",
+      "cell": {
+        "route": "vector",
+        "level": "ADV",
+        "subtype": "zero-match"
+      },
+      "parents": [
+        {
+          "twin_id": "vec-15",
+          "record": {
+            "question_id": "vec-15",
+            "text": "Which EU-funded projects study how companies and business groups try to influence the policies and regulations that governments adopt?",
+            "expected_route": "vector",
+            "level": "L3",
+            "subtype": "survey",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              657949,
+              658375,
+              705677,
+              716849,
+              741538,
+              748066,
+              751843,
+              786587,
+              798769,
+              819394,
+              834253,
+              840978,
+              842868,
+              865165,
+              950056,
+              101024225
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 43,
+              "accepted": [
+                657949,
+                658375,
+                705677,
+                716849,
+                741538,
+                748066,
+                751843,
+                786587,
+                798769,
+                819394,
+                834253,
+                840978,
+                842868,
+                865165,
+                950056,
+                101024225
+              ],
+              "rejected_count": 38,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "EU-funded research on this question sits mostly in political economy, and it covers both who does the influencing and what it achieves. Several projects put firms at the centre of trade rule-making: PROSPER studies firms that 'mobilize politically across global trade networks and influence trade policymaking in the European Union' and reports that because 'particularly resourceful firms are able to carry their political demands to policymakers, interest representation might be skewed in their favor'; TRASC builds a firm-level dataset of lobbying on the ratification and content of free trade agreements and on antidumping measures; DIA reports that the effect of industry lobbying on international rule-making depends on whether industries across countries share common or conflicting interests. Other projects work on domestic policy: BUSWEL compares the policy positions and strategies of business interest groups in Denmark, Sweden, Germany, Austria and the United States and, as delivered, focused on three policy fields - corporate taxation, inheritance taxation and wage bargaining - finding that the responsiveness of governments to business demands depends on the policy at hand and on the types of firms represented; MILO models how polluting firms' incentives to join a lobby group shape a policy maker's choice of environmental policy instrument; BIZPOL maps corporate political activity, 'all non-market activities by companies when they engage with governments and policy-making more broadly to advance their interests'. The set reaches further sectors and periods: POWERSHIFTS finds that 'firms in centralised systems have actively opposed policies that facilitate increased decentralisation' and that 'incumbent generators wield significant influence over energy policy processes'; MIGPSC asks how private security actors and the defence industry shape European migration management policy; GRIP-ARM asks how business power shapes the design of industrial policies in resource-rich countries; EFTA DEVELOPMENT traces how non-state actors including business lobby groups shaped EFTA's policies and priorities between 1958 and 1992; EURECON studies the influence of non-state actors including commercial banks and big business on European economic decision-making; and ClimActiv and CORPORATOCRACY treat corporate lobbying and corporate political power as questions of democratic legitimacy rather than of measurement.",
+            "notes": "Seeds: PROSPER 842868 and LOBFRAM 657949 from the corpus-profile candidate (social sciences/political sciences bucket), read before the question existed; the question was composed from PROSPER's 'firms ... influence trade policymaking' and LOBFRAM's 'non-state actors (NSAs), such as business groups'. Candidate drift check (first pass): the candidate's in-bucket lobbying cluster re-executes to 9 members, not 5; corpus-wide there are 17 projects with 'lobb' in project.objective and 84 with 'lobb' in objective or any report_text section, so the euroSciVoc fence was dropped and gold was built corpus-wide. GOLD RULE (tightened this pass): IN iff the project's own research, as stated in its objective or its published report sections, examines efforts to influence public policy, regulation or rule-making AND the influencing actor is identified in the project's own text as business, firms, corporate or industry. OUT: the project's own advocacy or dissemination; passing background mentions; an influence claim attributed only to a cited literature rather than to the project's own findings; influencers named only as lobbies, special interests, interest groups or lobbyists with no business identification; and the reverse direction (regulation acting on an industry). The tightened rule changed three cases this pass: CITIZINGLOBAL 714905 dropped from gold (its texts say 'lobbies' and 'powerful special interests', never business/firms/corporate/industry - the same ground on which CONSERVATION 683031 was already out); PARTICIPATE 948516 dropped from gold (its own delivered finding is the tax-price elasticity of corporate giving, and the influence claim 'corporations sometimes use giving as a means to influence politics' is explicitly attributed to 'the recent literature on tax-exempt lobbying'); SPIKE 797989 adjudicated and named OUT (it studies the US lobbying industry itself - 'quantify the importance of lobbyist-client relationships' - and aims to inform 'the regulation of advocacy services', not business influence on policy). The four other previously disclosed weak members were re-run under the same rule and stay IN because each names a business actor in its own text: UneqDems 741538 ('the exercise of business power in switzerland'), IFDG 786587 ('us firms react more to increased competition from china by lobbying more'), GRIP-ARM 950056 ('how do state capacity, business power and organizational structure of domestic markets shape the design of industrial policies in resource-rich countries?'), CORPORATOCRACY 865165 ('Business corporations exercise political power, both internally ... and externally (towards states, consumers and others)'). POWERSHIFTS 751843 added to gold: its own report finds 'Firms in centralised systems have actively opposed policies that facilitate increased decentralisation as they seek to protect their market shares and profits' and 'Incumbent generators wield significant influence over energy policy processes', and its workPerformed reports that renewable energy communities build political coalitions 'most often with renewables companies and industry groups'. Pooling arithmetic: 43 candidates were pooled across the four conditions at k=20; 5 of them are gold (BUSWEL 705677, PROSPER 842868, TRASC 834253, BIZPOL 840978, LOBFRAM 657949) and the other 38 were rejected, so pooled_candidate_count 43 = 5 pooled-and-accepted + rejected_count 38. The `accepted` field carries all 16 gold ids because the brief requires accepted == gold_project_ids; the 11 gold that are not in that 5 were never in the pool at all - they were found by the SQL completeness sweeps below. Completeness sweeps, all executed and all fully enumerated: (S1) '\\blobb' over project.objective - 17 rows, all adjudicated; (S2) '\\blobb' over report_text teaser/summary/workPerformed/finalResults for projects S1 missed - 67 rows, all triaged from a 140-char context window; (S3) actor-first proximity (business|corporate|corporation|industry|industries|firm|company) NEAR (lobb|influenc|captur|shap|press) NEAR (polic|regulat|legislat|rule-making|government) over objective+report - 29 rows, all read; (S4) '(regulatory capture|corporate political|business interest group|business power|producer group|interest group NEAR influenc/lobb/polic/legislat)' - 7 rows, all read; (S5, this pass, closing the directional blind spot S3 left) the same actor/verb/policy proximity in BOTH word orders - actor-first and policy-first - with the verb set widened to (lobb|influenc|captur|shap|press|oppos|resist|block|push|campaign|advocat|sway|persuad), gaps of up to 70 non-sentence-ending characters, over objective plus all four report sections, excluding the 73 projects already adjudicated: 58 rows, every one returned and read. All 58 are OUT. The recurring patterns are the reverse direction, regulation pressuring an industry (GRAIL 638719, iLABOUR 639652, TyRec 672558, HEAT-R 697982, Auxilia 775737, Triboconditioning 823307, CLIMEX 851876, FinanceCC 885552, LAND GRIFFON 101004174); the project's own dissemination or advocacy (PV FINANCING 646554, progRESsHEAT 646573, SmartAct-2-3 650702, FloTEC 691916, InnoRenew CoE 739574, IFASA 744848, AQUA-FAANG 817923, RESTORE 820292, CASCADES 821010, SENSEI 847066, 5GMED 951947, EU-PolarNet 2 101003766); stakeholder or audience lists (SLALOM 644270, BeLEADFREE 691503, CineAF 891966); and false positives on device or process vocabulary ('pressure regulator': M-H70 826062, P200 876347; CO2 'capture': ACCSESS 101022487). Three S5 rows were read in full before rejection: MANAGLOBAL 823744 (local management practice and 'private companies' government' in African and Arab countries - corporate governance, not public policy), FASHION IN IR 886026 (the influence of French women's fashion on the American mass market and within the common market, not business influence on government policy), RECENT 823903 (beyond-5G wireless networks; the hit is an impact sentence about consortium companies and technical standards). S5 produced no new gold beyond POWERSHIFTS 751843, which the judge supplied. term_style paraphrase, recounted this pass by SQL over objective plus all report sections: 10 of the 16 gold texts carry a 'lobb' token as their key term (LOBFRAM, EFTA DEVELOPMENT, MILO, IFDG, MIGPSC, DIA, TRASC, BIZPOL, PROSPER, ClimActiv) and 6 do not (BUSWEL, EURECON, UneqDems, POWERSHIFTS, CORPORATOCRACY, GRIP-ARM), while the question uses none of that vocabulary, saying 'try to influence the policies and regulations that governments adopt'; consistent with the rank matrix, where only BUSWEL (lexical 8), PROSPER (lexical 13) and LOBFRAM (lexical 17) reach the lexical top-20 and the rest of the pooled gold arrives via dense/hybrid/rerank. Named near-misses left OUT: CITIZINGLOBAL 714905, PARTICIPATE 948516 and SPIKE 797989 (reasons above), REVEAL 725798 (resilience of private rule-making bodies, not efforts to shape government policy), TRADEPOWER 724107 (bargaining power of countries in trade negotiations), POLBUSNETWORKS 724501 (firm-politician favour networks and misallocation), CLIFF 101020082 ('fossil fuel vested interests are lobbying heavily' is scene-setting), Digital Good 804985 (one workPerformed bullet), IMPACT HAU 772544 (lobbyists named among ethnographic case sites), CONSERVATION 683031 (lobbyists unspecified, in a resource-conservation game-theory paper), ENERGY ETHICS 715146 ('the strong industry lobbies' as context), PmNC 832350 and DemocInChange 702134 and DEMSEC 639021 and CONSULTATIONEFFECTS 804288 (civil society or interest groups not identified as business), Dia-Pol 101028566 (activists), CitIndus 890615 and WELTECH 101033625 (background phrases), FEDCIT 740447 (lobbying by municipalities), PEMP 637662 (lobbying listed as a future application). Remaining doubt: GRIP-ARM 950056 and CORPORATOCRACY 865165 still rest mainly on their objectives - both are ongoing and their interim reports do not repeat the phrase - so they are the two members most exposed to a stricter report-only reading."
+          }
+        },
+        {
+          "twin_id": "vec-04",
+          "record": {
+            "question_id": "vec-04",
+            "text": "I keep coming across mathematics projects that bring knot theory to bear on physical field equations - studying how knots show up in the solution fields themselves, whether as knotted electromagnetic or magnetic field lines, knotted vortex lines and tubes in ideal fluid flows, or knotted nodal lines of quantum wavefunctions satisfying Maxwell's, Euler's or Schrodinger's equations. How do the projects working in this area differ in the physical systems and equations they focus on?",
+            "expected_route": "vector",
+            "level": "L2",
+            "subtype": "comparison",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              101023017,
+              633152,
+              862342
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 37,
+              "accepted": [
+                101023017,
+                633152,
+                862342
+              ],
+              "rejected_count": 34,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "KNOTDYNAPP takes an electromagnetic and quantum-mechanical route: it proves that every knot type can occur as a stable closed field line of an electromagnetic field satisfying Maxwell's equations, constructs optical and quantum vortex knots as the knotted zeros of wavefunctions obeying Schrodinger and paraxial equations, and ties a knot's fiberedness to whether the magnetic field induced by a current through a knotted wire vanishes anywhere. GEOFLUIDS works instead in fluid mechanics and spectral theory, proving the Arnold-Moffatt conjecture on knotted vortex lines and Kelvin's conjecture on thin vortex tubes in Beltrami and steady Euler flows, and answering Berry's 2001 question by building Laplacian eigenfunctions whose nodal sets realize any knot type. FLUSPEC, a companion geometric-PDE program, targets smooth stationary solutions of the 3D Euler equations with chaotic trajectories confined in knotted vortex tubes of any topology, and studies vortex reconnection in the Gross-Pitaevskii equation. All three apply knot theory to solutions of physical field equations, but KNOTDYNAPP centres on electromagnetic field lines and quantum vortex knots whereas GEOFLUIDS and FLUSPEC centre on knotted vortex structures in incompressible fluid flows.",
+            "notes": "Seeds: candidate cp2 vector-09 proposed KNOTDYNAPP(101023017)+BOPNIE(682537) via euroscivoc 'knot theory'. Reading BOPNIE(682537) shows it studies boundary value problems for nonlinear integrable PDEs; 'knot theory' appears once in a passing list of fields where integrable equations arise, and no knotted structure is studied - REJECTED as a euroscivoc false positive. KNOTDYNAPP is a genuine seed. Completeness sweep (non-embedding): run_sql objective LIKE '%knot%' returned the full 31-row universe; the only genuine knot-in-physical-field projects are KNOTDYNAPP(101023017), GEOFLUIDS(633152), FLUSPEC(862342); abstract-topology neighbours QuantGeomLangTFT(637618, TQFT knot invariants), LDTSing(101030083, algebraic/torus knots in 4-manifold surgery), MM-CAHF(893282, Heegaard Floer knot invariants), REFINV, OXTOP, GENERALIZED, ROGW all OUT (knots studied abstractly, no physical field); GOKNOT(796969, protein-backbone gordian knot via molecular dynamics) and MaCChines(787115, protein origami) OUT (discrete polymer, not a field-equation solution); euroscivoc 'knot theory' = {KNOTDYNAPP, BOPNIE}. Pooled adjudication (k=20, 37 candidates): IN KNOTDYNAPP (ranks L1/D1/H1/R1; EM field-line knots, quantum/optical vortex knots, fibered-knot vs induced magnetic field); IN GEOFLUIDS (L4/D2/H3/R2; knotted vortex lines/tubes in Beltrami/Euler flows, knotted nodal sets in QM); IN FLUSPEC (L2/D3/H2/R4; knotted vortex tubes of any topology in Euler flows, Gross-Pitaevskii vortex reconnection). OUT boundary candidates read in full: BOPNIE(682537) integrable-PDE BVPs; VORTSHEET(706283) 2D vortex sheets/patches, no knots; IPFLOW(725967) geodesic/Anosov flows and CFT, no knots; 3DWATERWAVES(678698) water waves over Beltrami flows, no knotted structures; HADE(669689) single vortex-filament equation/Talbot effect, no knot topology; GRAPHCPX(678156) graph-complex TQFT / rational homotopy of knot-spaces, abstract; TopMechMat(771503) 'knot' metaphorical (band-structure braiding); MM-CAHF(893282) abstract knot invariants. Remaining 34-3 rejected pooled candidates are integrable-systems / QFT / geometry projects with no knot topic (absent from the objective-'knot' universe). term_style=exact-term: all three gold retrieved by lexical (KNOTDYNAPP L1, FLUSPEC L2, GEOFLUIDS L4), confirming real term overlap with the question's borrowed vocabulary (knot theory, field lines, vortex tubes, nodal, Maxwell/Euler/Schrodinger). Level computed: |gold|=3 in [2,4] => L2. GEOFLUIDS and FLUSPEC are companion grants of the same fluid-knot program; both genuinely satisfy so both are kept, and the reference notes their kinship."
+          }
+        },
+        {
+          "twin_id": "vec-01",
+          "record": {
+            "question_id": "vec-01",
+            "text": "In a project where a group of robots collectively assembled objects the way certain colony-dwelling animals build up their homes piece by piece, the robot that laid each piece could only sense a small region around itself at any moment. What hardware limitation forced its perception to stay so narrow?",
+            "expected_route": "vector",
+            "level": "L1",
+            "subtype": "detail",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              846009
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 40,
+              "accepted": [
+                846009
+              ],
+              "rejected_count": 39,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "The block-placing robot in this project - the BuilderBot - had to keep its field of view very small in order to stop its onboard CPU from overheating. As a result it could see only a few of the Stigmergic Blocks at a time, which limited the complexity of the structures it could build and the reliability of the building process.",
+            "notes": "Seed: 846009 SRoCS (the only project in the euroscivoc 'swarm robotics' cluster, n=5, whose report documents a block-placing robot with a deliberately narrow field of view). L1 detail: the reason (field of view kept small to prevent CPU overheating) lives only in report_text.workPerformed, not in any stored column. Gold = seed only; |gold|=1 -> L1. Adjudication: pooled k=20 on the final wording surfaced 40 distinct projects across the four conditions; all 39 non-seed candidates OUT - industrial pick-and-place/assembly (PICKPLACE, LABOR, SYMBIO-TIC, GROW, VisionBot), space/planetary assembly (PRO-ACT, PULSAR, FACILITATORS), real-insect biology (ANTSolve, Ceratina, EMERG-ANT, Vision-In-Flight, HIVEOPOLIS), and swarm/collective robotics without the FOV-overheating fact (DEMIURGE, BROS, gAIa, SWARMs, CyBioSys); none describes a swarm-construction robot whose view was narrowed to prevent processor overheating. Completeness sweep (fact-based, wording-independent): run_sql over project.objective LIKE '%swarm%' AND (build|construct|assembl) -> 22 rows, only SRoCS is a swarm-robotics construction system; run_sql over report_text (workPerformed/summary/finalResults) LIKE '%overheat%' -> 68 rows, all battery/server/cooling/LED thermal projects, none a robot field-of-view constraint. No additional gold. term_style=paraphrase (reviewer WARN): the question avoids the answer terms (CPU, overheating) and the seed's key vocabulary (field of view; 'nest building behavior of social insects' rendered as 'colony-dwelling animals building up their homes'). On this final wording SRoCS is found by dense (rank 2), hybrid (1) and hybrid_rerank (1) but only drops to lexical rank 5 (it was lexical rank 1 under exact-term phrasing) - residual lexical overlap on generic robotics vocabulary keeps the paraphrase label borderline rather than clean dense-only evidence. index_fingerprint be84cbad9182 (n_vectors 190248, bge-base-en-v1.5)."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-03",
+      "cell": {
+        "route": "hybrid",
+        "level": "ADV",
+        "subtype": "data-absent"
+      },
+      "parents": [
+        {
+          "twin_id": "hyb-01",
+          "record": {
+            "question_id": "hyb-01",
+            "text": "Among glaciology projects that started in 2021 or later, what past climatic change does the project that trains a new generation of early-stage researchers around the deep Antarctic ice core drilled by the Beyond EPICA campaign aim to help explain?",
+            "expected_route": "hybrid",
+            "level": "L1",
+            "subtype": "filter-read",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              955750
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID = p.id WHERE e.euroSciVocPath LIKE '%/glaciology%' AND p.startDate >= DATE '2021-01-01'",
+              "survivor_count": 7,
+              "survivor_ids": [
+                955750,
+                889508,
+                885891,
+                101030314,
+                101027900,
+                101024540,
+                101023960
+              ],
+              "schema_docs_hash": "c3435815b331"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 7,
+              "accepted": [
+                955750
+              ],
+              "rejected_count": 6,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 7
+            },
+            "reference_answer": "The project is DEEPICE (grant 955750), a research and training network for 15 early-stage researchers (ESRs) built around the 1.5-million-year-old Antarctic ice core being recovered by the Beyond EPICA drilling campaign. It aims to help explain the Mid-Pleistocene Transition (MPT) - the change, between about 900,000 and 1.2 million years ago, when the cyclicity of glacial/interglacial cycles shifted from 40,000 to 100,000 years - including the role of ice-sheet size and atmospheric greenhouse gas concentrations in past climate dynamics.",
+            "notes": "FILTER RATIONALE: euroSciVocPath LIKE '%/glaciology%' (subtree match, no leading slash per schema value note) AND startDate >= 2021-01-01. Executed this pass: 43 glaciology projects total, 7 survive the date filter. Survivors read in full (S<=20, exhaustive). PER-SURVIVOR ADJUDICATION on the identifier 'training network for early-stage researchers built around the Beyond EPICA deep Antarctic ice core': 955750 DEEPICE IN - only survivor that is a research and training network (15 ESRs, 10 countries) explicitly built around the 'Beyond EPICA' ice drilling to extract a 1.5-million-year Antarctic ice core; 889508 SCADI OUT - single-fellow MSCA-IF on a nitrogen-isotope snow-accumulation proxy; uses EPICA Dome C data but is not a training network and not built around the Beyond EPICA drilling; 885891 IceAq OUT - individual fellowship on proglacial/subglacial aquifers in Iceland, no ice core; 101030314 MOTKA OUT - individual fellowship modelling karst-cave temperatures, no ice core; 101027900 MGFR OUT - individual fellowship on Martian glaciations; 101024540 HAIL OUT - individual fellowship on High-Mountain Asia paleoglaciers/monsoon; 101023960 ICEglobe OUT - individual fellowship, scientific/political history of ice sheets, no drilling. |gold|=1. TEXT LOAD-BEARING: the answered fact (that DEEPICE targets the Mid-Pleistocene Transition, with 40,000->100,000-year cyclicity shift) lives only in the free-text objective + report summary; no stored column carries it (title only says 'Infer past antarctiC climatE dynamics'). FILTER LOAD-BEARING: unscoped pooled search on the textual concept returns many projects that satisfy the deep-Antarctic-ice-core / Beyond EPICA / MPT content but FAIL the filter (started before 2021 and/or not glaciology-classified), e.g. 815384 Beyond EPICA (startDate 2019-06-01, 'Beyond EPICA Oldest Ice Core: 1,5 Myr of greenhouse gas - climate feedbacks', dense rank 2 / hybrid 3 / rerank 2), 730258 BE-OI (2016-10-01, 'Beyond EPICA - Oldest Ice', lexical rank 2 / hybrid 2), 817493 ICORDA (2019-12-01, 'Ice CORe DAting... last 1.5 million years'), 790280 GOLD-ICE, 667507 deepSLice, 101023443 CliMoTran ('Comprehensive Climate Modeling of the Mid-Pleistocene Transition'). These out-of-filter projects answer the substantive MPT fact as well as or better than DEEPICE, so without the glaciology+2021 filter the question does not isolate DEEPICE - the filter is doing the work. SQL SWEEP: SELECT over project objective/title ILIKE '%ice core%'/'%EPICA%' with an in_filter flag -> 36 matching projects, only SCADI(889508) and DEEPICE(955750) are in-filter; 34 ice-core projects fail the filter (all started 2015-2022 but are not both glaciology-classified and 2021+). SCOPED RETRIEVABILITY: scoped pooled search over the 7 survivors ranks DEEPICE #1 in all four conditions (lexical/dense/hybrid/hybrid_rerank). TERM_STYLE exact-term: DEEPICE is scoped lexical rank 1, confirming real term overlap ('Beyond EPICA', 'deep ice core', 'Antarctic', 'training network' reused from its title/objective). index_fingerprint be84cbad9182 (n_vectors 190248, bge-base-en-v1.5); schema_docs sd1-pilot c3435815b331; corpus profile cp2."
+          }
+        },
+        {
+          "twin_id": "hyb-03",
+          "record": {
+            "question_id": "hyb-03",
+            "text": "Among the Horizon 2020 projects classified under superconductivity that received EU funding above the 95th percentile of all H2020 projects (about EUR 6.93 million in EC contribution), how do they differ in the application domain they target and in the way they make use of superconductivity?",
+            "expected_route": "hybrid",
+            "level": "L3",
+            "subtype": "filter-compare",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              810451,
+              656024,
+              730871,
+              856526
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT p.id, p.acronym, ROUND(p.ecMaxContribution) AS ec FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE e.euroSciVocPath LIKE '%/superconductivity%' AND p.ecMaxContribution > 6926372.79 GROUP BY 1,2,3 ORDER BY 3 DESC",
+              "survivor_count": 4,
+              "survivor_ids": [
+                810451,
+                656024,
+                730871,
+                856526
+              ],
+              "schema_docs_hash": "c3435815b331"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 4,
+              "accepted": [
+                810451,
+                656024,
+                730871,
+                856526
+              ],
+              "rejected_count": 0,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 4
+            },
+            "reference_answer": "All four are top-funded superconductivity projects but target sharply different domains. EcoSwing delivered the world's first demonstration of a high-temperature superconducting (HTS) direct-drive generator on a 3.6 MW wind turbine, using second-generation (2G) HTS wire coils to cut generator weight and rare-earth reliance in wind power. ARIES is a pan-European accelerator-infrastructure network that develops superconducting magnets, RF cavities with superconducting thin-film coatings, and cryogenics for particle accelerators and high-energy physics. NONLOCAL pursues fundamental quantum physics, engineering topological superconductivity and Majorana bound states in superconductor-semiconductor hybrid devices toward future quantum technologies, while HERO is a condensed-matter physics project searching for new hidden, entangled and resonating orders in correlated-electron quantum matter, where superconductivity figures as one example of the many-body paradigm rather than an engineered device.",
+            "notes": "FILTER: P95 of project.ecMaxContribution over all 35,389 projects = 6926372.79 (re-executed this session via PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ecMaxContribution)). Superconductivity subtree matched with euroSciVocPath LIKE '%/superconductivity%' (paths carry no leading slash, per schema value note); subtree = 219 distinct projects; above-P95 survivors = exactly 4. TERM_STYLE exact-term: question reuses 'superconductivity/superconductor', distinctive vocabulary present in every gold text; scoped rank matrix shows all four gold found by the lexical condition, confirming real term overlap. PER-SURVIVOR ADJUDICATION (S=4, exhaustive read): 810451 HERO IN - condensed-matter/correlated-electron physics, 'hidden, entangled and resonating orders'; superconductivity cited as a paradigm example of quantum matter. 656024 EcoSwing IN - applied wind-energy domain; HTS direct-drive superconducting generator on a 3.6 MW turbine, 2G HTS wire coils. 730871 ARIES IN - particle-accelerator infrastructure; superconducting magnets, superconducting thin-film RF cavities, HTS tapes, cryogenics. 856526 NONLOCAL IN - fundamental quantum physics; topological superconductivity and Majorana bound states in superconductor-semiconductor hybrids for quantum technologies. All 4 IN => gold = all survivors. FILTER-LOAD-BEARING: unscoped pooled search on the textual theme is dominated by below-threshold superconductivity projects (EASITrain, SUPERTERA, SUPERSPIN, ULTRASUPERTAPE, ASuMED, etc., none in the survivor set); SQL sweep of superconductivity projects at/below P95 names concrete counter-examples that satisfy the textual theme but fail the funding filter: Quaco 689359 (4.65M, superconducting magnets for the LHC - same domain as ARIES), ASuMED 723119 (4.01M, superconducting aircraft propulsion motor), MATQu 101007322 (6.55M, superconducting qubits for quantum computing), AndQC 828948 (3.48M) and TOPSQUAD 862046 (3.18M, topological/Andreev-qubit quantum computing - same domain as NONLOCAL). 215 of the 219 superconductivity projects fall below the threshold, so the funding filter, not the topic, isolates the gold four. TEXT-LOAD-BEARING: application domain and superconductor technology live only in free text; euroSciVocTitle is 'superconductivity' for all four and no stored column encodes wind-generator vs accelerator-magnet vs Majorana vs hidden-order. SCOPED-RETRIEVABLE: scoped pooled top-k ranks EcoSwing/NONLOCAL/ARIES/HERO at 1-4 in lexical, hybrid and hybrid_rerank; HERO absent only from dense. Adjudication is from the exhaustive read; pooled_candidate_count is from the scoped pooled search."
+          }
+        },
+        {
+          "twin_id": "hyb-06",
+          "record": {
+            "question_id": "hyb-06",
+            "text": "Among graphene projects that include a Swedish participant, how do the ones tackling antibiotic-resistant bacterial infections make use of graphene?",
+            "expected_route": "hybrid",
+            "level": "L2",
+            "subtype": "filter-synthesize",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              690836,
+              955626
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID=p.id JOIN organization o ON o.projectID=p.id WHERE e.euroSciVocPath LIKE '%graphene%' AND o.country='SE'",
+              "survivor_count": 18,
+              "survivor_ids": [
+                641416,
+                646155,
+                650029,
+                686135,
+                690836,
+                696656,
+                721991,
+                758935,
+                764977,
+                785219,
+                810451,
+                824962,
+                881603,
+                952792,
+                955626,
+                101002772,
+                101006963,
+                101017186
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 11,
+              "accepted": [
+                690836,
+                955626
+              ],
+              "rejected_count": 9,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 18
+            },
+            "reference_answer": "Of the 18 graphene-classified projects with a Swedish participant, two attack antibiotic-resistant bacteria, and each puts graphene to a different use. PANG (Pathogen and Graphene) builds graphene-based antibacterial matrixes by chemically functionalising them with antibacterial peptides and molecules such as menthol, then exploits the photothermal properties of rGO in suspensions and transdermal patches - among them a flexible skin patch that treats subcutaneous wound infections under photothermal irradiation - to kill pathogens non-invasively, while also probing the effect of these structures on the immune system and their mechanism of action. PEST-BIN uses graphene on two fronts: infection diagnostic kits built as disposable 'plug-and-play' chips of graphene functionalised with receptors that capture bacterial-surface biomarkers, containing only carbon and biodegradable polymers and now produced by the spin-out LayerLogic AB; and antibacterial graphene coatings on magnetic nanoparticles and hydrogel/polymer coatings, loaded with antibiotics so that the resulting nano-weapon physically penetrates bacterial biofilms and delivers the drug inside them. Both therefore rely on graphene as an intrinsically antibacterial, functionalisable surface, PANG for light-triggered killing on the skin and PEST-BIN for sensing plus biofilm eradication.",
+            "notes": "FILTER: euroSciVoc graphene subtree (euroSciVocPath LIKE '%graphene%'; profile note cp3 - paths carry no leading slash) intersected with any-role organization.country='SE'. Re-executed this pass: 18 survivors (candidate hybrid-02 evidence confirmed, no drift); graphene subtree corpus-wide is 290 projects, so the SE half prunes 290 -> 18. Survivors are enumerable (18 <= 200) so adjudication was EXHAUSTIVE: all 18 objectives read via get_project_text, plus a survivor-scoped SQL LIKE sweep over objective AND report_text (teaser||summary||workPerformed||finalResults) for bacter/antimicrob/antibiotic/pathogen/infection/biofilm - exactly 2 survivors hit, in both objective and report; the other 16 hit nothing in either field. ADJUDICATIONS: 690836 PANG IN (graphene-based antibacterial matrixes functionalised with antibacterial peptides/menthol, rGO photothermal patches to kill AMR pathogens); 955626 PEST-BIN IN (graphene diagnostic chips functionalised with receptors for infection biomarkers; antibacterial graphene coatings on magnetic nanoparticles to penetrate biofilms). OUT: 641416 iPUBLIC (inkjet-printed graphene energy storage); 646155 INSPIRED (graphene nanoplatelet inks for printed electronics); 650029 TAIPI (CSA on Flagship impact assessment); 686135 PROCETS (anti-wear/anti-corrosion coatings); 696656 GrapheneCore1, 785219 GrapheneCore2, 881603 GrapheneCore3 (Flagship umbrella projects - composites, photonics, batteries, neural electrodes; no antibacterial work in objective or report); 721991 GreenCarbon (biomass-derived carbons for CO2 capture/catalysis); 758935 1D-Engine (theory of 1D electrons and superconductivity); 764977 mCBEEs (corrosion of micro/nano devices); 810451 HERO (hidden order in quantum matter); 824962 Car2TERA (sub-THz radar and graphene MMICs); 952792 2D-EPL (2D pilot line wafer prototyping); 101002772 SPINNER (graphene spintronics); 101006963 GreEnergy (graphene rectennas for energy harvesting); 101017186 AEOLUS (mid-IR photonic gas sensing). FILTER-DISCRIMINATION (unscoped pooled search, k=10, query 'graphene-based antibacterial materials to fight antibiotic-resistant bacterial infections') returned strong text-satisfying projects OUTSIDE the filter: 664782 VANGUARD (antibacterial graphene-oxide scaffolds/laser-printed GO hydrogels for implant coatings; graphene-tagged, orgs IT only, 0 SE), 966720 GRAPHFITI 'Graphene to Fight Antimicrobial Resistance' (graphene membranes for antimicrobial susceptibility testing; graphene-tagged, NL only, 0 SE), 753636 NOVA (antimicrobial graphene-oxide-lanthanide-hydroxyapatite composites; graphene-tagged, UK only, 0 SE). Dropping the SE half would therefore change the answer set - filter is load-bearing. TEXT side is load-bearing: no stored column records what a project does with graphene against bacteria; the answer lives only in objective/report free text. TERM-STYLE exact-term: 'graphene', 'antibiotic resistance/antibiotic-resistant', 'bacterial infections' appear verbatim in both gold texts, and the scoped rank matrix has lexical ranking PANG 1 and PEST-BIN 2, confirming real term overlap. SCOPED RETRIEVABILITY: with the final question wording, PANG ranks 1 and PEST-BIN ranks 2 in all four conditions (lexical/dense/hybrid/hybrid_rerank). pooling_evidence counts come from that scoped search (11 distinct projects surfaced, 2 accepted, 9 rejected); adjudication itself was the exhaustive 18-survivor read, not the pooling."
+          }
+        }
+      ]
+    }
+  ]
+}

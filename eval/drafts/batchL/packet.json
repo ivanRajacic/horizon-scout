@@ -1,0 +1,441 @@
+{
+  "kind": "packet",
+  "output_dir": "eval/drafts/batchL/",
+  "order": "3 adversarial questions, one wearing each costume route (sql, vector, hybrid), each derived from a parent of that same route; ADV subtypes spread one per slot",
+  "siblings": "batchK is drafting adv-01/02/03 from sql-04, vec-15, hyb-01 and their backups - never reach for a parent it holds",
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd2",
+      "content_hash": "f8c001e8cc8f"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "adv-04",
+      "cell": {
+        "route": "sql",
+        "level": "ADV",
+        "subtype": "data-absent"
+      },
+      "parents": [
+        {
+          "twin_id": "sql-03",
+          "record": {
+            "question_id": "sql-03",
+            "text": "How much EU funding was committed to Horizon 2020 projects that were terminated?",
+            "expected_route": "sql",
+            "level": "L1",
+            "subtype": "aggregate",
+            "specification": "well-specified",
+            "gold_sql": "SELECT SUM(ecMaxContribution) AS total_eu_funding FROM project WHERE status = 'TERMINATED';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "total_eu_funding"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 1,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The total EU funding committed to terminated Horizon 2020 projects is EUR 1,181,999,476.27.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on project table, single table, no join. Filter status='TERMINATED' (observed values CLOSED/SIGNED/TERMINATED; TERMINATED slice n=2127). EU funding = ecMaxContribution per schema note (safe to SUM without join, no row repetition). Gold executed this pass -> single row 1181999476.27. Not value-grounded: TERMINATED meaning clear from column. sql_comparison=set (scalar, order-independent)."
+          }
+        },
+        {
+          "twin_id": "sql-05",
+          "record": {
+            "question_id": "sql-05",
+            "text": "Which five organisations received the most EU funding for their participation in the EUROfusion project?",
+            "expected_route": "sql",
+            "level": "L2",
+            "subtype": "rank",
+            "specification": "well-specified",
+            "gold_sql": "SELECT o.name, o.ecContribution FROM organization o JOIN project p ON o.projectID = p.id WHERE p.acronym = 'EUROfusion' ORDER BY o.ecContribution DESC LIMIT 5;",
+            "sql_comparison": "ordered",
+            "answer_columns": [
+              "name",
+              "ecContribution"
+            ],
+            "level_evidence": {
+              "join_count": 1,
+              "non_trivial_where_count": 1,
+              "has_group_by": false,
+              "has_order_by_limit": true,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The five organisations with the largest EU contributions in EUROfusion are, in order, MAX-PLANCK-GESELLSCHAFT ZUR FORDERUNG DER WISSENSCHAFTEN EV with 145585005.96, AGENZIA NAZIONALE PER LE NUOVE TECNOLOGIE, L'ENERGIA E LO SVILUPPO ECONOMICO SOSTENIBILE with 107764457.39, UNITED KINGDOM ATOMIC ENERGY AUTHORITY with 80114957.21, COMMISSARIAT A L ENERGIE ATOMIQUE ET AUX ENERGIES ALTERNATIVES with 70929420.51, and KARLSRUHER INSTITUT FUER TECHNOLOGIE with 53953782.73.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on organization JOIN project (projectID=id). Acronym EUROfusion verified unique (n=1). Per-org EU money = ecContribution per schema note (not project-level ecMaxContribution). No GROUP BY -> L2 rank, not L3. Gold executed this pass -> 5 rows: MPG 145585005.96, ENEA 107764457.39, UKAEA 80114957.21, CEA 70929420.51, KIT 53953782.73. Tie check: LIMIT 8 boundary row5=53953782.73 vs row6=36843160.27, distinct, no tie at cutoff; sql_comparison=ordered."
+          }
+        },
+        {
+          "twin_id": "sql-08",
+          "record": {
+            "question_id": "sql-08",
+            "text": "How many projects classified under machine learning, including any of its subfields, are coordinated by organisations based in Spain?",
+            "expected_route": "sql",
+            "level": "L3",
+            "subtype": "multi-join",
+            "specification": "well-specified",
+            "gold_sql": "SELECT COUNT(DISTINCT p.id) AS n_projects FROM project p JOIN organization o ON o.projectID = p.id JOIN euroscivoc e ON e.projectID = p.id WHERE o.role = 'coordinator' AND o.country = 'ES' AND e.euroSciVocPath LIKE '%/machine learning%';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "n_projects"
+            ],
+            "level_evidence": {
+              "join_count": 2,
+              "non_trivial_where_count": 3,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "156 Horizon 2020 projects classified under machine learning or one of its subfields are coordinated by organisations based in Spain.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Rewritten from the original sql-08, which required the exact leaf euroSciVocTitle='machine learning' (107) without the question text signalling exact-leaf scope. Grounded on project JOIN organization JOIN euroscivoc (both on projectID=id), 2 joins / 3 tables -> L3 multi-join. Vocabulary check this pass: 'machine learning' is an interior node with 6 subfields (deep learning, reinforcement learning, unsupervised/supervised/semisupervised learning, transfer learning); ALL paths containing 'machine learning' lie in this AI subtree, so euroSciVocPath LIKE '%/machine learning%' matches the node and its descendants exactly, no over-match. Question text says 'including any of its subfields' to pin the subtree reading. Role filter role='coordinator' (self-describing enum), country='ES'. Fan-out check: COUNT(*)=157 vs COUNT(DISTINCT p.id)=156 (one project carries two ML-subtree classifications), so DISTINCT is required. Gold executed this pass -> single row 156. Discrimination: exact-leaf-only reading gives 107, now a genuine model error given the question wording. sql_comparison=set (scalar)."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-05",
+      "cell": {
+        "route": "vector",
+        "level": "ADV",
+        "subtype": "false-presupposition"
+      },
+      "parents": [
+        {
+          "twin_id": "vec-09",
+          "record": {
+            "question_id": "vec-09",
+            "text": "How do EU-funded projects approach tax evasion that operates through the links between firms - the companies a business buys from, sells to or shares owners with - rather than being the act of a single company on its own?",
+            "expected_route": "vector",
+            "level": "L2",
+            "subtype": "synthesis",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              758984,
+              101026736
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 23,
+              "accepted": [
+                758984,
+                101026736
+              ],
+              "rejected_count": 21,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "Two projects approach tax evasion as something produced inside business relationships rather than by one firm acting alone. DEVTAXNET starts from the claim that the most common and hardest-to-detect forms of evasion involve interactions across firm networks, which earlier work missed because it had mostly considered taxpayers as isolated units; it sets out to study, using unique administrative datasets from Chile and Ecuador covering networks of supply chains and of joint ownership structures, profit shifting by multinational firms to low tax jurisdictions, profit shifting and tax collusion among firms within the same country, and how the tax compliance of local trading partners of foreign-owned firms is affected. AnthroTax takes the same idea into ethnographic fieldwork in Croatia, studying how practices of tax evasion play out between family winemakers in Istria and a massive agribusiness conglomerate with which they do business, and frames the arrangement as 'hostage barter', through which corporate tax evasion is enacted as an apparent 'natural' feature of everyday business in a predatory economy. In both, the trading relationship itself is the unit of analysis - approached through firm-to-firm transaction data in one case and through the weaker partner's experience in the other.",
+            "notes": "Seeds: 758984 DEVTAXNET and 101026736 AnthroTax, taken from cp5 candidate vector-42 (tax evasion). Drift check re-executed the candidate SQL (objective/title ILIKE '%tax evasion%') -> same 4 ids: 693402, 748062, 758984, 101026736. The candidate's broad 'tax evasion' framing was rejected as L2: a social-embeddedness reading pulled in SHADOWS, COFFERS, PROTAX, TaxInfoProcessing and ECOSOCPOL (6+ = L3), so the question was tightened to evasion running through inter-firm links, which the seeds' texts state explicitly. STEM ASKS ABOUT APPROACH, NOT CONCLUDED FINDINGS: AnthroTax's report sections never use the words 'tax evasion' and describe fieldwork, papers in progress, a workshop and a website, so all of its inter-firm evasion content lives in the objective; a stem demanding findings would penalise a system that correctly declines to report a stated approach as a result. Adjudications from the final pooled run on the recorded text (k=10, 23 distinct projects): IN 758984 (objective: evasion 'involve interactions across firm networks'; supply-chain and joint-ownership datasets from Chile and Ecuador; profit shifting, tax collusion between firms, FDI spillovers onto local trading partners; report adds the 'ghost firms' / 'ghost clients' false-receipt mechanism); IN 101026736 (objective: tax evasion practices 'play out between family winemakers in Istria, Croatia, and a massive agribusiness conglomerate with which they do business', framed as 'hostage barter'). OUT 727145 COFFERS (tax-gap measurement and regulator capacity, AEI/BEPS policy reform; its networks are tax-profession advisers, not a firm's buyers, suppliers or co-owners); OUT 798824 TaxInfoProcessing (eye-tracking of individual taxpayers' cognitive processing, no firms); OUT 889332 TAXGLOBAL (cross-border effects of corporate tax reforms, not evasion via inter-firm links); OUT 694943 CORPLINK (multi-subsidiary legal architecture and 'arbitrage power'; its report does name business planners constructing corporate groups to avoid or evade rules, of which tax is only one, but the unit is one corporate group's internal structuring, which the stem's 'rather than being the act of a single company on its own' clause excludes, and its finalResults places the claim far beyond taxation - recorded as a known-marginal exclusion); OUT 846270 PARTOWNEU and 789013 OCIAN (common/partial ownership and antitrust, no tax evasion); OUT 787098 PROTAX (law-enforcement toolkit for tax crimes); OUT 748062 ChEATAX (individual tax morale, lab experiments); OUT 746358 SHADOWS (undeclared work by individuals, tax morale/horizontal trust); OUT 758671 GLOBTAXGOV (international tax law-making governance); OUT 638666 LTI (long-term and intangible investment, incentive horizons; no tax evasion content); OUT 705677 BUSWEL, 674888 TAX4INNO, 724356 Connections, 715950 SHARE, 802145 MacroEntrepreneurs, 797989 SPIKE, 829729 Dawex GDM, 673581 SOMAPI, 882689 keyper, 717953 Fundsphere (no tax-evasion content). Completeness sweep, all non-embedding: (a) objective ILIKE over tax avoidance/compliance/morale/fraud/gap/haven, profit shifting, offshore wealth, shadow economy, informal economy, undeclared work, taxpayer, tax evasion -> 28 projects, all adjudicated OUT except the two gold; (b) objective ILIKE tax-evasion vocabulary AND firm/corporate/company/business/supply chain/network/subsidiary/multinational -> 8 rows (727145, 736261, 758671, 758984, 784247, 835042, 101026736, 101028296), new ones read and rejected: 835042 TXpp (blockchain invoice-registration product for VAT fraud prevention), 758671 GLOBTAXGOV, 101028296 VATTECH (legal analysis of VAT technology); (c) report_text summary/workPerformed/finalResults ILIKE tax evasion, tax fraud, profit shifting, transfer pricing, VAT fraud, tax collusion -> 17 rows, new ones read and rejected: 649439 FairTax (EU fiscal integration and tax/social policy harmonisation), 682172 NETS (statistical theory of spatio-temporal networks, incidental phrase), 861034 MARKETS (informal barriers to market entry in post-USSR), 876518 UUR (e-invoicing fintech product), 778188 SHADOW (shadow-activity index and taxonomy for the post-USSR region), 715536 IllegalPharma (informal economy of illegal pharmaceuticals, no tax), 884839 EXTORT (anthropology of extortion, no tax); (d) euroSciVoc arm: the 'taxation' leaf holds 153 projects and is visibly noisy (16gAirTest, TruckSecurity, QuickTicket, netCommons all tagged 'taxation'), so it was not used as the completeness instrument - the objective and report text sweeps above are a superset for any project stating an inter-firm evasion mechanism in its text. 693402 ECOSOCPOL was dropped from the seed set: its tax-evasion work is individual-level decisions in the U.K. and Sweden inside a social-motives framework, with no firm-to-firm dimension. term_style exact-term: the question reuses 'tax evasion' and the firm-link vocabulary present in both gold texts (firm networks, supply chains, joint ownership, trading partners; 'a massive agribusiness conglomerate with which they do business'), and on the recorded text lexical retrieval ranks DEVTAXNET 1 and AnthroTax 9, consistent with real term overlap rather than paraphrase."
+          }
+        },
+        {
+          "twin_id": "vec-17",
+          "record": {
+            "question_id": "vec-17",
+            "text": "What separation-management approaches for drone traffic have European U-space projects developed themselves - their own methods for keeping drones apart and resolving conflicts - as opposed to demonstrating separation services supplied by others?",
+            "expected_route": "vector",
+            "level": "L3",
+            "subtype": "survey",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              763719,
+              763807,
+              776293,
+              861696,
+              890378,
+              892928,
+              893206,
+              893864,
+              101017677,
+              101017689
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 40,
+              "pooled_candidate_count": 57,
+              "accepted": [
+                763719,
+                763807,
+                776293,
+                861696,
+                890378,
+                892928,
+                893206,
+                893864,
+                101017677,
+                101017689
+              ],
+              "rejected_count": 48,
+              "index_fingerprint": "be84cbad9182",
+              "accepted_from_pool": [
+                763719,
+                763807,
+                861696,
+                890378,
+                892928,
+                893206,
+                893864,
+                101017677,
+                101017689
+              ],
+              "accepted_from_sweep": [
+                776293
+              ],
+              "note": "single pooled run at k=40 over the final wording; 57 distinct pooled projects = 9 accepted-from-pool + 48 rejected. 776293 GAUSS is gold but retrieved by no condition at k=40; its provenance is the completeness sweep, recorded here rather than folded into the pooled arithmetic. hybrid_rerank returns 20 projects (reranker stage cap), the other three conditions 40."
+            },
+            "reference_answer": "European work on U-space separation splits between designing the separation service itself and validating deconfliction technology in flight. BUBBLES formulates a U-Space advanced (U3) separation management service at TRL3, computing UAS collision risk so that separation minima and methods - procedural, tactical self-separated or tactical ground-based - can be derived from a stated probability of collision. USEPE studies separation methods for demanding environments such as cities and applies machine learning to automate safe separation and deconfliction while holding airspace capacity. Metropolis 2 treats airspace design, flight planning and separation management as interdependent at high traffic density, comparing concepts that differ in how separation is performed (strategic/tactical, ground/air) by simulation before a real-world demonstration, while DACUS embeds separation management in a Demand and Capacity Balancing process and searches for the optimal balance between on-board separation intelligence and U-space separation service intelligence. LABYRINTH takes the centralised route, computing 4D paths for drone swarms so trajectories do not collide. On the technology and demonstration side, CLASS matured ground-based tracking with tactical deconfliction tools that suggest new conflict-free trajectories; IMPETUS tested tactical de-confliction in which virtual weights attached to each drone define the separation criteria, giving dynamic separation; TINDAiR demonstrated AI-based tactical deconfliction with a detect-and-avoid service over VTOL flights; GOF2.0 validated an architecture for highly automated real-time separation assurance in dense urban airspace; and GAUSS approaches coordination among UAS through Galileo-EGNOS precise positioning plus tactical deconfliction services in its UTM system.",
+            "notes": "Membership criterion is now STATED IN THE QUESTION: a project is gold iff its own stored text shows it developed or validated its own method for keeping drones apart or resolving conflicts between them (separation minima, strategic or tactical deconfliction, conflict detection and resolution) within U-space/UTM; a project that only demonstrates or consumes a separation-type service supplied by partners is excluded by the question's own words ('as opposed to demonstrating separation services supplied by others'), as is on-board sensing hardware and manned-aviation separation work. The earlier 'large numbers of drones' qualifier was dropped because gold members TINDAiR (largest exercise: 'Deconfliction between an autonomous drone, an eVTOL carrying a passenger and a manned helicopter') and GAUSS ('4 UTM coordinated RPAS') do not satisfy it. IN (10): 890378 USEPE ('research on drones' separation methods in high demanding environments such as cities', ML for separation and deconfliction); 892928 Metropolis 2 (unified approach to airspace design and separation management; strategic/tactical deconfliction, dynamic capacity management; compares its own separation concepts by simulation); 893206 BUBBLES (formulation and validation of a U3 separation management service, own collision-risk algorithms, separation minima and methods); 893864 DACUS (own DCB process integrating separation management, on-board vs U-space separation intelligence); 861696 LABYRINTH (own centralized 4D path-planning system computing paths to avoid collisions for drone swarms under U-SPACE); 101017677 TINDAiR (own AI-based tactical deconfliction demonstrated in flight, Tactical Conflict Resolution and DAA); 101017689 GOF2.0 (own GOF 2.0 architecture for highly automated real-time separation assurance; trials driven by strategic deconfliction); 763719 CLASS (own ground-based UTMS with tactical deconfliction - 'Airbus teams investigated deconfliction by adapting available algorithms from manned aviation. The traffic simulator and the conflict detection have been tuned to drone characteristics'); 763807 IMPETUS (own tactical de-confliction concept tested, virtual weights defining separation criteria for dynamic separation); 776293 GAUSS (objective: 'coordination among a higher number of RPAS' and 'the definition, negotiation and execution of safe trajectories'; finalResults: 'Development of algorithms and functionalities for U-space in-flight services ... such as UTM simulators and tactical deconfliction services' - mechanism is Galileo/EGNOS positioning rather than a separation algorithm, which the reference states). Demonstrator cases resolved explicitly under the stated criterion, all OUT: 783230 PODIUM (self-described 'U-Space compliant demonstration'; its finalResults report evidence on partners' services 'including drone registration and identification, automatic flight plan validation ... and conflict detection and alerting' - it evaluates services it did not develop); 101017701 SAFIR-Med ('leveraged to make use of the maximum number of U-Space services ..., including advanced Detect And Avoid U-space service'); 101017682 CORUS-XUAM (VLD campaigns in which 'Vertiport procedures, separation, and data services will be also demonstrated' using partners' U-space deployments); 101017643 Uspace4UAM (VLD demonstrations with 'a well experienced UTM provider'); 783261 USIS (demonstrates a list of initial U-space services - e-identification, tracking, flight planning, monitoring). Other OUT: 783211 SAFEDRONE and 763702 PercEvite (on-board sense/detect-and-avoid technology, not a traffic-separation method); 861211 RAPID (on-board sense-and-detect for inspection drones); 894593 ICARUS (common altitude reference; its separation is drone-to-ground-obstacle and drone-to-manned vertical); 734143 PJ10 PROSA, 874464 PJ10-W2 PROSA, 699247 R-WAKE, 101017688 VLD2-VOICE, 699337 SALSA, 892919 SafeOPS, 699299 DART, 699249 COMPAIR, 890417 ECHO, 699313 AGENT (manned-aviation separation/collision avoidance: AGENT extends TCAS for aircraft and ATC, no drones, no U-space); 870251 DELOREAN, 783228 GAINS, 791438 Aerobits, 763601 DroC2om, 763658 AIRPASS, 857031 5G!Drones, 826610 COMP4DRONES, 827563 TRANSDAT (navigation, communication, avionics or visibility enablers, no separation method); 763551 CORUS, 763671 DREAMS, 763831 TERRA, 101017521 PJ34-W3 AURA, 763599 SECOPS, 101017702 AMU-LED, 101007134 AURORA, 892440 URClearED, 867479 AIRCARRUS, 861635 5D-AeroSafe, 663483 ADS Project, 870236 HUUVER, 955317 FRONTIER, 777465 X2RAIL-2, 887092 WINGPULSE, 832537 GASTEJO, 753561 GINGER, 892054 ComAct, 690959 Errspitals, 847118 FEASIBLE, 747947 EU-Drones (concept/information/policy work, non-aviation, or lexical noise). Sweeps (unchanged, first round): objective LIKE '%u-space%' -> 19 projects; chunk text LIKE '%u-space%' OR '%uspace%' -> 43 projects with per-project counts of chunks containing separat/deconflict/conflict resolution/detect and avoid, every non-zero one read; non-U-space net (drone|uas|unmanned a|utm|urban air mobility) x (separation|deconflict|conflict resolution|detect and avoid|traffic management) -> 14 projects, all OUT except CLASS and IMPETUS. term_style re-derived from the new wording: exact-term - the question reuses 'separation management', 'U-space', 'drone traffic' and 'conflicts' verbatim from the gold titles and objectives, and lexical ranks 8 of the 10 gold in its top-40 (DACUS 1, USEPE 2, CLASS 3, Metropolis 2 4, TINDAiR 5, IMPETUS 7, BUBBLES 10, LABYRINTH 26), with GOF2.0 dense-only (22) and GAUSS unretrieved."
+          }
+        },
+        {
+          "twin_id": "vec-02",
+          "record": {
+            "question_id": "vec-02",
+            "text": "Which Horizon 2020 project is working to commercialize a bioartificial liver in which a bioreactor filled with a human liver cell line is temporarily connected to an end-stage liver disease patient's circulation to replace liver function and bridge the patient to a transplant?",
+            "expected_route": "vector",
+            "level": "L1",
+            "subtype": "identify",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              763310
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 32,
+              "accepted": [
+                763310
+              ],
+              "rejected_count": 31,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "The BALXPAND project, run by the SME Hep-Art. It concerns the HepaRG-AMC-BAL, a bioartificial liver built from a bioreactor embedded with the human liver cell line HepaRG that is temporarily connected to an end-stage liver disease patient's circulation to replace liver function and bridge the patient to a transplant (or support liver restoration until transplantation becomes superfluous).",
+            "notes": "Seed: 763310 BALXPAND, the only project in the euroscivoc 'bioartificial liver' cluster (n=3) that describes an extracorporeal cell-bioreactor liver-support device; the cluster's other two (660554 whole-organ ex-vivo bioengineering, 721902 FLUDD fluorination drug discovery) are unrelated. L1 identify: the device is described from the project's free text and the answer names the project; question contains neither the acronym (BALXPAND) nor title, and deliberately omits 'HepaRG'. Gold = seed only; |gold|=1 -> L1. Verified on the final 'commercialize' wording (an earlier 'developed' wording was re-run after edit; stale results discarded). Pooled k=20 surfaced 32 distinct projects; all 31 non-seed candidates OUT. Closest competitor 733057 ALIVER/DIALIVE is an extracorporeal liver-DIALYSIS device (albumin removal/replacement + endotoxin removal), NOT a bioreactor with a living liver cell line replacing liver function -> OUT; the phrase 'bioreactor filled with a human liver cell line' is what excludes it. Other OUTs: 874586 ORGANTRANS / 818890 ArtHep / 705607 ENHANCE (implantable engineered liver tissue/organoids, not extracorporeal), 742020 HEPASPHER / 657701 LiVirIn / 845147 LIV-AD-ON-CHIP / 899872 FAST_TOX / 656193 mini-liver SCCS / 848429 OrganoPlate Graft / 727641 BioREAD (in-vitro models / organs-on-chip), 660554 Liver Bioengineering (whole-organ ex-vivo revascularization), 851908 MyeFattyLiver / 864788 MacinNASH / 844301 LiverMacRegenCircuit (basic liver biology), 946364 HepatoPredict / 864313 MoDeLLiver (diagnostic/modelling), 874700 VANGUARD (bioartificial pancreas) / 641036 TheLiRep (liver->pancreas reprogramming, diabetes), 733108 TheraPD / 756195 Renaparin / 896932 TTV GUIDE TX (renal/kidney-transplant), 713732 MESOTAS-SIEVE (brain-on-chip), 874769 HCA Organoid (colon/brain organoid atlas), and biomaterials/bioprinting/other-tissue (642687 BIOGEL, 805361 3DBIOLUNG, 767309 SilkFUSION, 805411 CapBed, 818808 VesselNet, 949806 VOLUME-BIO, 668724 TECHNOBEAT, 802544 StopAutoimmunity, 948959 MORE2ADA2). Completeness sweep (non-embedding): run_sql over project.objective LIKE bioartificial/bio-artificial/artificial/extracorporeal liver, (bioreactor AND liver), 'liver support' -> 19 rows; after removing broad-LIKE false positives (water treatment, cardiac, wounds, CO2 removal, breast-cancer chip, etc.) only BALXPAND qualifies as an extracorporeal cell-bioreactor liver device (660554 is whole-organ bioengineering). No additional gold. term_style=exact-term: question reuses the seed's distinctive vocabulary; on the final wording BALXPAND is lexical rank 1 (dense 3, hybrid 2, rerank 1), confirming real term overlap. index_fingerprint be84cbad9182 (n_vectors 190248, bge-base-en-v1.5)."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-06",
+      "cell": {
+        "route": "hybrid",
+        "level": "ADV",
+        "subtype": "zero-match"
+      },
+      "parents": [
+        {
+          "twin_id": "hyb-07",
+          "record": {
+            "question_id": "hyb-07",
+            "text": "Across the Horizon 2020 projects classified under volcanology that include at least one organisation based in Italy, what kinds of approaches for monitoring volcanoes and forecasting eruptions are being developed?",
+            "expected_route": "hybrid",
+            "level": "L3",
+            "subtype": "filter-survey",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              653980,
+              731070,
+              749249,
+              793811,
+              801221,
+              823844,
+              858092,
+              863220
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID = p.id JOIN organization o ON o.projectID = p.id WHERE e.euroSciVocPath LIKE '%/volcanology%' AND o.country = 'IT' ORDER BY p.id",
+              "survivor_count": 15,
+              "survivor_ids": [
+                653980,
+                658591,
+                674907,
+                714936,
+                731070,
+                749249,
+                765710,
+                793811,
+                801221,
+                823844,
+                845115,
+                858092,
+                863220,
+                101024337,
+                101025887
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 12,
+              "accepted": [
+                653980,
+                731070,
+                749249,
+                793811,
+                801221,
+                823844,
+                858092,
+                863220
+              ],
+              "rejected_count": 7,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 15
+            },
+            "reference_answer": "The eight qualifying projects converge on making volcanic unrest measurable and interpretable in near-real time, along three complementary lines. New sensing hardware: NEWTON-g developed and field-tested the building blocks of a gravity imager, installing 4 MEMS gravimeters at Mt. Etna alongside an AQG-B absolute quantum gravimeter that it showed delivers continuous gravity data suitable for volcano monitoring, while reporting that COVID-19 delays meant the original 'gravity imager' idea did not come completely true; SiC nano for PicoGeo targets an optical fibre strain sensor built on a vacuum-encapsulated SiC thin-membrane resonator with picostrain resolution (10-12) to reveal the slow strain transients preceding eruptions, and reports first-stage work on SiC thin-film growth plus the first drilling of its test sites for strain-meter and seismometer installation; IMPROVE prototyped an automated gas-steam ratio sensor and demonstrated fibre-optic distributed acoustic sensing for volcano monitoring. Data-driven signal analysis and subsurface imaging: VULCAN.ears builds an automatic Volcano Seismic Recognition (VSR) system based on structured Hidden Markov Models and a Parallel System Architecture to classify precursory seismicity in real time; PICVOLC integrated seismic, gravity and deformation data (GNSS, tilt, InSAR) with a physics-based 3D FEM inverse model and a new seismic tomography of Nevado del Ruiz, run with the Colombian Geological Survey's observatory (OVSM) and INGV - Rome, to locate and interpret sources of unrest; IMPROVE also combined seismic, geodetic, gravity and geochemical observations with machine learning to image magma storage at Krafla and Mount Etna. Simulation, early warning and observatory integration: ChEESE prepared exascale flagship codes for ensemble volcanic ash dispersal forecasting with satellite data assimilation and physics-based probabilistic hazard assessment, running daily ensemble ash forecasts operationally during the La Palma eruption for PEVOLCA and civil protection; ARISE2 delivered a Volcano Information System (VIS) and near-real-time Volcano Infrasound Early-Warning (VIEW) notifications that infer ash plume height and mass eruption rate from infrasound signals; EUROVOLC networked volcano observatories and research institutions and opened virtual access to modelling and assessment tools for responding to volcanic unrest and eruptions.",
+            "notes": "FILTER: euroSciVoc leaf 'volcanology' matched with LIKE '%/volcanology%' (paths carry no leading slash) joined to any organization row with country='IT'. The question deliberately says 'at least one organisation based in Italy' (role-neutral): the organization table's role column includes the value 'participant', and a role-scoped reading would drop survivors to 6 and gold to 4, below the filter-survey floor - the recorded filter counts organisations in any role, including coordinators. Executed this pass: 15 survivors; the same topic without the country condition yields 62 projects, so the country filter removes 47. ADJUDICATION: exhaustive - all 15 survivors read via get_project_text (objective+teaser for all, plus workPerformed/finalResults for 653980, 674907, 858092, 101025887, 801221, 863220). IN: 653980 ARISE2; 731070 EUROVOLC; 749249 VULCAN.ears; 793811 PICVOLC; 801221 NEWTON-g (MEMS relative + AQG-B absolute quantum gravimeters installed at Mt. Etna; the full 'gravity imager' was not completely realised because of COVID-19 delays); 823844 ChEESE (operational ensemble ash dispersal forecasts during the La Palma eruption); 858092 IMPROVE; 863220 SiC nano for PicoGeo (10-12 picostrain resolution is the stated target; first-year SiC thin-film growth and test-site drilling reported). OUT: 658591 CIAO; 674907 EVER-EST; 714936 TRUE DEPTHS; 765710 INSIGHTS; 845115 ICELEARNING; 101024337 PUSKURUM; 101025887 ENDGAME. DISCRIMINATION (unscoped pooled k=10 on the final wording): 798480 VOLCANOWAVES (ES), 866085 DEEPVOLC (UK), 864052 VOLTA (DE), 646858 VOLCAPSE (DE), 677493 FEVER (CH) - each SQL-confirmed volcanology-classified with 0 IT organization rows in any role. TERM_STYLE exact-term - all 8 gold appear in the scoped lexical top-10. POOLING: pooled_candidate_count=12 is the scoped pooled search's distinct-project union (final wording); rejected_count=7 counts survivors rejected, not pooled candidates."
+          }
+        },
+        {
+          "twin_id": "hyb-08",
+          "record": {
+            "question_id": "hyb-08",
+            "text": "Among ERC Consolidator Grant projects classified under textiles, how does the project that set out to make wearable fibres for sensing hazardous gases and mechanical strain produce those fibres?",
+            "expected_route": "hybrid",
+            "level": "L1",
+            "subtype": "filter-read",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              648763
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID = p.id WHERE e.euroSciVocPath LIKE '%/textiles%' AND p.fundingScheme = 'ERC-COG' ORDER BY p.id",
+              "survivor_count": 7,
+              "survivor_ids": [
+                648763,
+                682711,
+                726195,
+                771288,
+                819458,
+                101002711,
+                101003104
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 7,
+              "accepted": [
+                648763
+              ],
+              "rejected_count": 6,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 7
+            },
+            "reference_answer": "INTERACT (grant 648763) produces them by electrospinning liquid crystals (LCs) inside a polymer sheath, so that the LC sits in the fibre core and passes its responsiveness to the non-woven textile; thicker LC-core fibres are made with a newly developed microfluidic wet spinning approach.",
+            "notes": "Filter: fundingScheme = 'ERC-COG' AND a euroSciVoc path under the textiles subtree ('engineering and technology/materials engineering/textiles'). Re-executed this pass: 7 survivors out of 295 projects in the textiles subtree. Exhaustive adjudication (S=7 <= 20, every survivor's objective + report teaser/summary read this pass). 648763 INTERACT: IN - report summary: 'INTERACT explored a new class of responsive textile fibers realized by electrospinning liquid crystals (LCs) inside a polymer sheath, targeting wearable detectors of hazardous gases and sensors of tensile or compressive strain', and 'Thicker LC core fibers can be realized by means of a newly developed microfluidic wet spinning approach'; objective adds 'the concept of liquid crystal (LC) electrospinning ... incorporating the LC in the fiber core'. 682711 PENELOPE: OUT - weaving as a technical mode of existence; no fibre production, no sensing. 726195 RE-FASHIONING: OUT - Renaissance dress; it does dye- and fibre ANALYSIS of historical textiles, but makes no wearable sensing fibres. 771288 TextileLab: OUT - economic history of cotton manufacturing relocation. 819458 PoliticsOfPatents: OUT - sociology of clothing patents and citizenship. 101002711 BODYinTRANSIT: OUT - the closest in-filter near-miss; it builds wearable multisensory feedback devices, but spins no fibres and senses neither gases nor strain. 101003104 MYCLOTH: OUT - geometric modelling of personalized garments. Filter-discrimination (unscoped pooled search on the recorded question text, k=10, four conditions): the gold is NOT an unambiguous top-1 - 648763 ranks lexical 2, dense 10, hybrid 7, hybrid_rerank 1, while the unscoped top-1s are 704963 E-TEX (lexical, hybrid) and 739891 Wearonics (dense). The filter removes these competing text-satisfiers, all of which make wearable sensing fibres: 704963 E-TEX (MSCA-IF-EF-ST, textiles-tagged, 'conductive textile fibres ... built directly on textile fibres', 'truly wearable sensing applications'), 739891 Wearonics (MSCA-IF-EF-ST, textiles+sensors+fibers-tagged, 'develop stretchable conductive fibres (SCF) using silver nanowires and spandex fibre', used 'for measuring respiration and body motions'), 842349 SENFLEX (ERC-POC, 'truly smart and flexible fibers called SenFlex, that can be elastically deformed and sense the imposed mechanical constraints'), 637624 ThermoTex (ERC-STG, textiles+sensors-tagged, thermoelectric fibres and yarns for wearable electronic textiles - ERC but not COG, so the scheme VALUE is what cuts), 796640 GFSMART (MSCA-IF-EF-CAR, textiles-tagged, graphene fibre based antennas for smart textiles), 834966 STREAM (MSCA-IF, textiles-tagged, optical fibre sensors produced by a microfluidic device and integrated into textiles), 685758 1D-Neon (IA, 'Piezo-based F-Stretch and Fibre-Sensor achieved'), 825232 WEAFING (RIA, coated yarn actuators woven into fabrics). Text is load-bearing: no stored column says how the fibres are made - the title ('Intelligent Non-woven Textiles and Elastomeric Responsive materials by Advancing liquid Crystal Technology') names neither electrospinning nor the polymer sheath; the method lives only in the objective and report summary. term_style re-derived for this wording: the question keeps 'wearable' and 'hazardous gases' verbatim from the gold report summary (it paraphrases only 'tensile or compressive strain' as 'mechanical strain' and deliberately omits the mechanism vocabulary, which is the answer), and the rank matrix agrees with exact-term - gold is lexical rank 1 scoped and lexical rank 2 unscoped. Scoped pooled search over the 7 survivors on the recorded text: 648763 lexical 1, dense 1, hybrid 1, hybrid_rerank 2 (726195 RE-FASHIONING takes rerank 1 on its dye/fibre-analysis chunk but is adjudicated OUT on the text)."
+          }
+        },
+        {
+          "twin_id": "hyb-09",
+          "record": {
+            "question_id": "hyb-09",
+            "text": "Among the SME Instrument phase 1 projects classified under viticulture, how do the ones that build on a producer's own naturally occurring organisms, rather than on bought-in standard cultures, put those organisms to work in making wine?",
+            "expected_route": "hybrid",
+            "level": "L2",
+            "subtype": "filter-synthesize",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              711328,
+              826866
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID = p.id WHERE e.euroSciVocTitle = 'viticulture' AND p.fundingScheme = 'SME-1' ORDER BY p.id",
+              "survivor_count": 14,
+              "survivor_ids": [
+                674409,
+                674786,
+                711328,
+                773813,
+                775049,
+                781608,
+                815904,
+                816093,
+                826866,
+                832214,
+                855467,
+                863346,
+                876252,
+                877334
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 11,
+              "accepted": [
+                711328,
+                826866
+              ],
+              "rejected_count": 9,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 14
+            },
+            "reference_answer": "Two of the 14 SME Instrument phase 1 projects tagged viticulture take this route, and both make the producer's own resident biology the source of a wine competitors cannot replicate. MYBIOASSET (LEV2050) treats a winery's own bio-imprint as a commercial asset: it genetically selects, preserves and reproduces indigenous yeasts of different strains, so a house can keep dependable, robust fermentation and still bottle singular wines, the firm's stated aim being to recover the old diversity of wines without giving up modern production technology. Eternum works from the vineyard outwards: Bodegas Langa, with 150 years of winemaking expertise, profiles the vineyard's own microbiology and uses that profile both to draw up a highly specific low-impact pest control plan and to pick the site's own fermentation yeasts, then matures the wine together with those yeasts in a purpose-designed container that mimics the shape of a maturation deposit, so nutrients the organisms yield keep enriching the wine inside the bottle. The shared move is to replace a bought-in standardised input with an on-site biological one, LEV2050 packaging it as a technology any winery can buy and Bodegas Langa applying it to its own estate's production.",
+            "notes": "Filter: fundingScheme='SME-1' (SME Instrument phase 1) AND euroSciVoc leaf 'viticulture'. Observed values: viticulture is a LEAF with no sub-terms - a DISTINCT euroSciVocPath/euroSciVocTitle query on LIKE '%viticulture%' returns exactly one path, 'agricultural sciences/agriculture, forestry, and fisheries/agriculture/horticulture/viticulture' (46 projects), so the subtree reading (path LIKE '%/viticulture%') and the leaf reading (euroSciVocTitle='viticulture') are the same 46 projects and 'classified under viticulture' has exactly one executable reading. Scheme spread over those 46: SME-1 14, SME-2 6, IA 6, RIA 5, MSCA-IF 3, CSA 3, MSCA-IF-EF-ST 3, MSCA-RISE 3, ERC-POC 1, MSCA-ITN-ETN 1, MSCA-IF-EF-RI 1 - the scheme half cuts 46 to 14. Corpus-wide the only SME schemes are SME-1 (4228), SME-2 (1389), SME (86), SME-2b (31); 'phase 1' = SME-1, and no viticulture project carries plain 'SME' or 'SME-2b'. Adjudication was EXHAUSTIVE (S=14 <= 20): all 14 survivors read via get_project_text (objective + report teaser), 2 IN and 12 OUT. IN: 711328 MYBIOASSET (LEV2050) - selects, preserves and reproduces indigenous yeasts so a winery can bottle unrepeatable wine while keeping robust fermentation; 826866 Eternum (Bodegas Langa) - analyses the vineyard's microbiome, selects indigenous fermentation yeasts, matures the wine with those yeasts in a novel container. OUT: 674409 UVT (UV light KILLS microorganisms in beverage tanks - the opposite of building on them); 674786 VitiPrecision 2020 (computer vision and sensors for vineyard information, no organisms); 773813 TX3 (electric transaxle for farm vehicles); 775049 TEVINS (vision-guided vineyard sprayer); 781608 LBS-PROTECTION (liquid bioassimilable sulphur against powdery mildew - a chemical formulation, not the producer's own organisms); 815904 ANTOFERINE (polyphenols extracted from vineyard waste - plant matter, applied post-harvest to fruit and vegetables, not to making wine); 816093 SSR (mechanical shoot remover); 832214 Winegrid (fibre-optic vinification sensors); 855467 Eco-Closure (recyclable bottle closure); 863346 BIOAVENGER (bio-fungicide made from MycoSolutions' own fungi, sold in and applied to soil for crop protection - not the producer's own organisms and not winemaking); 876252 PPB (bottle cleaning and polishing line); 877334 DSES (wireless power-tool safety system). Non-embedding sweeps over the survivors: regexp over objectives for yeast|microb|ferment|indigenous|native|microorganism|strain|bacteri|fungi|fungal hit only 674409, 711328, 815904, 826866, 863346; regexp over report teaser+summary+workPerformed+finalResults for yeast|indigenous|autochthon|native|microbio|microbiome|microbiota|ferment hit only 711328 and 855467 (Eco-Closure's hit is 'second fermentation ... methode Champenoise' plus cork-taint fungus - OUT). Both sweeps confirm the exhaustive read; no additional gold. Filter-discrimination (unscoped pooled, k=10, same question text): text-satisfying projects OUTSIDE the filter - 881239 ECOBIOMASS (fundingScheme SME-2, viticulture-tagged, same firm LEV2050: 'produce personalized wines using selected indigenous microorganisms', dense rank 2, hybrid_rerank rank 1), 643063 MICROWINE (MSCA-ITN-ETN, viticulture-tagged, microbial community from vineyard soil through fermentation, dense 3, hybrid_rerank 3), 747775 Mitogression (MSCA-IF-EF-RI, not viticulture-tagged, engineered wine yeast strains, dense 6). Unscoped, the gold pair ranks BELOW ECOBIOMASS (MYBIOASSET rerank 5, Eternum rerank 6), so the text alone does not identify the gold set. Text side is not answerable from any stored column: how each project puts the organisms to work exists only in objective and report prose. term_style=paraphrase: the question avoids the gold texts' distinctive vocabulary (yeast, indigenous, microorganism, microbiome, microbiota, fermentation, vinification, bio-imprint) and uses 'naturally occurring organisms' and 'bought-in standard cultures'; in the scoped rank matrix lexical puts non-gold VitiPrecision 1st and gold MYBIOASSET only 7th, while dense puts Eternum 1st and MYBIOASSET 2nd - gold is reached semantically, not by term overlap. pooling_evidence reports the SCOPED pooled search and nothing else, on one denominator: pooled_candidate_count=11 distinct survivors returned across the four conditions (711328, 826866, 674786, 815904, 832214, 855467, 674409, 876252, 775049, 863346, 781608; not returned: 773813, 816093, 877334), accepted=2, rejected_count=9. The gold label itself does NOT come from that pool: it comes from the separate exhaustive adjudication of all 14 survivors recorded above (2 IN, 12 OUT), which is the authority for gold, while the scoped pool only diagnoses retrievability and term_style."
+          }
+        }
+      ]
+    }
+  ]
+}

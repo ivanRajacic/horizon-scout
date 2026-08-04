@@ -1,0 +1,410 @@
+{
+  "kind": "packet",
+  "output_dir": "eval/drafts/batchM/",
+  "order": "3 adversarial questions, one wearing each costume route (sql, vector, hybrid), each derived from a parent of that same route; ADV subtypes spread one per slot",
+  "siblings": "batchL is in flight on adv-04/05/06 (parents sql-03/05/08, vec-09/17/02, hyb-07/08/09); batchK is closed. Never reach for a parent either holds.",
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd2",
+      "content_hash": "f8c001e8cc8f"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "adv-07",
+      "cell": {
+        "route": "sql",
+        "level": "ADV",
+        "subtype": "zero-match"
+      },
+      "parents": [
+        {
+          "twin_id": "sql-01",
+          "record": {
+            "question_id": "sql-01",
+            "text": "How much EU funding did the AQUACOMBINE project receive?",
+            "expected_route": "sql",
+            "level": "L1",
+            "subtype": "lookup",
+            "specification": "well-specified",
+            "gold_sql": "SELECT ecMaxContribution FROM project WHERE acronym = 'AQUACOMBINE';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "ecMaxContribution"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 1,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The AQUACOMBINE project received 9789883.64 in EU funding (its committed EC contribution).",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on project table. Acronym AQUACOMBINE verified unique (n=1); acronyms are not globally unique in this DB (e.g. AQUATIC appears twice), so a verified-unique key was chosen. EU funding = ecMaxContribution per schema note (not totalCost). Gold executed this pass -> single row 9789883.64."
+          }
+        },
+        {
+          "twin_id": "sql-02",
+          "record": {
+            "question_id": "sql-02",
+            "text": "Which five Horizon 2020 projects received the most EU funding?",
+            "expected_route": "sql",
+            "level": "L1",
+            "subtype": "rank",
+            "specification": "well-specified",
+            "gold_sql": "SELECT acronym, ecMaxContribution FROM project ORDER BY ecMaxContribution DESC LIMIT 5",
+            "sql_comparison": "ordered",
+            "answer_columns": [
+              "acronym",
+              "ecMaxContribution"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 0,
+              "has_group_by": false,
+              "has_order_by_limit": true,
+              "value_note_dependencies": [],
+              "trap_documented": false
+            },
+            "reference_answer": "The five best-funded H2020 projects, in order, are EUROfusion with 678800000.0, followed by LPA GAM 2018 at 184973049.81, H2020 at 178169171.0, GAM-2020-LPA at 173872776.94, and ENG GAM 2018 at 171920071.33. EUROfusion's commitment is more than triple the next-largest.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on project table, single table, no join. EU funding = ecMaxContribution per schema note (not totalCost). Gold executed this pass -> 5 rows: EUROfusion 678800000.0, LPA GAM 2018 184973049.81, H2020 178169171.0, GAM-2020-LPA 173872776.94, ENG GAM 2018 171920071.33. Tie check: LIMIT 6 boundary row5=171920071.33 vs row6 (GAM AIR 2018)=160974883.59, distinct, no tie at cutoff; sql_comparison=ordered. L1 rank = bare ORDER BY+LIMIT, no join."
+          }
+        },
+        {
+          "twin_id": "sql-06",
+          "record": {
+            "question_id": "sql-06",
+            "text": "How many times did organisations take part in Horizon 2020 projects as unfunded partners?",
+            "expected_route": "sql",
+            "level": "L2",
+            "subtype": "value-grounded",
+            "specification": "well-specified",
+            "gold_sql": "SELECT COUNT(*) AS participation_count FROM organization WHERE role = 'partner';",
+            "sql_comparison": "set",
+            "answer_columns": [
+              "participation_count"
+            ],
+            "level_evidence": {
+              "join_count": 0,
+              "non_trivial_where_count": 1,
+              "has_group_by": false,
+              "has_order_by_limit": false,
+              "value_note_dependencies": [
+                "organization.role: partner = MSCA, unfunded"
+              ],
+              "trap_documented": false
+            },
+            "reference_answer": "Organisations took part in Horizon 2020 projects as unfunded partners 7658 times; these are the MSCA partner participations, none of which carry an EC contribution.",
+            "schema_docs_hash": "c3435815b331",
+            "notes": "Grounded on organization table, single table, no join. Value note: role 'partner (MSCA, unfunded)' - 'unfunded partner' maps to role='partner' only via the note, not from the column name (other partner-ish roles exist: thirdParty, internationalPartner). Cross-check: partner slice = 7658 rows, 0 with non-null ecContribution, matching the note's 'NULL for all 7,658 partner rows'. Gold executed this pass -> single row 7658. Watch-item (not a documented trap): a model reading 'unfunded' might filter ecContribution IS NULL instead, returning 7800 (7658 partners + 142 others) - a wrong answer, not scored as a trap since this is typed value-grounded. sql_comparison=set."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-08",
+      "cell": {
+        "route": "vector",
+        "level": "ADV",
+        "subtype": "data-absent"
+      },
+      "parents": [
+        {
+          "twin_id": "vec-04",
+          "record": {
+            "question_id": "vec-04",
+            "text": "I keep coming across mathematics projects that bring knot theory to bear on physical field equations - studying how knots show up in the solution fields themselves, whether as knotted electromagnetic or magnetic field lines, knotted vortex lines and tubes in ideal fluid flows, or knotted nodal lines of quantum wavefunctions satisfying Maxwell's, Euler's or Schrodinger's equations. How do the projects working in this area differ in the physical systems and equations they focus on?",
+            "expected_route": "vector",
+            "level": "L2",
+            "subtype": "comparison",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              101023017,
+              633152,
+              862342
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 37,
+              "accepted": [
+                101023017,
+                633152,
+                862342
+              ],
+              "rejected_count": 34,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "KNOTDYNAPP takes an electromagnetic and quantum-mechanical route: it proves that every knot type can occur as a stable closed field line of an electromagnetic field satisfying Maxwell's equations, constructs optical and quantum vortex knots as the knotted zeros of wavefunctions obeying Schrodinger and paraxial equations, and ties a knot's fiberedness to whether the magnetic field induced by a current through a knotted wire vanishes anywhere. GEOFLUIDS works instead in fluid mechanics and spectral theory, proving the Arnold-Moffatt conjecture on knotted vortex lines and Kelvin's conjecture on thin vortex tubes in Beltrami and steady Euler flows, and answering Berry's 2001 question by building Laplacian eigenfunctions whose nodal sets realize any knot type. FLUSPEC, a companion geometric-PDE program, targets smooth stationary solutions of the 3D Euler equations with chaotic trajectories confined in knotted vortex tubes of any topology, and studies vortex reconnection in the Gross-Pitaevskii equation. All three apply knot theory to solutions of physical field equations, but KNOTDYNAPP centres on electromagnetic field lines and quantum vortex knots whereas GEOFLUIDS and FLUSPEC centre on knotted vortex structures in incompressible fluid flows.",
+            "notes": "Seeds: candidate cp2 vector-09 proposed KNOTDYNAPP(101023017)+BOPNIE(682537) via euroscivoc 'knot theory'. Reading BOPNIE(682537) shows it studies boundary value problems for nonlinear integrable PDEs; 'knot theory' appears once in a passing list of fields where integrable equations arise, and no knotted structure is studied - REJECTED as a euroscivoc false positive. KNOTDYNAPP is a genuine seed. Completeness sweep (non-embedding): run_sql objective LIKE '%knot%' returned the full 31-row universe; the only genuine knot-in-physical-field projects are KNOTDYNAPP(101023017), GEOFLUIDS(633152), FLUSPEC(862342); abstract-topology neighbours QuantGeomLangTFT(637618, TQFT knot invariants), LDTSing(101030083, algebraic/torus knots in 4-manifold surgery), MM-CAHF(893282, Heegaard Floer knot invariants), REFINV, OXTOP, GENERALIZED, ROGW all OUT (knots studied abstractly, no physical field); GOKNOT(796969, protein-backbone gordian knot via molecular dynamics) and MaCChines(787115, protein origami) OUT (discrete polymer, not a field-equation solution); euroscivoc 'knot theory' = {KNOTDYNAPP, BOPNIE}. Pooled adjudication (k=20, 37 candidates): IN KNOTDYNAPP (ranks L1/D1/H1/R1; EM field-line knots, quantum/optical vortex knots, fibered-knot vs induced magnetic field); IN GEOFLUIDS (L4/D2/H3/R2; knotted vortex lines/tubes in Beltrami/Euler flows, knotted nodal sets in QM); IN FLUSPEC (L2/D3/H2/R4; knotted vortex tubes of any topology in Euler flows, Gross-Pitaevskii vortex reconnection). OUT boundary candidates read in full: BOPNIE(682537) integrable-PDE BVPs; VORTSHEET(706283) 2D vortex sheets/patches, no knots; IPFLOW(725967) geodesic/Anosov flows and CFT, no knots; 3DWATERWAVES(678698) water waves over Beltrami flows, no knotted structures; HADE(669689) single vortex-filament equation/Talbot effect, no knot topology; GRAPHCPX(678156) graph-complex TQFT / rational homotopy of knot-spaces, abstract; TopMechMat(771503) 'knot' metaphorical (band-structure braiding); MM-CAHF(893282) abstract knot invariants. Remaining 34-3 rejected pooled candidates are integrable-systems / QFT / geometry projects with no knot topic (absent from the objective-'knot' universe). term_style=exact-term: all three gold retrieved by lexical (KNOTDYNAPP L1, FLUSPEC L2, GEOFLUIDS L4), confirming real term overlap with the question's borrowed vocabulary (knot theory, field lines, vortex tubes, nodal, Maxwell/Euler/Schrodinger). Level computed: |gold|=3 in [2,4] => L2. GEOFLUIDS and FLUSPEC are companion grants of the same fluid-knot program; both genuinely satisfy so both are kept, and the reference notes their kinship."
+          }
+        },
+        {
+          "twin_id": "vec-19",
+          "record": {
+            "question_id": "vec-19",
+            "text": "Which projects are aimed specifically at preventing, or detecting at an early stage, the skin and tissue damage that long periods of unrelieved pressure inflict on bedridden or wheelchair-bound patients?",
+            "expected_route": "vector",
+            "level": "L3",
+            "subtype": "survey",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              696939,
+              709595,
+              735302,
+              783594,
+              811965,
+              830134
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 38,
+              "accepted": [
+                696939,
+                709595,
+                735302,
+                783594,
+                811965,
+                830134
+              ],
+              "rejected_count": 32,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "Six H2020 grants in this corpus are aimed at this problem, and most are sensing-plus-prevention systems rather than treatments. i-LiveRest (696939) and its successor grant LiveRest (830134) put impedance, pressure, temperature and humidity textile sensors on a wheelchair or mattress to score Tissue Viability in real time and then trigger the prevention strategy that suits the user and context; their target group is Spinal Cord Injury patients, 85% of whom develop such an injury. Qone (735302) does the equivalent for bedridden patients with a pressure-relieving mattress carrying temperature and pressure mapping sensors feeding a personalised risk-score algorithm, claiming roughly a 75% reduction in new cases. The two JUMPAIR grants (709595, 783594) build a smart anti-decubitus mattress system that remotely tracks known ulcer-activity biomarkers to raise early alerts to the hospital. STINTS (811965) is the research and training strand: it studies the biomechanical and biochemical pathways by which prolonged pressure and shear destroy skin integrity, in order to improve preventative aids such as mattresses and insoles, early-stage diagnosis through non-invasive biomarkers and sensors, and ultrasound therapy.",
+            "notes": "SEEDS: cp6 candidate vector-68 (pressure injury / bedsores). Candidate evidence SQL re-executed this pass: the five-synonym ILIKE probe over project.title/objective still returns 11, no drift. Seed ids read in full: 696939, 709595, 735302, 783594, 811965, 815769, 830134, 834049, 845756, 868392, 869943.\n\nBOUNDARY, ON THE FACE OF THE QUESTION: the question asks for projects 'aimed specifically at' preventing or early-detecting this damage. That wording, not the notes, decides the two boundaries where a survey gold set leaks. (a) Projects that heal an existing chronic wound are out, because healing is neither prevention nor early detection: 815769 LYSADERM (platelet-lysate cream for skin ulcers, pressure ulcers one of three indications), 869943 DERMAREP (eggshell-membrane dressing for pressure, leg and diabetic foot ulcers). (b) Projects whose own aim is something else, and for which this damage is a downstream application, are out: 845756 BIOCONTACT states 'the main objective of BIOCONTACT was to develop an advanced contact mechanics model able to accurately describe the contact behavior of elastic/viscoelastic thin layers', and reaches bedsores only as one benefit among contact lenses and prosthetic bones ('the accurate prediction of the contacting normal and tangential stresses acting on the soft biological tissues provides an efficient tool to reduce bedsores in long-term bedridden patients'). Every gold member's own stated aim IS this damage: prevention systems (696939, 830134, 735302, 709595, 783594) or the study of how prolonged pressure and shear destroy skin integrity in order to improve prevention and early diagnosis (811965).\n\nJUMPAIR: 709595 (SME Phase 1, 2016) and 783594 (SME Phase 2, 2018) are two separate grants with the same acronym and distinct objectives; both are separately funded projects whose text satisfies the question, so both are gold. Same treatment for the i-LiveRest (696939) / LiveRest (830134) pair.\n\nPOOLED ADJUDICATION (final question string, k=20, all four conditions, 38 distinct projects). IN (6): 696939 i-LiveRest (real-time Tissue Viability sensing to prevent PU in wheelchair users); 830134 LiveRest (same system, written throughout as Pressure Injury, never pressure ulcer); 735302 Qone (sensing mattress predicting and preventing PU in bedridden patients); 783594 JUMPAIR (smart anti-decubitus system, biomarker monitoring for early diagnosis and prevention); 709595 JUMPAIR (Phase 1 of the same anti-decubitus system); 811965 STINTS (skin tissue integrity under prolonged pressure and shear; objectives are preventative aids, early-stage diagnosis, therapy). OUT (32): 845756 BIOCONTACT, 815769 LYSADERM and 869943 DERMAREP per the boundary above (LYSADERM did not surface in this run's pool but is adjudicated in the sweep list); 868392 Dignum (toilet assistive device, pressure ulcers only an inspection feature); 101003407 ELECTROSKIN, 873123 SWORD, 885973 StrataGRT, 833594 PHAS, 955722 SkinTERM, 892407 SKIN-REGEN-MECH, 877901 Bio2Skin - wound-healing, skin-graft, bandage or skin-adhesive work with pressure ulcers at most named in a chronic-wound list; 849047 and 826930 AGLYC (cardiac ischemia), 801126 EDIT (bladder cancer), 836268 DermoSafe 2.0 (skin cancer), 839888 MultiBioScan (tissue glycation imaging), 840786 BrainWatch (intracranial pressure implants), 101031327 WEARSENSNANO (hypothermia monitoring), 101038096 NeuroVascularHealth, 812772 Phys2BioMed, 885435 MAIT, 853508 BARRIER BREAK, 848158 EarlyCause, 101029808 EarlyCare, 101017385 WARIFA, 645759 WASTCArD - other conditions, matched on 'early detection' or 'tissue'; 643853 SC0806, 956003 REPAIRS, 745431 MyTherapyTools, 872082 ImpHandRehab, 855081 ABLE, 689476 RELIEF - rehabilitation/paralysis projects that name such damage at most as a complication they do not work on; 867161 ROCS (ore composition monitoring) - off-domain lexical match. Total: 6 + 32 = 38.\n\nCOMPLETENESS SWEEP (regexp_matches, case-folded, over project.title+objective AND report_text teaser+summary+workPerformed+finalResults+title; unchanged by the rewording, since it sweeps the topic's vocabulary and not the question string). Pattern 1: 'pressure[ -]?(ulcer|injur|sore)|bed[ -]?sore|decubitus' -> 23 projects: the 11 that match in the project fields (the candidate's 11) plus 12 that match only in report text, adjudicated from their matched context - 653019 CEREBSENSING (robot lifting of bed-confined elderly as an example application), 665055 NETEEG (pressure injuries caused by long-worn dry EEG electrodes - device-borne, not immobility), 753633 ELECTRO-HEAL, 827096 SkinKer, 828092 BC SKIN, 873123 SWORD, 896904 Dual-NanoMAE, 101003407 ELECTROSKIN (chronic-wound healing materials listing pressure ulcers among indications), 828169 HeartWatch (bedsore prevention named as a future upgrade), 855081 ABLE, 899040 Neuroprosthesis-UI (pressure sores listed as a complication of paralysis), 959492 Klikkit (carer reminder platform) - all OUT. Pattern 2 (neighbouring vocabulary): 'tissue viability|bedridden|bed-ridden|bed bound|bedbound|prolonged (sitting|lying|immobil|bed)|repositioning|offload' AND 'skin|wound|ulcer|tissue|sore', excluding pattern-1 hits -> 13 projects: 637908 STIGMATICS, 737043 TISuMR, 752489 SODIUMMRI-4-EU, 759731 RECEIVE, 770889 ULTRA, 771883 XHaLe, 777072 INSIST, 822455 GENBIO, 871312 HandheldOCT, 875328 ChronicPain, 954353 Signia, 963865 MELASTOP, 101024448 STASIS - all OUT, none concerns pressure-induced tissue damage.\n\nDELIBERATE NEAR-MISSES (sweep hits judged out, each decidable from the question's 'aimed specifically at' wording): 845756 BIOCONTACT, 815769 LYSADERM, 869943 DERMAREP, 834049 PODIUM (diabetic foot ulcer thermography; pressure ulcers only in a market-size sentence), 868392 Dignum, 665055 NETEEG, 828169 HeartWatch, 653019 CEREBSENSING, 855081 ABLE, 899040 Neuroprosthesis-UI.\n\nTERM_STYLE: paraphrase. The question uses none of the vocabulary the gold texts use for the condition itself (pressure ulcer, PU, pressure injury, PI, decubitus ulcer, DeU, bedsore, pressure sore, tissue viability); it says 'the skin and tissue damage that long periods of unrelieved pressure inflict'. Rank matrix on the final string (lexical/dense/hybrid/hybrid_rerank): 696939 = 1/1/1/2; 811965 = 2/2/2/1; 735302 = 3/3/3/4; 830134 = 19/6/4/3; 783594 = null/9/20/null; 709595 = null/11/null/null. The two decubitus-worded JUMPAIR grants are reachable only by dense/hybrid, the paraphrase signature; the three that lexical ranks high share only generic words (pressure, skin, tissue, bedridden, prevent, early), never the condition's name.\n\nSEED-RETRIEVED: all six gold appear in at least one condition's top-20 on the final string."
+          }
+        },
+        {
+          "twin_id": "vec-01",
+          "record": {
+            "question_id": "vec-01",
+            "text": "In a project where a group of robots collectively assembled objects the way certain colony-dwelling animals build up their homes piece by piece, the robot that laid each piece could only sense a small region around itself at any moment. What hardware limitation forced its perception to stay so narrow?",
+            "expected_route": "vector",
+            "level": "L1",
+            "subtype": "detail",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              846009
+            ],
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 40,
+              "accepted": [
+                846009
+              ],
+              "rejected_count": 39,
+              "index_fingerprint": "be84cbad9182"
+            },
+            "reference_answer": "The block-placing robot in this project - the BuilderBot - had to keep its field of view very small in order to stop its onboard CPU from overheating. As a result it could see only a few of the Stigmergic Blocks at a time, which limited the complexity of the structures it could build and the reliability of the building process.",
+            "notes": "Seed: 846009 SRoCS (the only project in the euroscivoc 'swarm robotics' cluster, n=5, whose report documents a block-placing robot with a deliberately narrow field of view). L1 detail: the reason (field of view kept small to prevent CPU overheating) lives only in report_text.workPerformed, not in any stored column. Gold = seed only; |gold|=1 -> L1. Adjudication: pooled k=20 on the final wording surfaced 40 distinct projects across the four conditions; all 39 non-seed candidates OUT - industrial pick-and-place/assembly (PICKPLACE, LABOR, SYMBIO-TIC, GROW, VisionBot), space/planetary assembly (PRO-ACT, PULSAR, FACILITATORS), real-insect biology (ANTSolve, Ceratina, EMERG-ANT, Vision-In-Flight, HIVEOPOLIS), and swarm/collective robotics without the FOV-overheating fact (DEMIURGE, BROS, gAIa, SWARMs, CyBioSys); none describes a swarm-construction robot whose view was narrowed to prevent processor overheating. Completeness sweep (fact-based, wording-independent): run_sql over project.objective LIKE '%swarm%' AND (build|construct|assembl) -> 22 rows, only SRoCS is a swarm-robotics construction system; run_sql over report_text (workPerformed/summary/finalResults) LIKE '%overheat%' -> 68 rows, all battery/server/cooling/LED thermal projects, none a robot field-of-view constraint. No additional gold. term_style=paraphrase (reviewer WARN): the question avoids the answer terms (CPU, overheating) and the seed's key vocabulary (field of view; 'nest building behavior of social insects' rendered as 'colony-dwelling animals building up their homes'). On this final wording SRoCS is found by dense (rank 2), hybrid (1) and hybrid_rerank (1) but only drops to lexical rank 5 (it was lexical rank 1 under exact-term phrasing) - residual lexical overlap on generic robotics vocabulary keeps the paraphrase label borderline rather than clean dense-only evidence. index_fingerprint be84cbad9182 (n_vectors 190248, bge-base-en-v1.5)."
+          }
+        }
+      ]
+    },
+    {
+      "question_id": "adv-09",
+      "cell": {
+        "route": "hybrid",
+        "level": "ADV",
+        "subtype": "false-presupposition"
+      },
+      "parents": [
+        {
+          "twin_id": "hyb-03",
+          "record": {
+            "question_id": "hyb-03",
+            "text": "Among the Horizon 2020 projects classified under superconductivity that received EU funding above the 95th percentile of all H2020 projects (about EUR 6.93 million in EC contribution), how do they differ in the application domain they target and in the way they make use of superconductivity?",
+            "expected_route": "hybrid",
+            "level": "L3",
+            "subtype": "filter-compare",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              810451,
+              656024,
+              730871,
+              856526
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT p.id, p.acronym, ROUND(p.ecMaxContribution) AS ec FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE e.euroSciVocPath LIKE '%/superconductivity%' AND p.ecMaxContribution > 6926372.79 GROUP BY 1,2,3 ORDER BY 3 DESC",
+              "survivor_count": 4,
+              "survivor_ids": [
+                810451,
+                656024,
+                730871,
+                856526
+              ],
+              "schema_docs_hash": "c3435815b331"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 20,
+              "pooled_candidate_count": 4,
+              "accepted": [
+                810451,
+                656024,
+                730871,
+                856526
+              ],
+              "rejected_count": 0,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 4
+            },
+            "reference_answer": "All four are top-funded superconductivity projects but target sharply different domains. EcoSwing delivered the world's first demonstration of a high-temperature superconducting (HTS) direct-drive generator on a 3.6 MW wind turbine, using second-generation (2G) HTS wire coils to cut generator weight and rare-earth reliance in wind power. ARIES is a pan-European accelerator-infrastructure network that develops superconducting magnets, RF cavities with superconducting thin-film coatings, and cryogenics for particle accelerators and high-energy physics. NONLOCAL pursues fundamental quantum physics, engineering topological superconductivity and Majorana bound states in superconductor-semiconductor hybrid devices toward future quantum technologies, while HERO is a condensed-matter physics project searching for new hidden, entangled and resonating orders in correlated-electron quantum matter, where superconductivity figures as one example of the many-body paradigm rather than an engineered device.",
+            "notes": "FILTER: P95 of project.ecMaxContribution over all 35,389 projects = 6926372.79 (re-executed this session via PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ecMaxContribution)). Superconductivity subtree matched with euroSciVocPath LIKE '%/superconductivity%' (paths carry no leading slash, per schema value note); subtree = 219 distinct projects; above-P95 survivors = exactly 4. TERM_STYLE exact-term: question reuses 'superconductivity/superconductor', distinctive vocabulary present in every gold text; scoped rank matrix shows all four gold found by the lexical condition, confirming real term overlap. PER-SURVIVOR ADJUDICATION (S=4, exhaustive read): 810451 HERO IN - condensed-matter/correlated-electron physics, 'hidden, entangled and resonating orders'; superconductivity cited as a paradigm example of quantum matter. 656024 EcoSwing IN - applied wind-energy domain; HTS direct-drive superconducting generator on a 3.6 MW turbine, 2G HTS wire coils. 730871 ARIES IN - particle-accelerator infrastructure; superconducting magnets, superconducting thin-film RF cavities, HTS tapes, cryogenics. 856526 NONLOCAL IN - fundamental quantum physics; topological superconductivity and Majorana bound states in superconductor-semiconductor hybrids for quantum technologies. All 4 IN => gold = all survivors. FILTER-LOAD-BEARING: unscoped pooled search on the textual theme is dominated by below-threshold superconductivity projects (EASITrain, SUPERTERA, SUPERSPIN, ULTRASUPERTAPE, ASuMED, etc., none in the survivor set); SQL sweep of superconductivity projects at/below P95 names concrete counter-examples that satisfy the textual theme but fail the funding filter: Quaco 689359 (4.65M, superconducting magnets for the LHC - same domain as ARIES), ASuMED 723119 (4.01M, superconducting aircraft propulsion motor), MATQu 101007322 (6.55M, superconducting qubits for quantum computing), AndQC 828948 (3.48M) and TOPSQUAD 862046 (3.18M, topological/Andreev-qubit quantum computing - same domain as NONLOCAL). 215 of the 219 superconductivity projects fall below the threshold, so the funding filter, not the topic, isolates the gold four. TEXT-LOAD-BEARING: application domain and superconductor technology live only in free text; euroSciVocTitle is 'superconductivity' for all four and no stored column encodes wind-generator vs accelerator-magnet vs Majorana vs hidden-order. SCOPED-RETRIEVABLE: scoped pooled top-k ranks EcoSwing/NONLOCAL/ARIES/HERO at 1-4 in lexical, hybrid and hybrid_rerank; HERO absent only from dense. Adjudication is from the exhaustive read; pooled_candidate_count is from the scoped pooled search."
+          }
+        },
+        {
+          "twin_id": "hyb-06",
+          "record": {
+            "question_id": "hyb-06",
+            "text": "Among graphene projects that include a Swedish participant, how do the ones tackling antibiotic-resistant bacterial infections make use of graphene?",
+            "expected_route": "hybrid",
+            "level": "L2",
+            "subtype": "filter-synthesize",
+            "specification": "well-specified",
+            "term_style": "exact-term",
+            "gold_project_ids": [
+              690836,
+              955626
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID=p.id JOIN organization o ON o.projectID=p.id WHERE e.euroSciVocPath LIKE '%graphene%' AND o.country='SE'",
+              "survivor_count": 18,
+              "survivor_ids": [
+                641416,
+                646155,
+                650029,
+                686135,
+                690836,
+                696656,
+                721991,
+                758935,
+                764977,
+                785219,
+                810451,
+                824962,
+                881603,
+                952792,
+                955626,
+                101002772,
+                101006963,
+                101017186
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 11,
+              "accepted": [
+                690836,
+                955626
+              ],
+              "rejected_count": 9,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 18
+            },
+            "reference_answer": "Of the 18 graphene-classified projects with a Swedish participant, two attack antibiotic-resistant bacteria, and each puts graphene to a different use. PANG (Pathogen and Graphene) builds graphene-based antibacterial matrixes by chemically functionalising them with antibacterial peptides and molecules such as menthol, then exploits the photothermal properties of rGO in suspensions and transdermal patches - among them a flexible skin patch that treats subcutaneous wound infections under photothermal irradiation - to kill pathogens non-invasively, while also probing the effect of these structures on the immune system and their mechanism of action. PEST-BIN uses graphene on two fronts: infection diagnostic kits built as disposable 'plug-and-play' chips of graphene functionalised with receptors that capture bacterial-surface biomarkers, containing only carbon and biodegradable polymers and now produced by the spin-out LayerLogic AB; and antibacterial graphene coatings on magnetic nanoparticles and hydrogel/polymer coatings, loaded with antibiotics so that the resulting nano-weapon physically penetrates bacterial biofilms and delivers the drug inside them. Both therefore rely on graphene as an intrinsically antibacterial, functionalisable surface, PANG for light-triggered killing on the skin and PEST-BIN for sensing plus biofilm eradication.",
+            "notes": "FILTER: euroSciVoc graphene subtree (euroSciVocPath LIKE '%graphene%'; profile note cp3 - paths carry no leading slash) intersected with any-role organization.country='SE'. Re-executed this pass: 18 survivors (candidate hybrid-02 evidence confirmed, no drift); graphene subtree corpus-wide is 290 projects, so the SE half prunes 290 -> 18. Survivors are enumerable (18 <= 200) so adjudication was EXHAUSTIVE: all 18 objectives read via get_project_text, plus a survivor-scoped SQL LIKE sweep over objective AND report_text (teaser||summary||workPerformed||finalResults) for bacter/antimicrob/antibiotic/pathogen/infection/biofilm - exactly 2 survivors hit, in both objective and report; the other 16 hit nothing in either field. ADJUDICATIONS: 690836 PANG IN (graphene-based antibacterial matrixes functionalised with antibacterial peptides/menthol, rGO photothermal patches to kill AMR pathogens); 955626 PEST-BIN IN (graphene diagnostic chips functionalised with receptors for infection biomarkers; antibacterial graphene coatings on magnetic nanoparticles to penetrate biofilms). OUT: 641416 iPUBLIC (inkjet-printed graphene energy storage); 646155 INSPIRED (graphene nanoplatelet inks for printed electronics); 650029 TAIPI (CSA on Flagship impact assessment); 686135 PROCETS (anti-wear/anti-corrosion coatings); 696656 GrapheneCore1, 785219 GrapheneCore2, 881603 GrapheneCore3 (Flagship umbrella projects - composites, photonics, batteries, neural electrodes; no antibacterial work in objective or report); 721991 GreenCarbon (biomass-derived carbons for CO2 capture/catalysis); 758935 1D-Engine (theory of 1D electrons and superconductivity); 764977 mCBEEs (corrosion of micro/nano devices); 810451 HERO (hidden order in quantum matter); 824962 Car2TERA (sub-THz radar and graphene MMICs); 952792 2D-EPL (2D pilot line wafer prototyping); 101002772 SPINNER (graphene spintronics); 101006963 GreEnergy (graphene rectennas for energy harvesting); 101017186 AEOLUS (mid-IR photonic gas sensing). FILTER-DISCRIMINATION (unscoped pooled search, k=10, query 'graphene-based antibacterial materials to fight antibiotic-resistant bacterial infections') returned strong text-satisfying projects OUTSIDE the filter: 664782 VANGUARD (antibacterial graphene-oxide scaffolds/laser-printed GO hydrogels for implant coatings; graphene-tagged, orgs IT only, 0 SE), 966720 GRAPHFITI 'Graphene to Fight Antimicrobial Resistance' (graphene membranes for antimicrobial susceptibility testing; graphene-tagged, NL only, 0 SE), 753636 NOVA (antimicrobial graphene-oxide-lanthanide-hydroxyapatite composites; graphene-tagged, UK only, 0 SE). Dropping the SE half would therefore change the answer set - filter is load-bearing. TEXT side is load-bearing: no stored column records what a project does with graphene against bacteria; the answer lives only in objective/report free text. TERM-STYLE exact-term: 'graphene', 'antibiotic resistance/antibiotic-resistant', 'bacterial infections' appear verbatim in both gold texts, and the scoped rank matrix has lexical ranking PANG 1 and PEST-BIN 2, confirming real term overlap. SCOPED RETRIEVABILITY: with the final question wording, PANG ranks 1 and PEST-BIN ranks 2 in all four conditions (lexical/dense/hybrid/hybrid_rerank). pooling_evidence counts come from that scoped search (11 distinct projects surfaced, 2 accepted, 9 rejected); adjudication itself was the exhaustive 18-survivor read, not the pooling."
+          }
+        },
+        {
+          "twin_id": "hyb-12",
+          "record": {
+            "question_id": "hyb-12",
+            "text": "Among ERC Starting Grant projects on nanoscale light control, which one set out to do away with the lenses and reflectors added onto low-energy lamps by placing the light-emitting nanoparticles inside engineered surroundings - stacked layers, patterned surfaces and resonant cavities - so that the tint and the beam spread of the light are fixed by those surroundings rather than by changing what the particles themselves are made of?",
+            "expected_route": "hybrid",
+            "level": "L1",
+            "subtype": "filter-read",
+            "specification": "well-specified",
+            "term_style": "paraphrase",
+            "gold_project_ids": [
+              715832
+            ],
+            "filter_evidence": {
+              "filter_sql": "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON e.projectID = p.id WHERE e.euroSciVocPath LIKE '%/nanophotonics%' AND p.fundingScheme = 'ERC-STG'",
+              "survivor_count": 10,
+              "survivor_ids": [
+                637116,
+                639109,
+                677470,
+                679841,
+                714151,
+                715832,
+                802682,
+                802986,
+                853500,
+                948804
+              ],
+              "schema_docs_hash": "f8c001e8cc8f"
+            },
+            "pooling_evidence": {
+              "conditions_run": [
+                "lexical",
+                "dense",
+                "hybrid",
+                "hybrid_rerank"
+              ],
+              "k": 10,
+              "pooled_candidate_count": 10,
+              "accepted": [
+                715832
+              ],
+              "rejected_count": 9,
+              "index_fingerprint": "be84cbad9182",
+              "scope_size": 10
+            },
+            "reference_answer": "NANOPHOM (project 715832) is the ERC Starting Grant in question: it puts rare-earth nanophosphors inside engineered optical structures - multilayers, surface textures, nano-scatterers, nanoimprinted corrugations and optical cavities - and shows that those surroundings alone set the chromaticity and the directionality of the device's output, 'without modifying the chemical composition of the emitters', replacing the reflectors and lenses normally added as secondary optical elements. Its target demonstrations were directional white-light emission within a narrow angular cone and omnidirectional emission of monochromatic light.",
+            "notes": "FILTER: euroSciVoc leaf 'nanophotonics' (one-reading check: 'engineering and technology/nanotechnology/nanophotonics' is the only path matching '%nanophotonics%', 62 projects) intersected with fundingScheme='ERC-STG' -> 10 survivors, re-executed this pass. Runtime note: the scoped path (src/retrieval/scoped.py) can only filter the structural half ('ERC Starting Grant' -> fundingScheme='ERC-STG'); the nanophotonics topic is carried by retrieval, which is how the question is worded. LOW note on scope width: the enumerated survivor set is narrower than the runtime's executable scope (all ERC-STG projects), so ERC-STG projects tagged under other euroSciVoc leaves - e.g. 849229 CQWLED (nanocrystals / colors / optoelectronics) - are reachable at runtime but not enumerated here; CQWLED is excluded by the question's own words (see ADJUDICATION), so this is a recorded width note, not a gold gap. ADJUDICATION (exhaustive, all 10 survivors read at objective+teaser, gold at full payload; re-adjudicated against the current wording): 715832 NANOPHOM IN - 'exploits new ways of controlling the emission characteristics of nanophosphors, surpassing the limits imposed by conventional optics', design 'based on multilayers, surface textures and nano-scatterers', and the report states the control comes 'without modifying the chemical composition of the emitters', with reflectors and lenses named as the secondary optical elements being replaced. OUT: 637116 ENLIGHTMENT (photonic electrodes to enhance light ABSORPTION in thin solar cells, photodetectors, sensors); 639109 FLATLIGHT (visible-wavelength metasurfaces as ultrathin reconfigurable optical components and modulators, not emission from a lamp's emitting particles); 677470 SEAQUEL (cold structured atomic ensembles for quantum engineering of light); 679841 ORDERin1D (chirality-sorted carbon nanotubes, molecular filling and order); 714151 PSINFONI (particle-surface near-field interactions, optical and Casimir forces); 802682 MODES (nonlinear multimode processes in fibres, chips and nanoparticles); 802986 aQUARiUM (epsilon-near-zero rolled-up metamaterials for quantum light-matter interaction); 853500 NanoGraphy (plasmon-enhanced photocatalytic nanolithography); 948804 CHANSON (chiral semiconductor nanophotonics for molecular sensing). NEAR-MISSES EXCLUDED BY THE QUESTION'S OWN WORDS: 798697 NEXTLEDs is titled 'Chemical Engineering of Atomically-Flat Colloidal Quantum Wells' and works by synthesizing the emitters themselves - the mechanism the question explicitly rules out - and is MSCA-IF, failing the scheme filter too; 849229 CQWLED likewise guides 'chemistry and shape' of its nanocrystals, never opposes itself to lenses or reflectors (its foils are total internal reflection and EQE), and its 'layers' are the emitter superlattices rather than engineered surroundings. DISCRIMINATION (unscoped pooled k=10 on the current question text): 657434 PhoLED (MSCA-IF-EF-ST) satisfies the textual ask outright and ranks dense 1 / hybrid 1 - 'integrating novel optical nanostructures and emitters, such as colloidal quantum dots or nanophosphors ... preparation and processing strategies, based on surface textures and colloidal scatterers, to attain large area optical nanostructures ... precise control on the intensity, angular distribution and color quality of light emission' - and it fails the ERC-STG filter, so dropping the filter changes the answer. TEXT SIDE: no stored column records what a project does with light emission; the filter alone leaves 10 candidates. TERM-STYLE paraphrase: the question uses 'tint', 'beam spread', 'low-energy lamps', 'stacked layers', 'patterned surfaces', 'resonant cavities' and avoids the gold's distinctive vocabulary (nanophosphor, LED, photonic, solid-state lighting, chromaticity, directionality, spectral, angular, integrated photonic systems). Unscoped on the current wording the lexical condition did NOT return 715832 in its top-10 (lexical rank 1 was 896410 OPAN) while dense ranked it 2, hybrid 3 and hybrid_rerank 2. Scoped lexical rank 1 is uninformative because the scope holds only 10 projects, so every survivor ranks in every condition."
+          }
+        }
+      ]
+    }
+  ]
+}
