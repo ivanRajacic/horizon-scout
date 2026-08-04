@@ -60,24 +60,36 @@ retired ~113 target had been driving drafting the whole time.
 The order is `horizon-scout.md` §8. Immediately:
 
 1. ~~Trim the bank to 49.~~ **Done 2026-08-03** - see above.
-2. **Three pre-baseline fixes**, all from `docs/pilot-router-findings.md` Part 2:
+2. **Both seats swap to external APIs, FIRST** - **BUILT 2026-08-04, smoke
+   still owed.** Everything the item specified is in and tested (552
+   passing): `src/openai_compat.py` is the one OpenAI-compatible transport -
+   two frozen `ApiSeat`s (generator = `gemini-2.5-flash-lite` with
+   `reasoning_effort "none"`, judge = `deepseek-v4-flash` with thinking
+   disabled and temperature 0), each with its own semaphore, backoff on
+   transient HTTP failures, and cost computed from per-Mtok prices pinned in
+   `src/config.py` (these dollars are billed, unlike the priced `claude -p`
+   figures). `ApiClient` sits beside `ClaudeClient` in `src/llm.py`
+   (`GEN_BACKEND="api"` default); `OpenAICompatLLM` sits beside
+   `ClaudeCliLLM` in `src/judge/ragas_backend.py` and counts completions
+   without parseable JSON - the DeepSeek loose-JSON instrument - surfaced as
+   the report's new `## Judge health` section (`JUDGE_DEFAULT="deepseek"`;
+   the rubric overlay now routes through the recorded gate too, so ADV judge
+   spend lands in usage, which the claude path never did). Both transports
+   record through `src/eval/usage.py` at their one gate. The report moved
+   from pass rates to continuous scores: judged routes show mean factual
+   with min/median/max, sql stays exact execution, ADV stays the refusal
+   rubric. **Remaining before item 3:** set `GEMINI_API_KEY` and
+   `DEEPSEEK_API_KEY`, then smoke each seat on a handful of questions
+   (`run-bank --limit`); the seats freeze on that smoke.
+3. **Three pre-baseline fixes**, all from `docs/pilot-router-findings.md` Part 2:
    scoped mode passes `rows_passed_to_gen = 0` so the generator hedges on its own
    filter (§1); the SQL scorer compares whole rows instead of `answer_columns`,
-   and `columns_ok` is computed and never used (§3); judge calls have no retry on
-   the `stop_reason:"tool_use"` class that killed 2 of 9 pilot calls (§4).
-   Each needs a test. The scoped fix changes what the system answers, so it is
-   disclosed in the write-up as pre-baseline wiring, not as an improvement.
-3. **Judge swap plus the ~2 EUR calibration** (`horizon-scout.md` §5). An
-   OpenAI-compatible backend beside `ClaudeCliLLM` in
-   `src/judge/ragas_backend.py` - same `BaseRagasLLM` surface, its own
-   concurrency, because the `claude -p` semaphore in `src/claude_cli.py` governs
-   `claude -p` only and must not be widened. Instrument silent `None`s: RAGAS
-   returns `None` on parse failure and a weak decomposer then scores 0.0, not
-   NaN. Then re-judge the 40 answers in
-   `data/runs/ladder-2026-07-29/records.jsonl` under gpt-5-mini and DeepSeek V4
-   Flash, compare agreement with Sonnet and parse-failure rate, pick, pin it in
-   `src/config.py`, and never change it again. Report generation also moves from
-   pass rates to continuous scores here.
+   and `columns_ok` is computed and never used (§3); judge calls have no retry -
+   the pilot's `stop_reason:"tool_use"` class that killed 2 of 9 calls was
+   `claude -p`-specific and dies with the swap, so the retry is written against
+   the new backend's actual failure modes (§4). Each needs a test. The scoped
+   fix changes what the system answers, so it is disclosed in the write-up as
+   pre-baseline wiring, not as an improvement.
 4. ~~**Author the last questions**~~ - **DONE 2026-08-04.** Adversarial was
    flipped into `/question-orchestrator` (bank schema v2.3: born-verified ADV
    with typed `absence_evidence` and `twin_id`) and 9 landed via batches K-M,

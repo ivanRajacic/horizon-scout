@@ -14,8 +14,11 @@ Two things must be up:
 - the **embedder** (bge-base on :8080) - any question that retrieves needs it.
   A SQL-only selection (`--routes sql`) does not, and the runner skips the check
   in that case.
-- the **Claude CLI** - generation and judging both go through `claude -p`. No
-  local generation server is needed; `GEN_BACKEND` defaults to `"claude"`.
+- the **API keys** (v5, 2026-08-04) - generation and judging both run on
+  external APIs now: `GEMINI_API_KEY` for the generator (Gemini 2.5
+  Flash-Lite) and `DEEPSEEK_API_KEY` for the judge (DeepSeek V4 Flash), both
+  checked before anything is spent. No local generation server and no Claude
+  CLI are needed; `GEN_BACKEND` defaults to `"api"`.
 
 The reranker on :8082 is only used by the rerank retrieval condition, which the
 bank runner does not exercise.
@@ -73,7 +76,9 @@ One capability forced on every question (the Study-2 ladder):
 ```
 
 Useful narrowing: `--routes vector hybrid`, `--limit N`, `--ids a b c`
-(which also fixes the order), `-k 10`, `--model sonnet|haiku` for the judge.
+(which also fixes the order), `-k 10`, `--model deepseek|sonnet|haiku` for
+the judge (deepseek is the v5 default; the claude keys are the retired v4
+seats).
 
 ## Watching it happen
 
@@ -151,19 +156,23 @@ history; a report worth keeping should be copied into the repo deliberately.
 
 ## About the cost figures
 
-Every dollar figure in the report and the console is **priced, not billed**: it
-is what those `claude -p` calls would have cost on the API. On the Max
-subscription the marginal spend is about EUR 0. It is there to compare
-conditions against each other, not to reconcile against an invoice.
+Since the v5 seat swap (2026-08-04) the dollar figures for generation and
+judging are **billed for real**: the APIs return token counts, and
+`src/openai_compat.py` prices them with the per-Mtok rates pinned in
+`src/config.py`. Only rows from the retired `claude -p` backends keep the old
+caveat - priced, not billed, about EUR 0 marginal on the Max subscription.
 
-Rough shape at the time of writing: about $0.06-0.10 per question to generate,
-about $0.77 per judged question. Judging is roughly ten times generation, which
-is the whole reason `--no-judge` and `--resume` exist.
+Rough shape on the v5 seats (plan §5, prices re-verified 2026-08-04): a full
+58-question run prices at roughly $0.20 to generate, and two complete studies
+at ~8-9 EUR total including judging. The old `claude -p` figures ($0.06-0.10
+to generate, ~$0.77 to judge per question) are why `--no-judge` and
+`--resume` exist; they remain useful even now that the absolute numbers are
+two orders of magnitude smaller.
 
-A `claude -p` call is a whole Claude Code session, so every call also spends a
-little Haiku on the harness's own overhead. That is why a Sonnet-judged run
-shows a small Haiku figure in the by-model breakdown. It is real, and it is not
-a role violation.
+Historical note for old reports: a `claude -p` call was a whole Claude Code
+session, so every call also spent a little Haiku on the harness's own
+overhead - that is the small Haiku figure in a Sonnet-judged run's by-model
+breakdown, real and not a role violation.
 
 ## The retrieval ladder (`run-retrieval`) - a diagnostic, not a study
 
@@ -186,7 +195,8 @@ rerank - generates an answer per condition, and scores each condition's ranking.
 - the **embedder** (:8080) for dense, hybrid and hybrid_rerank. A
   `--conditions lexical` run does not need it and does not check for it.
 - the **reranker** (:8082) for hybrid_rerank only.
-- the **Claude CLI** always, for generation and judging.
+- the **API keys** always: `GEMINI_API_KEY` (generation) and
+  `DEEPSEEK_API_KEY` (judging).
 - the **FTS index** must be built, for anything with a lexical side. If it is
   missing, `LexicalRetriever` says so with the fix; the fix is
   `./.venv/Scripts/python.exe -m src.cli build-fts`.
@@ -209,8 +219,9 @@ counts as found even though no generator saw it.
 
 ### Cost
 
-4 conditions x 40 questions = 160 answers. Fully judged that is roughly $120
-priced (Max subscription, so about EUR 0 billed - the same caveat as above).
+4 conditions x 40 questions = 160 answers. On the `claude -p` seats this ran
+on, fully judged was roughly $120 priced (Max subscription, about EUR 0
+billed); on the v5 API seats it would be a few euros, billed.
 Judging is the expensive half, so the normal shape is two stages: run phase A,
 read the answers, then pay for verdicts.
 

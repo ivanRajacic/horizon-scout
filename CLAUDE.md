@@ -28,7 +28,7 @@ Always use the venv interpreter: `./.venv/Scripts/python.exe` (Git Bash syntax).
 - `/question-orchestrator` nodes: `gap-report`, `next-ids` (`--sql/--vector/--hybrid/--adversarial`), `pick-parents` (the answerable bank questions an adversarial batch derives from), `journal-append`, `batch-crosscheck`, `write-batch`
 - `/explore-corpus` nodes: `frontier-report`, `verify-evidence`, `explore-crosscheck`, `write-profile`
 - Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`. `run-retrieval` and `bench-retrievers` still work but are diagnostics now, not study arms - retrieval is not measured.
-- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `src/eval/usage.py` records the dollars and tokens of every `claude -p` call at the one gate they all pass through
+- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `src/eval/usage.py` records the dollars and tokens of every generation and judge call at the one gate per transport they all pass through (`src/openai_compat.py:call_api_gated` for the v5 API seats, `src/claude_cli.py:call_claude_gated` for the retired `claude -p` backends)
 
 Local model servers (llama-server; launch commands pinned in `src/config.py`, flags LOAD-BEARING - do not tune them):
 
@@ -36,7 +36,7 @@ Local model servers (llama-server; launch commands pinned in `src/config.py`, fl
 - Reranker (bge-reranker-v2-m3, :8082) - the rerank condition
 - Qwen3-8B (:8081) - legacy generation only (`GEN_BACKEND="local"`); not needed by default
 
-Generation and judging run through `claude -p` (Claude CLI, Max subscription), not the local servers.
+Generation and judging run through external APIs (v5, 2026-08-04): Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges, both via `src/openai_compat.py`. Keys come from the environment: `GEMINI_API_KEY` and `DEEPSEEK_API_KEY`.
 
 ## Architecture
 
@@ -46,7 +46,7 @@ Generation and judging run through `claude -p` (Claude CLI, Max subscription), n
 - `retrieval/` - four conditions behind one interface (`base.py`, `registry.py`): `lexical.py` (DuckDB FTS/BM25), `vector_search.py` (FAISS), `hybrid.py` (RRF), `rerank.py` (cross-encoder); plus `scoped.py` (SQL-filtered vector search) and `sql_path.py` (guardrailed text-to-SQL - `validate_sql` enforces a single read-only SELECT)
 - `router/` -> sql / vector / scoped; `synthesis/` -> answer from evidence; `ask.py` -> end-to-end, logging every run to `data/logs/ask.jsonl`
 
-**Transport and roles (v4, fixed).** `src/claude_cli.py` is the ONE `claude -p` transport, gated by ONE process-wide semaphore (cap 16) shared by generation AND judging - never add a second of either. `src/llm.py:make_llm()` picks the backend by `GEN_BACKEND` ("claude" = Haiku, default). Haiku generates, Sonnet judges (`src/judge/`, RAGAS + a rubric refusal-overlay for adversarial questions), Opus authors questions and references. No model wears two hats.
+**Transport and roles (v5, fixed 2026-08-04).** Two transports, one per kind, never more: `src/openai_compat.py` is the ONE OpenAI-compatible HTTP transport - both external seats (generation and judging) go through its `call_api_gated`, each seat with its OWN semaphore - and `src/claude_cli.py` is the ONE `claude -p` transport (process-wide semaphore, cap 16), now serving only the retired legacy backends. Do not widen the `claude -p` semaphore to cover API calls or vice versa. `src/llm.py:make_llm()` picks the generation client by `GEN_BACKEND` ("api" = Gemini 2.5 Flash-Lite, default); `config.JUDGE_BACKENDS` maps judge model keys to transports ("deepseek" = default). Roles: Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges (`src/judge/`, RAGAS + a rubric refusal-overlay for adversarial questions), Opus authored questions and references (done). No model wears two hats, no vendor holds two seats. Both seats are frozen for the study; the judge backend counts completions without parseable JSON (DeepSeek's loose-JSON risk) and every run report carries the counts.
 
 ### The bank (M5, `src/eval/`, `eval/`)
 
