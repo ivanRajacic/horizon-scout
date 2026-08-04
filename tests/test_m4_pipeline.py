@@ -3,7 +3,7 @@ assertion, scoped edge policies. No servers needed - LLM and searcher faked."""
 
 import pytest
 
-from src.retrieval.scoped import (WEAK_FILTER, ScopedRetriever,
+from src.retrieval.scoped import (WEAK_FILTER, ScopedRetriever, filter_note,
                                   uses_subject_filter)
 from src.retrieval.vector_search import SearchResult
 from src.router.router import Router
@@ -15,9 +15,11 @@ class FakeLlm:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = 0
+        self.seen = []          # the messages each call was given
 
     def chat(self, messages, **kw):
         self.calls += 1
+        self.seen.append(messages)
         return self.responses.pop(0)
 
 
@@ -180,6 +182,75 @@ def test_uses_subject_filter_detection():
     assert not uses_subject_filter("SELECT DISTINCT id FROM project")
 
 
+# --- filter provenance: telling the generator what the filter already did ---
+
+SWEDISH = ("SELECT DISTINCT p.id FROM project p JOIN organization o ON "
+           "o.projectID = p.id WHERE o.country = 'SE'")
+
+
+def test_filter_note_names_the_count_and_quotes_the_query():
+    note = filter_note(SWEDISH, 1234)
+    assert "1,234 projects" in note
+    assert SWEDISH in note              # verbatim, not paraphrased
+
+
+def test_filter_note_is_suppressed_when_nothing_was_filtered():
+    """The narrowing prompt returns this form for a question with no structured
+    constraint. 'Every project satisfies: all projects' is noise that would only
+    teach the model to over-assert."""
+    assert filter_note("SELECT DISTINCT id FROM project", 35389) is None
+    assert filter_note(None, 0) is None
+
+
+def test_scoped_ok_carries_the_note():
+    searcher = FakeSearcher([mk_chunk(2, "B")])
+    h = ScopedRetriever(searcher,
+                        narrow_sql=FakeSql(R(True, rows=[(2,), (3,)],
+                                             sql=SWEDISH)))
+    res = h.retrieve("swedish pest control projects", k=10)
+    assert res.filter_note and "2 projects" in res.filter_note
+
+
+def test_zero_match_and_sql_failure_carry_no_note():
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    zero = ScopedRetriever(
+        searcher, narrow_sql=FakeSql(R(True, rows=[], sql=SWEDISH))
+    ).retrieve("q", k=10)
+    assert zero.filter_note is None          # nothing is synthesised at all
+
+    # The filter was DROPPED here - announcing it would be a lie.
+    failed = ScopedRetriever(
+        searcher, narrow_sql=FakeSql(R(False, error="Binder Error"))
+    ).retrieve("q", k=10)
+    assert failed.filter_note is None
+
+
+def test_synthesizer_puts_the_note_ahead_of_the_excerpts():
+    llm = FakeLlm(["answer [A, 1]."])
+    s = Synthesizer(llm=llm).synthesize("q", [mk_chunk(1, "A")],
+                                        filter_note="FILTER-BLOCK")
+    user = llm.seen[0][1]["content"]
+    assert user.index("FILTER-BLOCK") < user.index("Excerpts:")
+    assert s.trace["filter_note"] is True
+
+
+def test_synthesizer_without_a_note_is_unchanged():
+    """The vector route and eval/retrieval_run.py call this the old way; the
+    prompt they build must be byte-identical to before the note existed."""
+    with_kw = FakeLlm(["a [A, 1]."])
+    without = FakeLlm(["a [A, 1]."])
+    Synthesizer(llm=with_kw).synthesize("q", [mk_chunk(1, "A")],
+                                        filter_note=None)
+    Synthesizer(llm=without).synthesize("q", [mk_chunk(1, "A")])
+    assert with_kw.seen[0] == without.seen[0]
+    assert without.seen[0][1]["content"].startswith("Excerpts:")
+
+
+def test_the_pre_filter_rule_is_in_the_frozen_system_prompt():
+    assert "Structured filter already applied" in synth_mod.SYSTEM_PROMPT
+    assert synth_mod.SYNTH_PROMPT_VERSION == "s2-provenance"
+
+
 class QueueSql:
     """Returns successive results; records the questions it was asked."""
     def __init__(self, results):
@@ -278,3 +349,25 @@ def test_ask_vector_route_uses_the_shared_retriever(monkeypatch, tmp_path):
     res = a.ask("a topical question", k=10, mode="vector")
     assert res.mode == "vector"
     assert searcher.last_project_ids is None  # unfiltered, and it WAS called
+
+
+def test_ask_scoped_route_tells_the_generator_what_the_filter_did(
+        monkeypatch, tmp_path):
+    """End to end: the note the ScopedRetriever built has to reach the
+    generator's prompt, or the route hedges on its own filter."""
+    from src import ask as ask_mod
+
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    monkeypatch.setattr(ask_mod, "build_retriever", lambda name: searcher)
+    a = _ask(monkeypatch, tmp_path)
+    a.scoped = ScopedRetriever(
+        searcher, narrow_sql=FakeSql(R(True, rows=[(1,)], sql=SWEDISH)))
+    synth_llm = FakeLlm(["PEST-BIN has Swedish participants [A, 1]."])
+    a.synth = Synthesizer(llm=synth_llm)
+
+    res = a.ask("swedish pest control projects", k=10, mode="scoped")
+
+    assert SWEDISH in synth_llm.seen[0][1]["content"]
+    assert res.trace["filter_note_passed"] is True
+    assert res.trace["rows_passed_to_gen"] == 0    # a description, not rows
+    assert SWEDISH in res.filter_note

@@ -46,6 +46,9 @@ class AskResult:
     chunks: list = field(default_factory=list)      # SearchResult list
     degraded: str | None = None
     weak_filter: bool = False
+    # The scoped route's filter provenance, as the generator was given it. Kept
+    # on the result because the judge's contexts must be what the generator saw.
+    filter_note: str | None = None
     citation_violations: list[str] = field(default_factory=list)
     trace: dict = field(default_factory=dict)
 
@@ -177,7 +180,8 @@ class Ask:
                        "rows_passed_to_gen": 0, "chunks_passed_to_gen": 0})
 
         t = time.perf_counter()
-        s = self.synth.synthesize(question, h.chunks)
+        s = self.synth.synthesize(question, h.chunks,
+                                  filter_note=h.filter_note)
         stage = {"retrieve": t_retrieve, "synth": time.perf_counter() - t}
         answer = s.answer
         if h.degraded == "sql_failed":
@@ -187,10 +191,14 @@ class Ask:
         return AskResult(
             question=question, mode="scoped", router_reason="", answer=answer,
             sql=h.sql, chunks=s.used_chunks, degraded=h.degraded,
-            weak_filter=h.weak_filter,
+            weak_filter=h.weak_filter, filter_note=h.filter_note,
             citation_violations=s.citation_violations,
+            # rows_passed_to_gen stays 0: the generator is told what the filter
+            # DID, not handed its rows. Redefining a covariate so a recorded
+            # finding reads as closed would put a lie in the trace.
             trace={"timings": stage, **h.trace, **s.trace,
                    "rows_passed_to_gen": 0,
+                   "filter_note_passed": bool(h.filter_note),
                    "chunks_passed_to_gen": len(s.used_chunks)})
 
     def _explain_sql(self, question, columns, rows, base) -> str:
@@ -215,6 +223,7 @@ class Ask:
             # RQ1's covariate, first-class beside the trace (M5 §RQ1).
             "rows_passed_to_gen": res.trace.get("rows_passed_to_gen", 0),
             "chunks_passed_to_gen": res.trace.get("chunks_passed_to_gen", 0),
+            "filter_note_passed": res.trace.get("filter_note_passed", False),
             "versions": self.versions,
             "trace": res.trace,
         }

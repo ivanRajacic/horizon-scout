@@ -191,11 +191,22 @@ def judge_case_for(q: BankQuestion, res) -> dict:
 
     contexts are the chunk texts synthesis actually used - the real pipeline
     output, held in memory. ask.jsonl logs only chunk_ids and stays a trace.
+
+    The scoped route's filter note joins them because contexts must be
+    everything the generator was given. Faithfulness scores the answer against
+    the contexts, and once the answer stops hedging and asserts the filter's
+    predicate ("this is an SME Instrument phase 1 project") that claim lives in
+    the filter, not in any chunk - so omitting it would penalise the more
+    correct answer.
     """
+    contexts = [c.text for c in (res.chunks or [])]
+    note = getattr(res, "filter_note", None)
+    if note:
+        contexts.append(note)
     return {"question_id": q.question_id, "question": q.text,
             "reference_answer": q.reference_answer or "",
             "answer": res.answer,
-            "contexts": [c.text for c in (res.chunks or [])],
+            "contexts": contexts,
             "adversarial": q.is_adversarial}
 
 

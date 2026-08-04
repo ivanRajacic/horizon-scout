@@ -100,8 +100,10 @@ def chunk(pid, text="content", cid=None):
 
 class FakeAskResult:
     def __init__(self, mode, answer="an answer", sql=None, rows=(),
-                 columns=(), chunks=(), degraded=None, trace=None):
+                 columns=(), chunks=(), degraded=None, trace=None,
+                 filter_note=None):
         self.mode = mode
+        self.filter_note = filter_note
         self.answer = answer
         self.router_reason = "because"
         self.router_fallback = False
@@ -383,6 +385,25 @@ def test_topical_question_builds_a_judge_case_with_real_contexts(tmp_path):
     assert needs_judge(r) is True
     # the reference is on the record too, not only inside the judge case
     assert r["reference_answer"] == VEC_Q["reference_answer"]
+
+
+def test_the_scoped_filter_note_joins_the_judge_contexts(tmp_path):
+    """Contexts must be everything the generator was given. Once the answer
+    asserts the filter's predicate instead of hedging, that claim lives in the
+    filter and in no chunk - so leaving the note out would drop faithfulness on
+    the more correct answer."""
+    r = _one(tmp_path, HYB_Q,
+             FakeAskResult("scoped", answer="Both are Italian [P201, 201]",
+                           chunks=[chunk(201, "glacier text")],
+                           filter_note="Structured filter already applied. ..."))
+    assert r["judge_case"]["contexts"] == [
+        "glacier text", "Structured filter already applied. ..."]
+
+
+def test_a_result_without_a_filter_note_has_chunk_contexts_only(tmp_path):
+    r = _one(tmp_path, VEC_Q,
+             FakeAskResult("vector", chunks=[chunk(101, "only this")]))
+    assert r["judge_case"]["contexts"] == ["only this"]
 
 
 # --- routing ---

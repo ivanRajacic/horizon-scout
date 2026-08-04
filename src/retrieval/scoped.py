@@ -39,8 +39,35 @@ _SUBJECT_FILTER_RE = re.compile(
     re.IGNORECASE)
 
 
+_HAS_WHERE_RE = re.compile(r"\bWHERE\b", re.IGNORECASE)
+
+
 def uses_subject_filter(sql: str | None) -> bool:
     return bool(sql and _SUBJECT_FILTER_RE.search(sql))
+
+
+def filter_note(sql: str | None, n_ids: int) -> str | None:
+    """What the generator must be told about the filter that already ran.
+
+    Without this the synthesizer sees prose only, is never told the excerpts
+    were pre-selected, and refuses to assert the filter's own predicate - the
+    pilot's hybrid route hedged on all seven scoped questions, twice with every
+    gold document in the context window (pilot-router-findings.md Part 2 §1).
+
+    The SQL goes in verbatim rather than paraphrased: it is already exact, and
+    turning it into prose would cost another generation call.
+
+    None when there is nothing to announce. build_id_narrowing_prompt emits
+    `SELECT DISTINCT id FROM project` for a question with no structured
+    constraint at all, and "every project satisfies: all projects" is noise that
+    would only teach the model to over-assert.
+    """
+    if not sql or not _HAS_WHERE_RE.search(sql):
+        return None
+    return ("Structured filter already applied. The excerpts below are drawn "
+            f"ONLY from the {n_ids:,} projects returned by this query:\n"
+            f"{sql}\n"
+            "Every project shown satisfies it.")
 
 
 def build_id_narrowing_prompt() -> str:
@@ -101,6 +128,10 @@ class ScopedResult:
     chunks: list[SearchResult] = field(default_factory=list)
     degraded: str | None = None       # "sql_failed" when the filter was dropped
     weak_filter: bool = False
+    # What synthesis must be told the filter did. Set on "ok" only: there is no
+    # synthesis on "zero_match", and on "sql_failed" the filter was dropped, so
+    # announcing it would be a lie (ask.py prefixes its own note there).
+    filter_note: str | None = None
     trace: dict = field(default_factory=dict)
 
 
@@ -152,9 +183,11 @@ class ScopedRetriever:
 
         weak = len(ids) > WEAK_FILTER
         chunks = self.searcher.search(question, k=k, project_ids=ids)
+        note = filter_note(sql_result.sql, len(ids))
         return ScopedResult(
             question=question, status="ok", sql=sql_result.sql,
             project_ids=ids, chunks=chunks, weak_filter=weak,
+            filter_note=note,
             trace={"n_ids": len(ids), "weak_filter": weak,
                    "sql_retried": sql_result.retried,
                    "subject_corrected": subject_corrected,
