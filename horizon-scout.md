@@ -189,8 +189,11 @@ making plots.
 - Guardrailed text-to-SQL (`validate_sql` enforces a single read-only SELECT).
 - Router -> sql / vector / scoped; synthesis; `ask.py` end to end.
 - Every prompt carries a version label **and** a content hash; every run logs
-  model and prompt versions; every `claude -p` call is priced at the one
-  transport gate (`src/claude_cli.py`, one process-wide semaphore, cap 16).
+  model and prompt versions; every LLM call is priced at its transport gate.
+  `claude -p` has one (`src/claude_cli.py`, one process-wide semaphore, cap 16,
+  authoring-era); the external API backends replacing it at run time (§5, §8.2)
+  must record usage through `src/eval/usage.py` the same way - a run whose
+  spend is unknowable after the fact is the gap that module exists to close.
 - Two runners, checkpointed and resumable, reports generated from append-only
   records: `run-bank` varies the condition, `run-retrieval` varies the retriever.
 
@@ -215,13 +218,21 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   $0.48 per answer on Sonnet against $0.028 to generate - about 10x - and the
   blocker was never money but the 5-hour Max window. On a cheap API the whole
   bank costs single-digit euros.
-- **The choice is settled empirically, once, for ~2 EUR**: re-judge the 40
-  already-Sonnet-judged answers in `data/runs/ladder-2026-07-29/records.jsonl`
-  under **gpt-5-mini** and **DeepSeek V4 Flash**, compare agreement with Sonnet
-  and parse-failure rate, pick, freeze, and report the agreement number. The
-  asymmetry on record: gpt-5-mini has the strongest direct judge evidence in the
-  literature and is shut down 2026-12-11; DeepSeek V4 has no judge track record
-  and no expiry. Never change judges mid-study.
+- **The seats are decided (2026-08-04), no calibration run: judge = DeepSeek
+  V4 Flash, generator = Gemini 2.5 Flash-Lite.** The planned agreement
+  calibration against the 40 Sonnet-judged pilot answers is dropped for budget
+  and simplicity. Reasoning on record: the judge seat gets the most capable
+  cheap model because a weak judge corrupts every number while a mediocre
+  generator only makes all conditions equally harder, which the comparison
+  survives; the generator seat gets the most boring reliable JSON emitter.
+  Different vendors, temperature 0 on the judge, thinking/reasoning pinned off
+  on both, no expiry date on either (gpt-5-mini lost the judge seat to its
+  2026-12-11 shutdown plus 4x the cost; its stronger published judge evidence
+  is the disclosed tradeoff). Known risk, instrumented rather than ignored:
+  DeepSeek has only loose JSON mode, and RAGAS returns None on parse failure
+  which then scores 0.0 - so parse failures are counted and reported, never
+  silent. Budget: the study is planned to run TWICE; on this stack two full
+  studies price at ~8-9 EUR (~13 ceiling). Never change either seat mid-study.
 - **Metrics.** RAGAS 0.4.3 (pinned) `factual_correctness` + `faithfulness`, with
   the one-paragraph NLI amendment `n1-pilot` - disclosed as "RAGAS with an
   amendment", not stock.
@@ -230,9 +241,17 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   executing the generated query against the gold query, which is free and exact.
   Adversarial questions bypass RAGAS for a one-call refusal rubric, because
   claim-decomposition metrics are structurally blind to a correct refusal.
-- **Role separation.** Opus authors questions and references, Haiku generates,
-  the external judge scores. No model wears two hats and no model grades its own
-  output. Generation stays on `claude -p`.
+- **Role separation, both seats external (changed 2026-08-04).** Opus authored
+  the questions and references (done, on Max - authoring is over). At run time
+  nothing runs on the subscription: generation - the router call, text-to-SQL,
+  synthesis, and the agentic loop - moves off `claude -p` to a cheap external
+  API, same as judging. This replaces "generation stays on `claude -p`" (Haiku
+  on Max). Run-side cost is noise next to judging: ~18k in / ~1k out per
+  question, so a full 58-question run prices at ~$0.20 on DeepSeek V4 Flash or
+  ~$0.45 on gpt-5-mini (prices re-verified 2026-08-04). No model grades its own
+  output: Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges. Both
+  pinned in `src/config.py` and frozen before round one, identical across all
+  three rounds.
 - **References** are written from gold evidence only, never from system
   retrieval - the measuring stick is independent of the thing measured. SQL
   references are the executed gold result, free.
@@ -243,7 +262,8 @@ comparisons between conditions, never accuracy.
 ## 6. What is settled, and what is dropped
 
 Live: the three rounds, the router/always-hybrid contrast, the 58-question bank,
-one retrieval stack, a frozen cheap judge, the authoring pipeline.
+one retrieval stack, a frozen cheap external judge and generator, the authoring
+pipeline.
 
 Dropped, with the reason, so none of it is re-litigated:
 
@@ -260,10 +280,11 @@ Dropped, with the reason, so none of it is re-litigated:
 | **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round; the agentic round now shows itself on the 58 (its cost/latency columns and failure buckets carry the story) | this table; §3 Allocation |
 
 Freeze discipline is relaxed: prompts and thresholds can move if the change is
-disclosed in the write-up. Three things stay genuinely frozen because every
+disclosed in the write-up. Four things stay genuinely frozen because every
 recorded number depends on them - the chunking and index config, the retrieval
-stack (`config.RUNTIME_RETRIEVER`), and the judge once chosen. The agentic
-scaffold freezes after its pilot so later runs stay comparable.
+stack (`config.RUNTIME_RETRIEVER`), and the judge (DeepSeek V4 Flash) and
+generator (Gemini 2.5 Flash-Lite) decided in §5. The agentic scaffold freezes
+after its pilot so later runs stay comparable.
 
 ## 7. What ships
 
@@ -303,8 +324,9 @@ arc - built it, benchmarked it, improved it, showed the numbers.
 **Disclosures, one line each:** judge unvalidated against human labels;
 retrieval stack chosen on a 10-question pilot; bank at the size it froze at, with
 the vector trim and its selection rule stated; RAGAS 0.4.3 with a one-paragraph
-NLI amendment, not stock; generator, judge and reference author separated by role
-but two of the three are the same vendor family; scoped-provenance and SQL-scorer
+NLI amendment, not stock; generator, judge and reference author separated by
+role AND by vendor (Google / DeepSeek / Anthropic) - no model grades its own
+work and no vendor holds two seats; scoped-provenance and SQL-scorer
 fixes landed before the baseline as wiring, not as improvements; no formal coverage argument for the bank's
 question distribution; no ambiguous or compositional cells (dropped 2026-08-04,
 §6) - but over-refusal on answerable questions IS controlled, by the nine
@@ -315,11 +337,20 @@ adversarial twins.
 Live state and what is next: `working-plan.md`.
 
 1. ~~**Trim the bank to 49** via `archive-questions`~~ - **DONE 2026-08-03** (§3.3).
-2. **Fix the three things that would corrupt a baseline** - scoped mode passes
+2. **Swap both seats to external APIs, first** - an OpenAI-compatible generation
+   backend in `src/llm.py` beside `ClaudeCliLLM` pointed at Gemini 2.5
+   Flash-Lite, and the judge backend in `src/judge/ragas_backend.py` pointed at
+   DeepSeek V4 Flash (§5). Pin both in `src/config.py`; the new backends log
+   cost and prompt versions the same way `claude -p` did; smoke each on a
+   handful of questions. This comes before the fixes so nothing is built or
+   verified against a transport that is about to be replaced.
+3. **Fix the three things that would corrupt a baseline** - scoped mode passes
    zero rows to the generator so it hedges on its own filter; the SQL scorer
-   compares whole rows instead of `answer_columns`; judge calls have no retry on
-   a ~20% failure class. All three are in `docs/pilot-router-findings.md` Part 2.
-3. **Swap the judge** and run the ~2 EUR calibration (§5).
+   compares whole rows instead of `answer_columns`; judge calls have no retry
+   (the pilot's ~20% `stop_reason:"tool_use"` failure class was `claude -p`
+   -specific and dies with the swap - the retry is written against the new
+   backend's actual failure modes). All three are in
+   `docs/pilot-router-findings.md` Part 2.
 4. ~~**Author the last questions**~~ - **DONE 2026-08-04**: 9 adversarial
    authored through `/question-orchestrator` (batches K-M), ambiguous and
    compositional dropped (§6). Bank complete at 58.
