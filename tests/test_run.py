@@ -86,6 +86,20 @@ HYB_Q = {
 }
 
 
+# A SQL-route adversarial question: its gold is an absence, so it carries no
+# gold_sql - the refusal rubric is the scorer, never execution accuracy.
+ADV_SQL_Q = {
+    "question_id": "adv-01",
+    "text": "How much funding was paid out to terminated projects?",
+    "expected_route": "sql", "level": "ADV", "subtype": "data-absent",
+    "absence_evidence": [
+        {"sql": "SELECT 1 WHERE 1 = 0", "expect": "zero",
+         "key_result": "no paid-out amount exists anywhere in the schema"}],
+    "reference_answer": "The database does not record amounts paid out; "
+                        "a correct answer says so.",
+}
+
+
 def write_bank(tmp_path, records):
     p = tmp_path / "bank.jsonl"
     p.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
@@ -404,6 +418,34 @@ def test_a_result_without_a_filter_note_has_chunk_contexts_only(tmp_path):
     r = _one(tmp_path, VEC_Q,
              FakeAskResult("vector", chunks=[chunk(101, "only this")]))
     assert r["judge_case"]["contexts"] == ["only this"]
+
+
+def test_adv_sql_question_goes_to_the_refusal_judge_not_execution(tmp_path):
+    """An ADV question on the sql route has no gold_sql - execution accuracy
+    has nothing to execute, so it must build a judge case (adversarial=True)
+    instead of scoring unscoreable forever."""
+    r = _one(tmp_path, ADV_SQL_Q,
+             FakeAskResult("sql", answer="The data does not record payments.",
+                           sql="SELECT paid FROM nowhere"))
+    assert r["score"] is None                    # phase B fills it
+    assert r["judge_case"]["adversarial"] is True
+    assert r["judge_case"]["reference_answer"] == ADV_SQL_Q["reference_answer"]
+    assert needs_judge(r)
+
+
+def test_adv_sql_question_is_judged_end_to_end(tmp_path):
+    bank = bank_of(tmp_path, ADV_SQL_Q)
+    ask = FakeAsk({"adv-01": {"text": ADV_SQL_Q["text"],
+                              "result": FakeAskResult("sql", sql="SELECT 1")}})
+    meta = run_bank(bank, ["router"], runs_dir=tmp_path / "runs", ask=ask,
+                    pool=FakePool({"adv-01": FakeVerdict(True, factual=None,
+                                                        faith=None,
+                                                        path="overlay")}))
+    (r,) = read_records(meta["records_path"])
+    assert r["status"] == "judged"
+    assert r["score"]["method"] == "judge"
+    assert r["score"]["passed"] is True
+    assert r["score"]["judge_path"] == "overlay"
 
 
 # --- routing ---

@@ -42,7 +42,10 @@ happened to produce:
   - vector/hybrid-route questions go to the judge, with contexts = the chunks
     synthesis actually used.
   - ADV questions carry adversarial=True and JudgePool sends them to the rubric
-    refusal overlay instead of RAGAS.
+    refusal overlay instead of RAGAS - whatever their expected_route. A
+    SQL-route ADV question has no gold_sql (its gold is an absence), so
+    execution accuracy has nothing to execute and the refusal rubric is the
+    scorer.
 
 Retrieval quality is computed alongside, free, wherever gold_project_ids exist:
 the run's own chunks deduplicated to projects and scored with src/eval/metrics.
@@ -291,7 +294,10 @@ def execute_question(ask, q: BankQuestion, condition: str, k: int,
         "spend": {"gen": _spend_dict(usage.take(q.question_id))},
     })
 
-    if q.expected_route == "sql":
+    if q.expected_route == "sql" and not q.is_adversarial:
+        # ADV stays out of this branch even on the sql route: its gold is an
+        # absence, there is no gold_sql to execute, and the refusal rubric is
+        # the scorer.
         record["score"] = score_sql_question(q, res, sql_path)
         record["judge_case"] = None
     else:
