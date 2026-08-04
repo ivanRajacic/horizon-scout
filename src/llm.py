@@ -1,9 +1,11 @@
 """One LLM client interface for everything downstream.
 
-Two interchangeable generation clients share the .chat() contract:
-- ClaudeClient (v4 default): Claude Haiku over the shared `claude -p`
-  transport (src/claude_cli.py), gated by the process-wide semaphore so up
-  to CLAUDE_CONCURRENCY generators can run in parallel.
+Three interchangeable generation clients share the .chat() contract:
+- ApiClient (v5 default): Gemini 2.5 Flash-Lite over Google's
+  OpenAI-compatible endpoint (src/openai_compat.py), gated by the gen seat's
+  own semaphore. The run-time generation seat decided 2026-08-04.
+- ClaudeClient (retired v4 seat): Claude Haiku over the shared `claude -p`
+  transport (src/claude_cli.py), gated by the process-wide semaphore.
 - LlmClient (legacy): OpenAI-compatible chat-completions against the local
   llama-server on port 8081 (Qwen3-8B), kept for a possible RQ3 revival.
 
@@ -12,6 +14,7 @@ client is behind .chat(); traces pin the model per answer either way.
 """
 
 import hashlib
+import os
 import re
 import shutil
 
@@ -123,19 +126,66 @@ class ClaudeClient:
         return str(envelope.get("result", "")).strip()
 
 
+class ApiClient:
+    """Generation over the OpenAI-compatible gen seat (v5 default: Gemini
+    2.5 Flash-Lite, src/openai_compat.py).
+
+    Same .chat() contract as the other clients, but messages travel as real
+    chat turns - no flattening, the API speaks roles natively. Temperature
+    and the thinking-off pin come from the frozen seat; the only override
+    honored is max_tokens (a temperature override would unfreeze a pinned
+    value mid-study, so it is accepted and ignored like the claude backend
+    always did). Thread-safe the same way ClaudeClient is: no mutable state,
+    every call gated by the seat's semaphore.
+    """
+
+    def __init__(self, seat=None, max_tokens: int | None = None,
+                 transport=None):
+        from src.openai_compat import GEN_SEAT
+        self.seat = seat or GEN_SEAT
+        self.model = self.seat.model
+        self.max_tokens = max_tokens
+        self.transport = transport   # injectable for tests
+
+    def chat(self, messages: list[dict], **overrides) -> str:
+        """messages = [{'role': ..., 'content': ...}, ...] -> assistant text.
+        Only max_tokens is honored among overrides; the rest are pinned."""
+        from src.openai_compat import call_api_gated
+        kwargs = {}
+        max_tokens = overrides.get("max_tokens", self.max_tokens)
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        envelope = call_api_gated(messages, self.seat, **kwargs)
+        return str(envelope.get("result", "")).strip()
+
+
 def make_llm(**local_overrides):
     """Factory for the configured generation client (config.GEN_BACKEND).
-    local_overrides (e.g. max_tokens) apply to the local backend only - the
-    claude backend has no sampling controls to override."""
+    max_tokens passes through to the api and local backends; the claude
+    backend has no sampling controls to accept it."""
+    if GEN_BACKEND == "api":
+        return ApiClient(max_tokens=local_overrides.get("max_tokens"))
     if GEN_BACKEND == "claude":
         return ClaudeClient()
     return LlmClient(**local_overrides)
 
 
 def check_generator() -> dict:
-    """Fail fast before a run, whichever backend is configured: the claude
-    backend needs the `claude` CLI on PATH; the local backend needs the
-    llama-server up (with the relaunch command in the error)."""
+    """Fail fast before a run, whichever backend is configured: the api
+    backend needs its key in the environment; the claude backend needs the
+    `claude` CLI on PATH; the local backend needs the llama-server up (with
+    the relaunch command in the error)."""
+    if GEN_BACKEND == "api":
+        from src.openai_compat import GEN_SEAT
+        if not os.environ.get(GEN_SEAT.api_key_env):
+            raise LlmServerError(
+                f"GEN_BACKEND='api' but {GEN_SEAT.api_key_env} is not set - "
+                f"generation runs {GEN_SEAT.model} at {GEN_SEAT.base_url}. "
+                f"Set the key in the environment before the run.")
+        return {"backend": "api", "model": GEN_SEAT.model,
+                "key_env": GEN_SEAT.api_key_env}
     if GEN_BACKEND == "claude":
         exe = shutil.which("claude")
         if exe is None:

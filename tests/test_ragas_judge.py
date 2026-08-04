@@ -14,8 +14,9 @@ from src.claude_cli import ClaudeCliError
 from src.config import (CLAUDE_MAX_CONCURRENCY, JUDGE_PASS_FACTUAL,
                         JUDGE_PASS_FAITHFULNESS)
 from src.judge.judge import JudgeError
-from src.judge.ragas_backend import ClaudeCliLLM
+from src.judge.ragas_backend import ClaudeCliLLM, OpenAICompatLLM
 from src.judge.ragas_judge import JudgePool, derive_ragas_pass
+from src.openai_compat import JUDGE_SEAT
 
 
 class FakePrompt:
@@ -215,3 +216,85 @@ def test_batch_isolates_case_failures(tmp_path):
     results = pool.judge_all([bad, good])
     assert isinstance(results[0], JudgeError)
     assert results[1].passed
+
+
+# --- the api backend (v5 default: DeepSeek V4 Flash) ---
+
+def api_envelope(result: str) -> dict:
+    return {"result": result, "is_error": False, "usage": {},
+            "total_cost_usd": 0.0, "duration_ms": 5, "num_turns": 1}
+
+
+def api_transport(result: str):
+    """A fake with call_api's signature: (messages, seat, **kw) -> envelope."""
+    def transport(messages, seat, **kw):
+        return api_envelope(result)
+    return transport
+
+
+def test_openai_backend_returns_llmresult_text():
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=api_transport('{"verdict": 1}'))
+    out = llm.generate_text(FakePrompt())
+    assert out.generations[0][0].text == '{"verdict": 1}'
+
+
+def test_openai_backend_counts_unparseable_json():
+    """DeepSeek's loose JSON mode is the instrumented risk: a completion
+    with no parseable JSON is where ragas's silent 0.0 starts, so it is
+    counted at the source rather than inferred from scores."""
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=api_transport("I think the answer is"))
+    llm._call("p")
+    llm._call("p")
+    assert llm.stats()["completions"] == 2
+    assert llm.stats()["unparseable_json"] == 2
+
+    ok = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                         transport=api_transport(
+                             'Sure! ```json\n{"claims": []}\n```'))
+    ok._call("p")
+    assert ok.stats()["unparseable_json"] == 0
+
+
+def mk_api_pool(tmp_path, result=RUBRIC_OK, concurrency=4):
+    return JudgePool(model_key="deepseek", concurrency=concurrency,
+                     log_path=tmp_path / "judge.jsonl",
+                     transport=api_transport(result))
+
+
+def test_deepseek_pool_picks_the_api_backend(tmp_path):
+    pool = mk_api_pool(tmp_path)
+    assert pool.backend_kind == "api"
+    assert isinstance(pool.backend, OpenAICompatLLM)
+    assert pool.model == "deepseek-v4-flash"
+    assert pool.stats()["model"] == "deepseek-v4-flash"
+
+
+def test_deepseek_pool_default_uses_the_seat_semaphore(tmp_path):
+    pool = JudgePool(model_key="deepseek", log_path=tmp_path / "j.jsonl",
+                     transport=api_transport(RUBRIC_OK))
+    assert pool._sem is JUDGE_SEAT.semaphore
+    assert pool._sem is not claude_cli.shared_semaphore()
+    assert pool.concurrency == JUDGE_SEAT.concurrency
+
+
+def test_deepseek_pool_dispatches_both_paths(tmp_path):
+    pool = mk_api_pool(tmp_path)
+    pool.faithfulness = StubMetric(0.9)
+    pool.factual = StubMetric(0.8)
+    adv = {"question_id": "adv-1", "question": "q?",
+           "reference_answer": "ref", "answer": "none exist",
+           "adversarial": "zero-match"}
+    ordinary = {"question_id": "r-9", "question": "q?",
+                "reference_answer": "ref", "answer": "ans",
+                "contexts": ["ev"]}
+    verdicts = pool.judge_all([adv, ordinary])
+    assert verdicts[0].path == "overlay" and verdicts[0].passed
+    assert verdicts[1].path == "ragas" and verdicts[1].passed
+    assert verdicts[1].factual_correctness == 0.8
+
+
+def test_claude_pool_has_no_parse_stats(tmp_path):
+    pool = mk_pool(tmp_path, lambda p, m, **kw: envelope("x"))
+    assert pool.backend_kind == "claude" and pool.stats() == {}

@@ -30,11 +30,13 @@ from pathlib import Path
 
 from src.claude_cli import call_claude, shared_semaphore
 from src.config import (CLAUDE_CONCURRENCY, CLAUDE_MAX_CONCURRENCY,
-                        JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS,
-                        JUDGE_PASS_FACTUAL, JUDGE_PASS_FAITHFULNESS)
+                        JUDGE_BACKENDS, JUDGE_DEFAULT, JUDGE_LOG_PATH,
+                        JUDGE_MODELS, JUDGE_PASS_FACTUAL,
+                        JUDGE_PASS_FAITHFULNESS)
 from src.eval import usage
 from src.judge.judge import Judge
-from src.judge.ragas_backend import ClaudeCliLLM  # installs the ragas shim
+from src.judge.ragas_backend import (ClaudeCliLLM,  # installs the ragas shim
+                                     OpenAICompatLLM)
 from src.llm import fingerprint
 
 import ragas  # noqa: E402  (after backend import: shim must run first)
@@ -89,36 +91,77 @@ def derive_ragas_pass(faithfulness: float | None,
 class JudgePool:
     """Judges a batch of cases concurrently, dispatching each to the RAGAS
     metrics or the rubric overlay by the case's `adversarial` flag. One
-    semaphore caps concurrent `claude -p` processes across BOTH paths."""
+    semaphore caps this pool's concurrent judge calls across BOTH paths -
+    the judge seat's own semaphore on the api backend (v5 default), the
+    process-wide `claude -p` gate on the legacy claude backend. Which
+    backend a model_key selects is pinned in config.JUDGE_BACKENDS."""
 
     def __init__(self, model_key: str = JUDGE_DEFAULT,
                  concurrency: int | None = None,
                  log_path: Path = JUDGE_LOG_PATH,
-                 transport=call_claude):
+                 transport=None):
         self.model_key = model_key
         self.model = JUDGE_MODELS[model_key]
         self.log_path = log_path
-        if concurrency is None:
-            # Default: the process-wide `claude -p` gate, shared with the
-            # generation clients - the global cap holds across all paths.
-            self.concurrency = min(CLAUDE_CONCURRENCY, CLAUDE_MAX_CONCURRENCY)
-            self._sem = shared_semaphore()
+        self.backend_kind = JUDGE_BACKENDS.get(model_key, "claude")
+
+        if self.backend_kind == "api":
+            from src.openai_compat import (JUDGE_SEAT, call_api,
+                                           call_api_gated)
+            api_transport = transport or call_api
+            if concurrency is None:
+                self.concurrency = JUDGE_SEAT.concurrency
+                self._sem = JUDGE_SEAT.semaphore
+            else:
+                self.concurrency = max(1, int(concurrency))
+                self._sem = threading.Semaphore(self.concurrency)
+            self.backend = OpenAICompatLLM(JUDGE_SEAT, self._sem,
+                                           transport=api_transport)
+
+            def rubric_transport(prompt, model, **kw):
+                # The rubric judge speaks (prompt, model) -> envelope; the
+                # seat pins the model, and going through call_api_gated
+                # keeps backoff and usage recording identical to the RAGAS
+                # path - the overlay's spend is on the record too.
+                return call_api_gated([{"role": "user", "content": prompt}],
+                                      JUDGE_SEAT, transport=api_transport,
+                                      semaphore=self._sem)
+
+            self.rubric = Judge(model_key=model_key, log_path=log_path,
+                                transport=rubric_transport)
         else:
-            self.concurrency = max(1, min(int(concurrency),
-                                          CLAUDE_MAX_CONCURRENCY))
-            self._sem = threading.Semaphore(self.concurrency)
+            transport = transport or call_claude
+            if concurrency is None:
+                # Default: the process-wide `claude -p` gate, shared with the
+                # generation clients - the global cap holds across all paths.
+                self.concurrency = min(CLAUDE_CONCURRENCY,
+                                       CLAUDE_MAX_CONCURRENCY)
+                self._sem = shared_semaphore()
+            else:
+                self.concurrency = max(1, min(int(concurrency),
+                                              CLAUDE_MAX_CONCURRENCY))
+                self._sem = threading.Semaphore(self.concurrency)
 
-        def gated(prompt, model, **kw):
-            with self._sem:
-                return transport(prompt, model, **kw)
+            def gated(prompt, model, **kw):
+                with self._sem:
+                    return transport(prompt, model, **kw)
 
-        self.backend = ClaudeCliLLM(self.model, self._sem, transport=transport)
-        self.rubric = Judge(model_key=model_key, log_path=log_path,
-                            transport=gated)
+            self.backend = ClaudeCliLLM(self.model, self._sem,
+                                        transport=transport)
+            self.rubric = Judge(model_key=model_key, log_path=log_path,
+                                transport=gated)
+
         self.faithfulness = Faithfulness(llm=self.backend)
         self.factual = FactualCorrectness(llm=self.backend)
         self.faithfulness.nli_statements_prompt.instruction += NLI_LENIENCY
         self.factual.nli_prompt.instruction += NLI_LENIENCY
+
+    def stats(self) -> dict:
+        """The backend's parse-health counters (api backend only): DeepSeek's
+        loose JSON mode can fail silently inside ragas - see ragas_backend -
+        so completions and unparseable-JSON counts are surfaced per run."""
+        stats = getattr(self.backend, "stats", None)
+        return stats() if callable(stats) else {}
 
     async def judge_case(self, case: dict) -> PoolVerdict:
         qid = case.get("question_id")

@@ -27,15 +27,59 @@ SERVER_LAUNCH_CMD = (
     + " --embedding --pooling cls -ngl 99 --port 8080 --cache-ram 0"
 )
 
-# --- Generation (v4): Claude Haiku over the shared `claude -p` transport ---
+# --- Generation backend switch ---
 # GEN_BACKEND selects the generation client behind src.llm.make_llm():
-#   "claude" (default) - Haiku via `claude -p`, gated by the shared semaphore
-#                        below; up to CLAUDE_CONCURRENCY parallel generators.
+#   "api" (v5 default) - Gemini 2.5 Flash-Lite over Google's OpenAI-compatible
+#                        endpoint (src/openai_compat.py); the run-time seat
+#                        decided 2026-08-04, frozen for the study.
+#   "claude"           - the retired v4 seat: Haiku via `claude -p`, gated by
+#                        the shared semaphore below.
 #   "local"            - the legacy llama-server Qwen3-8B path (kept for a
 #                        possible RQ3 revival with a weak generator).
 # Nothing downstream knows which client is behind .chat().
-GEN_BACKEND = "claude"
+GEN_BACKEND = "api"
 GEN_MODEL = "claude-haiku-4-5-20251001"
+
+# --- External API seats (v5, decided 2026-08-04) ---
+# Nothing at run time stays on the subscription: generation AND judging move
+# to cheap external APIs, different vendors so no vendor holds two seats
+# (horizon-scout.md §5). Both seats are FROZEN for the whole study once
+# smoked - a mid-study seat change would make every recorded number
+# incomparable. The judge seat gets the most capable cheap model because a
+# weak judge corrupts every number; the generator seat gets the boring
+# reliable JSON emitter.
+#
+# The *_EXTRA dicts are the thinking/reasoning OFF pin, merged verbatim into
+# every request body: Gemini 2.5 models take reasoning_effort "none" on the
+# OpenAI-compatible surface; DeepSeek V4 Flash turns thinking ON by default
+# and takes {"thinking": {"type": "disabled"}} to turn it off (thinking mode
+# also ignores temperature, so the judge's temperature 0 only means anything
+# with thinking disabled).
+#
+# Prices are pinned per MILLION tokens because these APIs return token
+# counts, not dollars - src/openai_compat.py computes each call's cost from
+# these and records it through src/eval/usage.py exactly like `claude -p`
+# envelopes were. Verified 2026-08-04 against the providers' price pages.
+# Unlike the Max-subscription figures, these dollars are BILLED, not priced.
+API_TIMEOUT_S = 240.0
+
+GEN_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+GEN_API_MODEL = "gemini-2.5-flash-lite"
+GEN_API_KEY_ENV = "GEMINI_API_KEY"
+GEN_API_TEMPERATURE = 0.0
+GEN_API_EXTRA = {"reasoning_effort": "none"}
+GEN_API_CONCURRENCY = 8
+GEN_API_PRICES_PER_MTOK = {"input": 0.10, "cache_read": 0.025,
+                           "output": 0.40}
+
+JUDGE_API_BASE_URL = "https://api.deepseek.com"
+JUDGE_API_MODEL = "deepseek-v4-flash"
+JUDGE_API_KEY_ENV = "DEEPSEEK_API_KEY"
+JUDGE_API_TEMPERATURE = 0.0
+JUDGE_API_EXTRA = {"thinking": {"type": "disabled"}}
+JUDGE_API_CONCURRENCY = 8
+JUDGE_API_PRICES_PER_MTOK = {"input": 0.14, "cache_read": 0.0028,
+                             "output": 0.28}
 
 # --- Shared `claude -p` transport (generation + rubric judge + RAGAS) ---
 # ONE process-wide semaphore (src/claude_cli.py) gates every `claude -p`
@@ -100,18 +144,27 @@ RERANK_SERVER_LAUNCH_CMD = (
     + " --reranking --pooling rank -ngl 99 --port 8082 -c 2048 -b 2048 -ub 2048"
 )
 
-# --- Judge (M5, v4): Sonnet via the shared `claude -p` transport ---
-# Transport = ONE function (src/claude_cli.py: call_claude); a billing change
-# means swapping that function for an API call, nothing else. Model strings
-# are pinned in full and logged per verdict. v4: the judge is FIXED to Sonnet
-# by decision (RQ5 scratched) and unvalidated - results are "Sonnet-judged
-# pass rates", never accuracy. Role separation: Opus authors references,
-# Haiku generates, Sonnet judges - no model wears two hats.
+# --- Judge (M5, v5): DeepSeek V4 Flash over its OpenAI-compatible API ---
+# v5 (2026-08-04): the judge seat leaves the subscription for the external
+# API seat pinned above (JUDGE_API_*); the claude keys stay only so old runs
+# can be reproduced and tests can exercise the legacy path. JUDGE_BACKENDS
+# maps each key to its transport - "api" = src/openai_compat.py with its own
+# per-seat concurrency, "claude" = the shared `claude -p` semaphore. Model
+# strings are pinned in full and logged per verdict. The judge is unvalidated
+# against human labels - results are judge-scored, never accuracy. Role
+# separation: Opus authored references (done), Gemini generates, DeepSeek
+# judges - no model wears two hats, no vendor holds two seats.
 JUDGE_MODELS = {
     "haiku": "claude-haiku-4-5-20251001",
     "sonnet": "claude-sonnet-5",
+    "deepseek": JUDGE_API_MODEL,
 }
-JUDGE_DEFAULT = "sonnet"
+JUDGE_BACKENDS = {
+    "haiku": "claude",
+    "sonnet": "claude",
+    "deepseek": "api",
+}
+JUDGE_DEFAULT = "deepseek"
 JUDGE_LOG_PATH = ROOT / "data" / "logs" / "judge.jsonl"
 
 # RAGAS pass thresholds - PILOT DRAFT values, frozen with the judged-metric

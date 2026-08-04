@@ -24,7 +24,7 @@
                                       [--reasons per-id.json] [--dry-run]
                                       [--bank eval/bank.jsonl] [--archive PATH]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
-                               [--model haiku|sonnet]
+                               [--model deepseek|haiku|sonnet]
   python -m src.cli run-bank [--conditions router force-sql force-vector
                                             always-hybrid]
                              [--bank eval/bank.jsonl] [-k 10] [--no-judge]
@@ -45,8 +45,8 @@ import sys
 import textwrap
 from pathlib import Path
 
-from src.config import (CHUNK_TARGET, CLAUDE_CONCURRENCY, FUSE_CANDIDATES,
-                        JUDGE_DEFAULT, ROOT, SPLIT_OVERLAP)
+from src.config import (CHUNK_TARGET, FUSE_CANDIDATES, JUDGE_BACKENDS,
+                        JUDGE_DEFAULT, JUDGE_MODELS, ROOT, SPLIT_OVERLAP)
 
 # Transcription-boundary guard: agent-returned packages have arrived with
 # HTML entities (&lt; &gt; &amp;) where the source text had < > &. Unnoticed,
@@ -939,6 +939,12 @@ def cmd_run_bank(args):
         sys.exit(2)
 
     check_generator()
+    if not args.no_judge and JUDGE_BACKENDS.get(args.model) == "api":
+        # Prove the judge key exists BEFORE generation spends real dollars -
+        # finding out at phase B that DEEPSEEK_API_KEY is unset would waste
+        # the whole generation phase.
+        from src.openai_compat import JUDGE_SEAT, check_key
+        check_key(JUDGE_SEAT)
     # Only the topical paths need the embedder; a SQL-only selection does not.
     if args.routes != ["sql"]:
         check_embed()
@@ -976,7 +982,10 @@ def cmd_run_retrieval(args):
     # Every server this run depends on is proven up before the first paid
     # generation. Four conditions x forty questions is 160 answers; finding out
     # at answer 41 that the reranker is down is the expensive way to learn it.
-    check_generator()                    # generation goes through `claude -p`
+    check_generator()                    # whichever backend is configured
+    if not args.no_judge and JUDGE_BACKENDS.get(args.model) == "api":
+        from src.openai_compat import JUDGE_SEAT, check_key
+        check_key(JUDGE_SEAT)
     reranker = None
     if any(c in ("dense", "hybrid", "hybrid_rerank") for c in args.conditions):
         check_embed()
@@ -1247,11 +1256,12 @@ def main():
     jf = sub.add_parser("judge-file",
                         help="LLM judge over {question, reference, answer} jsonl")
     jf.add_argument("--eval-file", default=str(ROOT / "eval" / "judge_smoke.jsonl"))
-    jf.add_argument("--model", choices=["haiku", "sonnet"],
+    jf.add_argument("--model", choices=sorted(JUDGE_MODELS),
                     default=JUDGE_DEFAULT)
-    jf.add_argument("--concurrency", type=int, default=CLAUDE_CONCURRENCY,
-                    help=f"parallel judge processes "
-                         f"(default {CLAUDE_CONCURRENCY}, max 16)")
+    jf.add_argument("--concurrency", type=int, default=None,
+                    help="parallel judge calls (default: the backend's own "
+                         "cap - the judge seat's concurrency on the api "
+                         "backend, the shared claude gate on the legacy one)")
     jf.set_defaults(fn=cmd_judge_file)
 
     rb = sub.add_parser("run-bank",
@@ -1279,7 +1289,7 @@ def main():
                     help="continue the run named by --run-id: skip questions "
                          "already executed, and judge any that are still owed "
                          "a verdict without paying for generation again")
-    rb.add_argument("--model", choices=["haiku", "sonnet"],
+    rb.add_argument("--model", choices=sorted(JUDGE_MODELS),
                     default=JUDGE_DEFAULT, help="judge model")
     rb.set_defaults(fn=cmd_run_bank)
 
@@ -1325,7 +1335,7 @@ def main():
                          "(condition, question) pairs already executed, and "
                          "judge any still owed a verdict without paying for "
                          "generation again")
-    rr.add_argument("--model", choices=["haiku", "sonnet"],
+    rr.add_argument("--model", choices=sorted(JUDGE_MODELS),
                     default=JUDGE_DEFAULT, help="judge model")
     rr.set_defaults(fn=cmd_run_retrieval)
 
