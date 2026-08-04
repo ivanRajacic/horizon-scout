@@ -12,7 +12,7 @@ import json
 import pytest
 
 from src.config import ROOT
-from src.eval.batch import (BatchError, crosscheck, gap_report,
+from src.eval.batch import (BatchError, archived_ids, crosscheck, gap_report,
                             journal_append, load_journal, next_ids,
                             parse_allocation, write_batch)
 from src.eval.promote import promote
@@ -142,20 +142,22 @@ def test_next_ids_counts_bank_and_every_staged_file(tmp_path):
                 [{"question_id": "sql-07"}])
     write_jsonl(drafts / "draft-bank-2026-07-25.jsonl",
                 [{"question_id": "hyb-04"}, {"question_id": "vec-02"}])
-    assigned = next_ids({"sql": 2, "vector": 1, "hybrid": 1}, bank, drafts)
+    assigned = next_ids({"sql": 2, "vector": 1, "hybrid": 1}, bank, drafts,
+                           tmp_path / "archive")
     assert assigned == {"sql": ["sql-08", "sql-09"], "vector": ["vec-03"],
                         "hybrid": ["hyb-05"]}
 
 
 def test_next_ids_starts_at_01_on_an_empty_bank(tmp_path):
     bank = write_jsonl(tmp_path / "bank.jsonl", [])
-    assert next_ids({"sql": 1}, bank, tmp_path / "none")["sql"] == ["sql-01"]
+    assert next_ids({"sql": 1}, bank, tmp_path / "none",
+                     tmp_path / "archive")["sql"] == ["sql-01"]
 
 
 def test_next_ids_rejects_a_route_it_cannot_name(tmp_path):
     bank = write_jsonl(tmp_path / "bank.jsonl", [])
     with pytest.raises(BatchError, match="ambiguous"):
-        next_ids({"ambiguous": 1}, bank, tmp_path)
+        next_ids({"ambiguous": 1}, bank, tmp_path, tmp_path / "archive")
 
 
 # --- gap report ------------------------------------------------------------
@@ -165,7 +167,8 @@ def test_gap_report_counts_filled_staged_and_target(tmp_path):
     drafts = tmp_path / "drafts"
     write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
                 [{**SQL_A, "question_id": "sql-02"}])
-    text = gap_report(bank, drafts, plan_file(tmp_path))
+    text = gap_report(bank, drafts, plan_file(tmp_path),
+                      tmp_path / "archive")
     assert "| sql | 1+1/7 |" in text
     assert "1+0/6" in text            # hybrid L1
     assert "0+0/24" in text           # vector route total, nothing authored
@@ -180,7 +183,8 @@ def test_gap_report_ignores_already_promoted_staged_records(tmp_path):
     bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
     drafts = tmp_path / "drafts"
     write_jsonl(drafts / "draft-bank-2026-07-24.jsonl", [SQL_A])   # promoted
-    text = gap_report(bank, drafts, plan_file(tmp_path))
+    text = gap_report(bank, drafts, plan_file(tmp_path),
+                      tmp_path / "archive")
     assert "Staged (undecided): 0 record(s)" in text
     assert "| sql | 1+0/7 |" in text
 
@@ -206,11 +210,13 @@ def test_gap_report_ignores_rejected_staged_records(tmp_path):
     write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
                 [{**HYB_A, "question_id": "hyb-09"}])
     _report(drafts, "draft-report-2026-07-24.md", {"hyb-09": False})
-    text = gap_report(bank, drafts, plan_file(tmp_path))
+    text = gap_report(bank, drafts, plan_file(tmp_path),
+                      tmp_path / "archive")
     assert "Staged (undecided): 0 record(s)" in text
     assert "0+0/6" in text                     # hybrid L1 still unfilled
     # but the id stays taken, so the counter never reuses it
-    assert next_ids({"hybrid": 1}, bank, drafts)["hybrid"] == ["hyb-10"]
+    assert next_ids({"hybrid": 1}, bank, drafts,
+                    tmp_path / "archive")["hybrid"] == ["hyb-10"]
 
 
 def test_gap_report_still_counts_an_approved_but_unpromoted_record(tmp_path):
@@ -221,7 +227,7 @@ def test_gap_report_still_counts_an_approved_but_unpromoted_record(tmp_path):
                 [{**HYB_A, "question_id": "hyb-09"}])
     _report(drafts, "draft-report-2026-07-24.md", {"hyb-09": True})
     assert "Staged (undecided): 1 record(s)" in gap_report(
-        bank, drafts, plan_file(tmp_path))
+        bank, drafts, plan_file(tmp_path), tmp_path / "archive")
 
 
 def test_gap_report_treats_an_unticked_report_as_undecided(tmp_path):
@@ -235,14 +241,64 @@ def test_gap_report_treats_an_unticked_report_as_undecided(tmp_path):
         "## hyb-09 - ACCEPTED\n\nDecision: [ ] APPROVE  [ ] REJECT\n",
         encoding="utf-8")
     assert "Staged (undecided): 1 record(s)" in gap_report(
-        bank, drafts, plan_file(tmp_path))
+        bank, drafts, plan_file(tmp_path), tmp_path / "archive")
+
+
+# --- archived questions are decided, and their ids stay taken --------------
+
+def _archive(tmp_path, *records, name="bank-trimmed-2026-08-03.jsonl"):
+    """An archive file in archive.py's envelope shape."""
+    d = tmp_path / "archive"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_text(
+        "".join(json.dumps({"archived_at": "2026-08-03T00:00:00+00:00",
+                            "archived_reason": "trimmed to target",
+                            "archived_from": "bank.jsonl",
+                            "record": r}) + "\n" for r in records),
+        encoding="utf-8")
+    return d
+
+
+def test_archived_ids_reads_the_envelope_and_ignores_bare_records(tmp_path):
+    d = _archive(tmp_path, {**HYB_A, "question_id": "hyb-09"})
+    # bank_pilot.jsonl is the pre-skill smoke set: bare old-schema records with
+    # no envelope. It must not contribute ids, and must not crash the read.
+    (d / "bank_pilot.jsonl").write_text(
+        json.dumps({"question_id": "vec-99"}) + "\nnot json\n", encoding="utf-8")
+    assert archived_ids(d) == {"hyb-09"}
+
+
+def test_archived_ids_are_never_handed_to_a_new_question(tmp_path):
+    """The id an archived question used stays taken forever - otherwise a new
+    vec-09 is authored while a different vec-09 sits in the archive."""
+    bank = write_jsonl(tmp_path / "bank.jsonl", [HYB_A])          # hyb-01
+    archive = _archive(tmp_path, {**HYB_A, "question_id": "hyb-09"})
+    assert next_ids({"hybrid": 1}, bank, tmp_path / "none",
+                    archive)["hybrid"] == ["hyb-10"]
+
+
+def test_gap_report_does_not_count_an_archived_questions_staged_twin(tmp_path):
+    """A trimmed question's draft file stays on disk. Without the archive it
+    stops being 'banked' and reappears as pending work the batch must finish -
+    the same defect already fixed for promoted and for rejected records."""
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "draft-bank-2026-07-24.jsonl",
+                [{**HYB_A, "question_id": "hyb-09"}])
+    archive = _archive(tmp_path, {**HYB_A, "question_id": "hyb-09"})
+
+    text = gap_report(bank, drafts, plan_file(tmp_path), archive)
+
+    assert "Staged (undecided): 0 record(s)" in text
+    assert "| hybrid | 0+0/6 |" in text
 
 
 def test_gap_report_refuses_a_half_parsed_bank(tmp_path):
     bank = tmp_path / "bank.jsonl"
     bank.write_text('{"question_id": "sql-01"}\nnot json\n', encoding="utf-8")
     with pytest.raises(BatchError, match="invalid JSON"):
-        gap_report(bank, tmp_path / "none", plan_file(tmp_path))
+        gap_report(bank, tmp_path / "none", plan_file(tmp_path),
+                   tmp_path / "archive")
 
 
 # --- cross-check -----------------------------------------------------------

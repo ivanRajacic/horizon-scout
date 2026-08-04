@@ -36,6 +36,7 @@ from src.llm import fingerprint
 
 PLAN_DOC_PATH = ROOT / "horizon-scout.md"
 DRAFTS_DIR = ROOT / "eval" / "drafts"
+ARCHIVE_DIR = ROOT / "eval" / "archive"
 
 # Routes /question-orchestrator can fill, and their id prefixes. The other allocation
 # rows (ambiguous, adversarial, compositional) are interactive-only.
@@ -154,6 +155,41 @@ def staged_files(drafts_dir: Path = DRAFTS_DIR) -> list[Path]:
     return sorted(drafts_dir.glob("draft-bank-*.jsonl"))
 
 
+def archived_ids(archive_dir: Path = ARCHIVE_DIR) -> set[str]:
+    """Ids `archive-questions` moved out of the bank.
+
+    An archived id is DECIDED and its number stays permanently taken. Without
+    this, removing a question from the bank would hand its id straight back to
+    the next drafter (two different vec-42s), and its still-on-disk staged twin
+    would read as pending work forever - the same defect already fixed once for
+    promoted records and once for rejected ones.
+
+    Envelope shape is `archive.py`'s: provenance outside, the record inside.
+    Tolerant like `rejected_ids` - an unreadable or foreign file in the archive
+    dir means "nothing archived here", never a crash, so a gap report stays
+    readable. `bank_pilot.jsonl` (the pre-skill smoke set, bare old-schema
+    records with no envelope) is skipped by exactly that tolerance.
+    """
+    ids: set[str] = set()
+    for path in sorted(archive_dir.glob("*.jsonl")):
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            record = obj.get("record") if isinstance(obj, dict) else None
+            qid = record.get("question_id") if isinstance(record, dict) else None
+            if isinstance(qid, str) and qid:
+                ids.add(qid)
+    return ids
+
+
 def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
     """Ids a review report ticked REJECT, across every report in the dir.
 
@@ -187,20 +223,25 @@ def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
 
 
 def next_ids(counts: dict[str, int], bank_path: Path = BANK_PATH,
-             drafts_dir: Path = DRAFTS_DIR) -> dict[str, list[str]]:
+             drafts_dir: Path = DRAFTS_DIR,
+             archive_dir: Path = ARCHIVE_DIR) -> dict[str, list[str]]:
     """Assign the next free `sql-NN` / `vec-NN` / `hyb-NN` per route.
 
-    Counts BOTH the bank AND every staged draft file: a staged id is taken
-    even before promotion. Failed slots leave id gaps, which is harmless - the
-    counter never reuses a number.
+    Counts the bank, every staged draft file AND the archive: a staged id is
+    taken even before promotion, and an archived id stays taken forever. Failed
+    and archived slots leave id gaps, which is harmless - the counter never
+    reuses a number.
     """
     highest: dict[str, int] = {p: 0 for p in ROUTE_PREFIX.values()}
+    taken = archived_ids(archive_dir)
     for path in [bank_path, *staged_files(drafts_dir)]:
         for record in read_records(path):
-            match = ID_RE.match(str(record.get("question_id", "")))
-            if match:
-                prefix, number = match.group(1), int(match.group(2))
-                highest[prefix] = max(highest[prefix], number)
+            taken.add(str(record.get("question_id", "")))
+    for qid in taken:
+        match = ID_RE.match(qid)
+        if match:
+            prefix, number = match.group(1), int(match.group(2))
+            highest[prefix] = max(highest[prefix], number)
     assigned: dict[str, list[str]] = {}
     for route, n in counts.items():
         prefix = ROUTE_PREFIX.get(route)
@@ -220,18 +261,21 @@ def _tally(records: list[dict]) -> Counter:
 
 
 def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
-               plan_path: Path = PLAN_DOC_PATH) -> str:
+               plan_path: Path = PLAN_DOC_PATH,
+               archive_dir: Path = ARCHIVE_DIR) -> str:
     """filled / staged / target per cell, plus the coverage the batch's cell
     negotiation needs: subtypes, term_style balance, and the next free ids."""
     targets = parse_allocation(plan_path)
     bank = read_records(bank_path)
     staged_paths = staged_files(drafts_dir)
-    # Staged means staged-but-UNDECIDED. A promoted OR rejected batch's draft
-    # file stays on disk for the record, and counting those records again would
-    # show a filled cell as half pending (promoted) or a cell the batch still
-    # has to fill as already covered (rejected).
+    # Staged means staged-but-UNDECIDED. A promoted, rejected OR archived
+    # batch's draft file stays on disk for the record, and counting those
+    # records again would show a filled cell as half pending (promoted), or a
+    # cell the batch still has to fill as already covered (rejected), or an
+    # archived question as work still on its way in (archived).
     decided_ids = ({r.get("question_id") for r in bank}
-                   | rejected_ids(drafts_dir))
+                   | rejected_ids(drafts_dir)
+                   | archived_ids(archive_dir))
     staged, live_paths = [], []
     for path in staged_paths:
         undecided = [r for r in read_records(path)
@@ -297,7 +341,8 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
             f"paraphrase={styles['paraphrase']}+{styles_staged['paraphrase']}"
             "  (aim ~50/50 within each route)")
 
-    free = next_ids({r: 1 for r in ROUTE_PREFIX}, bank_path, drafts_dir)
+    free = next_ids({r: 1 for r in ROUTE_PREFIX}, bank_path, drafts_dir,
+                    archive_dir)
     out += ["", "next free id per route: "
             + ", ".join(f"{route}={ids[0]}" for route, ids in free.items())]
     return "\n".join(out)

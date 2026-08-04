@@ -20,6 +20,9 @@
   python -m src.cli write-batch <journal.jsonl> [--output-dir ...]
                                 [--date YYYY-MM-DD] [--suffix -2] [--force]
   python -m src.cli promote-drafts <draft-report.md> [--bank eval/bank.jsonl]
+  python -m src.cli archive-questions --ids vec-03 ... --reason "<why>"
+                                      [--reasons per-id.json] [--dry-run]
+                                      [--bank eval/bank.jsonl] [--archive PATH]
   python -m src.cli judge-file [--eval-file eval/judge_smoke.jsonl]
                                [--model haiku|sonnet]
   python -m src.cli run-bank [--conditions router force-sql force-vector
@@ -809,6 +812,50 @@ def cmd_promote_drafts(args):
     print(bank_summary(load_bank(args.bank)))
 
 
+def cmd_archive_questions(args):
+    """Move questions out of the bank into an archive file. Deterministic:
+    validates the bank that would remain BEFORE writing either file, and
+    refuses loudly on any problem. Archived ids stay permanently taken."""
+    from src.eval.archive import ArchiveError, archive_questions
+    from src.eval.bank import bank_summary, load_bank
+
+    per_id: dict[str, str] = {}
+    if args.reasons:
+        per_id = json.loads(Path(args.reasons).read_text(encoding="utf-8"))
+        if not isinstance(per_id, dict):
+            print("--reasons must be a JSON object of {question_id: reason}")
+            sys.exit(1)
+
+    if args.dry_run:
+        bank = {q.question_id: q for q in load_bank(args.bank)}
+        missing = [q for q in args.ids if q not in bank]
+        print(f"DRY RUN - nothing written. {len(args.ids)} question(s) would "
+              f"move to {args.archive}\n")
+        for qid in args.ids:
+            q = bank.get(qid)
+            where = (f"{q.expected_route}/{q.level}/{q.subtype}"
+                     if q else "NOT IN BANK")
+            print(f"  {qid:8} {where:28} {per_id.get(qid, args.reason)}")
+        print(f"\nbank would go {len(bank)} -> {len(bank) - len(args.ids)}")
+        if missing:
+            print(f"REFUSAL AHEAD - not in bank: {', '.join(missing)}")
+            sys.exit(1)
+        return
+
+    try:
+        res = archive_questions(args.ids, args.reason, Path(args.bank),
+                                Path(args.archive), per_id_reasons=per_id)
+    except ArchiveError as e:
+        print("ARCHIVE REFUSED - bank untouched:")
+        for line in str(e).splitlines():
+            print(f"  {line}")
+        sys.exit(1)
+    print(f"archive file: {res.archive_file}")
+    print(f"archived ({len(res.archived)}): {', '.join(res.archived)}")
+    print(f"bank now {res.remaining} question(s)\n")
+    print(bank_summary(load_bank(args.bank)))
+
+
 def cmd_judge_file(args):
     """Judge a jsonl of {question_id, question, reference_answer, answer,
     contexts?, adversarial?, expect_pass?}. Ordinary cases go through the
@@ -1145,6 +1192,24 @@ def main():
     pd.add_argument("report", help="draft-report .md with ticked decision boxes")
     pd.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     pd.set_defaults(fn=cmd_promote_drafts)
+
+    aq = sub.add_parser("archive-questions",
+                        help="move questions out of the bank into an archive "
+                             "file (the bank is never hand-edited)")
+    aq.add_argument("--ids", nargs="+", required=True,
+                    help="question ids to archive")
+    aq.add_argument("--reason", required=True,
+                    help="why - recorded on every archived envelope")
+    aq.add_argument("--reasons",
+                    help="optional JSON {question_id: reason} overriding "
+                         "--reason per question")
+    aq.add_argument("--dry-run", action="store_true",
+                    help="print what would move and write nothing")
+    aq.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    aq.add_argument("--archive",
+                    default=str(ROOT / "eval" / "archive" /
+                                "bank-trimmed-2026-08-03.jsonl"))
+    aq.set_defaults(fn=cmd_archive_questions)
 
     jf = sub.add_parser("judge-file",
                         help="LLM judge over {question, reference, answer} jsonl")
