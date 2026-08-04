@@ -203,3 +203,78 @@ def test_scoped_subject_filter_triggers_corrective_reask():
     assert res.status == "ok" and res.project_ids == {1, 2}
     assert res.trace["subject_corrected"] is True
     assert len(narrow.asked) == 2 and "Reminder" in narrow.asked[1]
+
+
+# --- the runtime retrieval stack (2026-08-03: dense-only -> hybrid_rerank) ---
+#
+# The wiring these cover is easy to break silently: Ask used to build a bare
+# VectorSearcher, and a regression back to that would still answer questions,
+# just worse and with no marker in the trace saying so.
+
+def _ask(monkeypatch, tmp_path, **kw):
+    """An Ask with every external dependency faked - no servers, no CLI."""
+    from src import ask as ask_mod
+    llm = FakeLlm([])
+    llm.model = "fake-model"          # Ask pins llm.model into versions
+    monkeypatch.setattr(ask_mod, "make_llm", lambda: llm)
+    return ask_mod.Ask(log_path=tmp_path / "ask.jsonl", **kw)
+
+
+def test_ask_builds_the_configured_runtime_retriever(monkeypatch, tmp_path):
+    from src import ask as ask_mod
+    from src.config import RUNTIME_RETRIEVER
+
+    built = []
+
+    def fake_build(name):
+        built.append(name)
+        return FakeSearcher([])
+
+    monkeypatch.setattr(ask_mod, "build_retriever", fake_build)
+    a = _ask(monkeypatch, tmp_path)
+    assert built == [RUNTIME_RETRIEVER]
+    assert RUNTIME_RETRIEVER == "hybrid_rerank"
+
+
+def test_ask_shares_one_retriever_with_the_scoped_path(monkeypatch, tmp_path):
+    # Both routes must see identical retrieval, and the lexical connection /
+    # FAISS index / rerank client must be constructed once, not twice.
+    from src import ask as ask_mod
+
+    monkeypatch.setattr(ask_mod, "build_retriever", lambda name: FakeSearcher([]))
+    a = _ask(monkeypatch, tmp_path)
+    assert a.scoped.searcher is a.retriever
+
+
+def test_ask_records_the_retriever_in_versions(monkeypatch, tmp_path):
+    # Absent from a log row = dense-only, pre-2026-08-03. Without this the
+    # re-baseline is unreadable.
+    from src import ask as ask_mod
+    from src.config import RERANKER_MODEL
+
+    monkeypatch.setattr(ask_mod, "build_retriever", lambda name: FakeSearcher([]))
+    a = _ask(monkeypatch, tmp_path)
+    assert a.versions["retriever"] == "hybrid_rerank"
+    assert a.versions["rerank_model"] == RERANKER_MODEL
+
+
+def test_ask_omits_rerank_model_when_the_stack_does_not_rerank(monkeypatch, tmp_path):
+    # Recording a reranker that never scored anything would be a false trace.
+    from src import ask as ask_mod
+
+    monkeypatch.setattr(ask_mod, "build_retriever", lambda name: FakeSearcher([]))
+    a = _ask(monkeypatch, tmp_path, retriever_name="dense")
+    assert a.versions["retriever"] == "dense"
+    assert "rerank_model" not in a.versions
+
+
+def test_ask_vector_route_uses_the_shared_retriever(monkeypatch, tmp_path):
+    from src import ask as ask_mod
+
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    monkeypatch.setattr(ask_mod, "build_retriever", lambda name: searcher)
+    a = _ask(monkeypatch, tmp_path)
+    a.synth = Synthesizer(llm=FakeLlm(["grounded answer [A, 1]."]))
+    res = a.ask("a topical question", k=10, mode="vector")
+    assert res.mode == "vector"
+    assert searcher.last_project_ids is None  # unfiltered, and it WAS called

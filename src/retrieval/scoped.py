@@ -3,8 +3,10 @@ ids, then a semantic search runs WITHIN that scope.
 
 This is the "structured constraint + topic" path (router mode 'scoped'). It is
 distinct from hybrid.py, which fuses lexical and dense retrieval (RRF + rerank);
-the semantic step here can use any Retriever, so once the retriever bake-off
-picks a winner, this class's inner searcher can be swapped with a one-line change.
+the semantic step here takes any base.Retriever. That swap has now happened:
+since 2026-08-03 ask.py passes in config.RUNTIME_RETRIEVER (hybrid_rerank), so
+the filter narrows to a set of ids and lexical + dense both search WITHIN it -
+HybridRetriever.search forwards project_ids to both legs.
 
 Step 1 reuses SqlPath (guardrails + one-retry) with an id-narrowing system
 prompt instead of a copy. Step 2 embeds the FULL original question - the
@@ -23,9 +25,8 @@ import re
 from dataclasses import dataclass, field
 
 from src.config import SCHEMA_DOCS_PATH
-from src.retrieval.base import SearchResult
+from src.retrieval.base import Retriever, SearchResult
 from src.retrieval.sql_path import SqlPath
-from src.retrieval.vector_search import VectorSearcher
 
 WEAK_FILTER = 5000
 NARROW_ROW_LIMIT = 50000  # never truncate a real filter set; just bound pathology
@@ -104,7 +105,7 @@ class ScopedResult:
 
 
 class ScopedRetriever:
-    def __init__(self, searcher: VectorSearcher, narrow_sql: SqlPath | None = None):
+    def __init__(self, searcher: Retriever, narrow_sql: SqlPath | None = None):
         self.searcher = searcher
         # Same SqlPath machinery, id-narrowing instruction, no row truncation.
         self.narrow = narrow_sql or SqlPath(

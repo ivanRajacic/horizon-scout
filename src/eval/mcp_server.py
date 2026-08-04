@@ -24,9 +24,11 @@ exploration journal (`python -m src.cli verify-evidence`, the same code).
 
 search_corpus runs the real retrieval stack (lexical | dense | hybrid |
 hybrid_rerank, or "pooled" = all four) and returns PROJECT-level rankings -
-gold_project_ids are project labels, never chunk labels, and the pooling
-protocol ("label the union of all retrieval conditions' top-k") needs every
-condition's view at once. get_project_text is the gold-evidence channel:
+gold_project_ids are project labels, never chunk labels. It defaults to
+config.RUNTIME_RETRIEVER, the stack the system answers with; gold labelling
+and adversarial absence proofs must ask for "pooled" explicitly, because the
+pooling protocol ("label the union of all retrieval conditions' top-k") needs
+every condition's view at once. get_project_text is the gold-evidence channel:
 full objective + report sections for grounding, candidate relevance judging,
 and reference writing. Its optional `fields` / `max_chars` arguments let a
 caller that only needs the gist (corpus exploration confirming a theme) pull
@@ -62,7 +64,7 @@ import duckdb
 
 from src.config import (BANK_PATH, CORPUS_PROFILE_PATH,
                         CORPUS_PROFILE_VERSION, DB_PATH, DRAFT_MCP_LOG_PATH,
-                        INDEX_META_PATH, SCHEMA_DOCS_PATH,
+                        INDEX_META_PATH, RUNTIME_RETRIEVER, SCHEMA_DOCS_PATH,
                         SCHEMA_DOCS_VERSION, SQL_TIMEOUT_S)
 from src.eval.bank import HYBRID_SUBTYPE_GOLD_BOUNDS, ROUTES
 from src.eval.explore import (LEVEL_WINDOWS, SURVIVOR_CEILING,
@@ -366,15 +368,27 @@ def _first_k_projects(hits, k: int) -> list:
 
 
 @traced
-def search_corpus(query: str, condition: str = "pooled",
+def search_corpus(query: str, condition: str = RUNTIME_RETRIEVER,
                   k: int = SEARCH_K_DEFAULT,
                   scope_project_ids: list[int] | None = None,
                   snippet_chars: int | None = None) -> dict:
     """Run retrieval over the chunk corpus, returning PROJECT-level rankings.
 
-    condition is one of lexical|dense|hybrid|hybrid_rerank, or "pooled"
-    (default): all four at once - the honest-labeling protocol for
-    gold_project_ids ("label the union of all retrieval conditions' top-k").
+    condition is one of lexical|dense|hybrid|hybrid_rerank, or "pooled" (all
+    four at once). The default is config.RUNTIME_RETRIEVER - the stack the
+    system actually answers with - because that is what an ordinary
+    retrievability or discrimination check should ask about.
+
+    PASS condition="pooled" EXPLICITLY for the two jobs that need every
+    condition's view at once, and do not economise on them:
+      - labelling gold_project_ids ("label the union of all retrieval
+        conditions' top-k"). All 51 gold-labelled bank entries were pooled
+        over four conditions; a narrower gold set would make the bank two
+        instruments instead of one.
+      - proving ABSENCE for an adversarial question. Absence under one
+        condition is a weaker claim than absence under four, and it is the
+        claim the study leads with.
+
     k (capped at 50) counts distinct projects per condition. Each project
     carries its per-condition ranks (null = outside that condition's top-k)
     and the text of its best-ranked chunk. scope_project_ids restricts

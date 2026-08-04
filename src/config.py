@@ -173,6 +173,23 @@ RRF_K = 60              # reciprocal-rank-fusion constant (Cormack et al. 2009)
 FUSE_CANDIDATES = 100   # candidates pulled from EACH retriever before fusion
 RERANK_DEPTH = 50       # top fused candidates re-scored by the cross-encoder
 
+# The ONE retrieval stack the system runs: ask.py's vector route, the scoped
+# route's semantic step, and every eval run. A name from
+# src.retrieval.registry.RETRIEVERS, built through build_retriever.
+#
+# Why this value: RQ2 (the four-condition ladder as a study) was dropped
+# 2026-08-03 to put the whole study on routing. The choice is not an assumption
+# - the 2026-07-29 ladder (data/runs/ladder-2026-07-29/report.md, 10 vector
+# questions x 4 conditions) measured hybrid_rerank best of four at recall@20
+# 0.875, against hybrid 0.842, dense 0.839, lexical 0.706. That was a
+# 10-question pilot, not a bank-scale measurement; the write-up carries the
+# limitation. Changing the stack the study runs on is this one line.
+#
+# Note for anyone reading old logs: until 2026-08-03 ask.py ran DENSE-ONLY (a
+# bare VectorSearcher), so every data/logs/ask.jsonl row without a
+# versions.retriever field predates this and is not comparable.
+RUNTIME_RETRIEVER = "hybrid_rerank"
+
 
 def chunk_policy(chunk_target: int, split_overlap: int) -> str:
     """One-line policy string recorded in index_meta.json."""

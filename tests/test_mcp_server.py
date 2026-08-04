@@ -9,7 +9,8 @@ import json
 import duckdb
 import pytest
 
-from src.config import CORPUS_PROFILE_VERSION, SCHEMA_DOCS_VERSION
+from src.config import (CORPUS_PROFILE_VERSION, RUNTIME_RETRIEVER,
+                        SCHEMA_DOCS_VERSION)
 from src.eval import mcp_server
 from src.eval.mcp_server import (ServerConfig, get_bank_questions,
                                  get_corpus_profile, get_project_text,
@@ -282,7 +283,7 @@ def test_search_pooled_union_rank_matrix_and_order(fakes):
     fakes["lexical"].results = [sr("L1", 1), sr("L2", 2)]
     fakes["dense"].results = [sr("D2", 2, text="dense beta"), sr("D3", 3)]
     fakes["hybrid"].results = [sr("H2", 2)]
-    result = search_corpus("widgets", k=5)
+    result = search_corpus("widgets", condition="pooled", k=5)
     assert "error" not in result
     # Project 2: best rank 1 in three conditions -> first. Then project 1
     # (rank 1, one condition), then project 3 (best rank 2).
@@ -302,12 +303,27 @@ def test_search_pooled_union_rank_matrix_and_order(fakes):
 def test_search_condition_failure_is_error_result(fakes):
     fakes["dense"].error = ConnectionError("embed server down")
     # Pooled: one dead condition fails the whole call (no partial pooling).
-    result = search_corpus("widgets")
+    result = search_corpus("widgets", condition="pooled")
     assert set(result) == {"error"}
     assert "dense" in result["error"] and "embed server down" in result["error"]
     # Single condition: same contract.
     result = search_corpus("widgets", condition="dense")
     assert set(result) == {"error"}
+
+
+def test_search_defaults_to_the_runtime_retriever_not_pooled(fakes):
+    # 2026-08-03: the default went pooled -> config.RUNTIME_RETRIEVER, so an
+    # ordinary check asks about the stack the system answers with. Pooling is
+    # now opt-in, and the two jobs that still need it (gold labelling, ADV
+    # absence proofs) pass condition="pooled" explicitly.
+    fakes["lexical"].results = [sr("L1", 1)]
+    fakes["dense"].results = [sr("D2", 2)]
+    fakes["hybrid_rerank"].results = [sr("R3", 3)]
+    result = search_corpus("widgets")
+    assert result["condition"] == RUNTIME_RETRIEVER == "hybrid_rerank"
+    # Only the one condition ran: the other three were never called.
+    assert [p["project_id"] for p in result["projects"]] == [3]
+    assert not fakes["lexical"].calls and not fakes["dense"].calls
 
 
 def test_search_input_validation(fakes):

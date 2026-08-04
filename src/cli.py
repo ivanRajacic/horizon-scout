@@ -70,9 +70,11 @@ def cmd_build_index(args):
 
 
 def cmd_search(args):
-    from src.retrieval.vector_search import VectorSearcher
+    from src.config import RUNTIME_RETRIEVER
+    from src.retrieval.registry import build_retriever
 
-    searcher = VectorSearcher()
+    # The stack the system actually answers with, not dense alone.
+    searcher = build_retriever(RUNTIME_RETRIEVER)
     results = searcher.search(
         args.query, k=args.k,
         project_ids=set(args.project_ids) if args.project_ids else None,
@@ -87,9 +89,13 @@ def cmd_search(args):
 
 
 def cmd_smoke(args):
-    from src.retrieval.vector_search import VectorSearcher
+    from src.config import RUNTIME_RETRIEVER
+    from src.retrieval.registry import build_retriever
 
-    searcher = VectorSearcher()
+    # Smokes the stack the system answers with. Hit counts moved when this went
+    # dense-only -> hybrid_rerank on 2026-08-03; that is a re-baseline, not a
+    # regression, and the numbers before/after are in working-plan.md.
+    searcher = build_retriever(RUNTIME_RETRIEVER)
     cases = [json.loads(line) for line in
              Path(args.eval_file).read_text(encoding="utf-8").splitlines()
              if line.strip()]
@@ -930,7 +936,9 @@ def main():
     bf.set_defaults(fn=cmd_build_fts)
 
     br = sub.add_parser("bench-retrievers",
-                        help="bake-off: lexical/dense/hybrid/hybrid_rerank")
+                        help="bake-off: lexical/dense/hybrid/hybrid_rerank "
+                             "(diagnostic - RQ2 was dropped 2026-08-03, so "
+                             "this is no longer part of the study)")
     br.add_argument("--eval-file", default=str(ROOT / "eval" / "smoke_vector.jsonl"))
     br.add_argument("--retrievers", nargs="+", default=None,
                     help="subset to run (default: all four)")

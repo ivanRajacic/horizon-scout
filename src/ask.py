@@ -4,6 +4,13 @@ Pure-SQL answers are the table plus one templated sentence - no LLM synthesis
 (an 8B paraphrasing a correct table can only subtract accuracy). Vector and
 hybrid answers go through the Synthesizer. Every ask is logged to
 data/logs/ask.jsonl with per-stage timings for M5's failure analysis.
+
+Retrieval is ONE stack, config.RUNTIME_RETRIEVER, built through the registry
+and SHARED between the vector route and the scoped route's semantic step - so
+both paths see identical retrieval and the lexical connection, FAISS index and
+rerank client are constructed once per Ask. Until 2026-08-03 this was a bare
+dense VectorSearcher; see the RUNTIME_RETRIEVER comment in config.py for why it
+moved and what that means for older logs.
 """
 
 import json
@@ -11,11 +18,12 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.config import EMBED_MODEL, ROOT
+from src.config import EMBED_MODEL, RERANKER_MODEL, ROOT, RUNTIME_RETRIEVER
 from src.llm import fingerprint, make_llm
+from src.retrieval.base import Retriever
+from src.retrieval.registry import build_retriever
 from src.retrieval.scoped import ScopedRetriever
 from src.retrieval.sql_path import SqlPath
-from src.retrieval.vector_search import VectorSearcher
 from src.router import router as router_mod
 from src.router.router import Router
 from src.synthesis import synthesizer as synth_mod
@@ -52,19 +60,27 @@ def _templated_sql_answer(columns, rows) -> str:
 
 class Ask:
     def __init__(self, llm=None,
-                 searcher: VectorSearcher | None = None,
-                 log_path: Path = ASK_LOG_PATH):
+                 retriever: Retriever | None = None,
+                 log_path: Path = ASK_LOG_PATH,
+                 retriever_name: str = RUNTIME_RETRIEVER):
         self.llm = llm or make_llm()
         self.router = Router(llm=self.llm)
         self.sql_path = SqlPath(llm=self.llm)
-        self.searcher = searcher or VectorSearcher()
-        self.scoped = ScopedRetriever(self.searcher)
+        # ONE retriever, shared by the vector route and the scoped route's
+        # semantic step. An injected retriever keeps its caller's name only for
+        # the trace - what it actually is, is the caller's business.
+        self.retriever_name = retriever_name
+        self.retriever = retriever or build_retriever(retriever_name)
+        self.scoped = ScopedRetriever(self.retriever)
         self.synth = Synthesizer(llm=self.llm)
         self.log_path = log_path
         # Everything that could change an answer, pinned per trace (M5).
         self.versions = {
             "llm_model": self.llm.model,
             "embed_model": EMBED_MODEL,
+            # The retrieval stack is an answer-changing input like any prompt.
+            # Its absence in a log row means dense-only, pre-2026-08-03.
+            "retriever": self.retriever_name,
             "router_prompt": f"{router_mod.ROUTER_PROMPT_VERSION}:"
                              f"{fingerprint(router_mod.SYSTEM_PROMPT)}",
             "synth_prompt": f"{synth_mod.SYNTH_PROMPT_VERSION}:"
@@ -72,6 +88,10 @@ class Ask:
             "sql_prompt": self.sql_path.prompt_version,
             "narrow_prompt": self.scoped.narrow.prompt_version,
         }
+        # Only when the stack actually reranks - recording a rerank model that
+        # never scored anything would be a false entry in the trace.
+        if "rerank" in self.retriever_name:
+            self.versions["rerank_model"] = RERANKER_MODEL
 
     def ask(self, question: str, k: int = 10, mode: str | None = None,
             explain: bool = False) -> AskResult:
@@ -128,7 +148,7 @@ class Ask:
 
     def _ask_vector(self, question: str, k: int) -> AskResult:
         t = time.perf_counter()
-        chunks = self.searcher.search(question, k=k)
+        chunks = self.retriever.search(question, k=k)
         t_search = time.perf_counter() - t
         t = time.perf_counter()
         s = self.synth.synthesize(question, chunks)

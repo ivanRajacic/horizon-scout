@@ -6,15 +6,25 @@ or one capability forced on every question.
 
     router        mode=None      the router chooses
     force-sql     mode="sql"     every question down the SQL path
-    force-vector  mode="vector"  every question down dense retrieval
+    force-vector  mode="vector"  every question down unfiltered retrieval
     always-hybrid mode="scoped"  every question through the filtered path
+
+The retrieval stack under force-vector and always-hybrid is the same one:
+config.RUNTIME_RETRIEVER (hybrid_rerank since 2026-08-03), recorded in the run
+meta via ask.versions. What separates those two conditions is the SQL id filter,
+not the retriever - "hybrid" in the condition name means the scoped path, not
+lexical+dense fusion. Both senses of the word are now true at once, which is
+worth knowing when reading a report header.
 
 Two phases, and the split is about safety, not speed.
 
-PHASE A executes, sequentially. VectorSearcher holds one shared read-only DuckDB
-connection (vector_search.py) that is not safe to hit from several threads, and
-the embedder and reranker are a single GPU that serialises anyway. --concurrency
-exists but defaults to 1; raising it needs per-thread cursors first.
+PHASE A executes, sequentially. VectorSearcher and LexicalRetriever each hold a
+shared read-only DuckDB connection that is not safe to hit from several threads,
+and the embedder and reranker are a single GPU that serialises anyway.
+--concurrency exists but defaults to 1; raising it needs per-thread cursors
+first. Note that since the runtime went hybrid_rerank there are two such
+connections per Ask and a rerank call per question, so Phase A is slower than
+the dense-only runs recorded before 2026-08-03.
 
 PHASE B judges, concurrently, in one JudgePool batch. That is what JudgePool is
 built for and it is already proven at concurrency 8. Judging is the expensive
