@@ -78,9 +78,14 @@ The order is `horizon-scout.md` §8. Immediately:
    record through `src/eval/usage.py` at their one gate. The report moved
    from pass rates to continuous scores: judged routes show mean factual
    with min/median/max, sql stays exact execution, ADV stays the refusal
-   rubric. **Remaining before item 3:** set `GEMINI_API_KEY` and
-   `DEEPSEEK_API_KEY`, then smoke each seat on a handful of questions
-   (`run-bank --limit`); the seats freeze on that smoke.
+   rubric. **Remaining before item 3, the immediate next step:** set
+   `GEMINI_API_KEY` and `DEEPSEEK_API_KEY` in the environment, then smoke
+   both seats with a small judged run per route, e.g.
+   `run-bank --routes sql --limit 3`, then `--routes vector --limit 3`
+   (add an adversarial id to exercise the rubric overlay). Read the
+   answers, the verdicts and the report's Judge health section - the point
+   is to see both seats behave before anything depends on them. The seats
+   freeze on that smoke; after it, never change either again.
 3. **Three pre-baseline fixes**, all from `docs/pilot-router-findings.md` Part 2:
    scoped mode passes `rows_passed_to_gen = 0` so the generator hedges on its own
    filter (§1); the SQL scorer compares whole rows instead of `answer_columns`,
