@@ -2,8 +2,8 @@
 
 ## Header
 
-- **Version:** cp6
-- **Generated:** 2026-07-27
+- **Version:** cp8
+- **Generated:** 2026-07-29
 - **Corpus fingerprint:** 35,389 projects (`SELECT COUNT(*) FROM project`). Dense index `data/processed/index_meta.json`: 190,248 vectors, embedder `bge-base-en-v1.5-f16.gguf`, dim 768, built 2026-07-22T08:53:52Z. euroscivoc classification covers 32,236 of 35,389 projects across 111,614 rows (`SELECT COUNT(DISTINCT projectID), COUNT(*) FROM euroscivoc`).
 - **Grounded against schema_docs:** version `sd2`, content_hash `e2696e0f80f5`.
 
@@ -15,6 +15,8 @@
 - cp4 (2026-07-26) scope `"map=6"`: 12m wall (32s in MCP calls), 3 subagents (2 explorers + 1 critic) over 6 slices, 14 `run_sql`, 18 projects read across 6 `get_project_text` calls; +6 map entries, +18 candidates; frontier `mapped 6/46 | mined 19/46 | unexplored 21/46`.
 - cp5 (2026-07-26) scope `"vector=15 (three named mined buckets, L1-weighted)"`: 16m wall (143s in MCP calls), 4 subagents over 3 slices, 39 `run_sql`, 21 projects read across 7 `get_project_text` calls; +3 map entries, +15 candidates; frontier `mapped 4/46 | mined 23/46 | unexplored 19/46`.
 - cp6 (2026-07-27) scope `"vector=20 (five mined-but-unmapped buckets; frontier-report partition NOT used - it partitions unexplored buckets, all of which are now small)"`: 17m wall (188s in MCP calls), 6 subagents over 5 slices, 38 `run_sql`, 35 projects read across 12 `get_project_text` calls; +5 map entries, +20 candidates; frontier `mapped 0/46 | mined 33/46 | unexplored 13/46`.
+- cp7 (2026-07-28) scope `"hybrid=20"`: 10m wall (45s in MCP calls), 3 subagents over 4 slices, 12 `run_sql`, 15 projects read across 5 `get_project_text` calls; +4 map entries, +20 candidates; frontier `mapped 4/46 | mined 36/46 | unexplored 6/46`.
+- cp8 (2026-07-29) scope `"sql=18 distributions=6"`: 3m wall (1s in MCP calls), 3 subagents over 3 slices, 20 `run_sql`, 0 projects read across 0 `get_project_text` calls; +18 candidates, +9 structural findings; frontier `mapped 3/46 | mined 37/46 | unexplored 6/46`.
 
 **Reading order for a run:** `## Frontier` alone is enough to plan one (it says where we have not been). Read a section's candidates only when you are drafting from them. The whole file is never needed at once.
 
@@ -32,54 +34,54 @@ The `bank` column is traced through `gold_project_ids` -> `euroscivoc`, so SQL-r
 
 | bucket | projects | status | map | seeds | bank |
 |---|---|---|---|---|---|
-| natural sciences / biological sciences | 8,057 | mined | m10 | vector-01, vector-12, vector-49, vector-50, vector-51, vector-52 | hyb-06, hyb-09, vec-01, vec-05, vec-12, vec-13 |
-| natural sciences / computer and information sciences | 7,654 | mined | m07 | vector-07, vector-34, vector-35, vector-36, vector-37, vector-38 | hyb-07, vec-01, vec-06, vec-10, vec-14, vec-17 |
-| natural sciences / physical sciences | 5,788 | mined | m11 | hybrid-10, vector-53, vector-54, vector-55, vector-56 | hyb-03, hyb-07, hyb-08, vec-04, vec-05, vec-13 |
-| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | m12 | vector-05, vector-57, vector-58, vector-59, vector-60 | hyb-03, hyb-07, hyb-08, vec-01, vec-15, vec-17 |
-| engineering and technology / environmental engineering | 5,178 | mined | m13 | vector-11, vector-61, vector-62, vector-63, vector-64 | hyb-03, hyb-07, vec-05, vec-13, vec-15 |
-| social sciences / economics and business | 4,711 | mined | m08 | vector-10, vector-39, vector-40, vector-41, vector-42, vector-43 | hyb-09, vec-05, vec-07, vec-10, vec-14, vec-15, vec-17 |
-| medical and health sciences / clinical medicine | 4,661 | mined | m14 | vector-06, vector-13, vector-65, vector-66, vector-67, vector-68 | vec-02 |
-| natural sciences / chemical sciences | 4,331 | mined | m09 | vector-44, vector-45, vector-46, vector-47, vector-48 | hyb-03, hyb-07, vec-05, vec-08, vec-12, vec-13 |
-| medical and health sciences / basic medicine | 4,252 | mined | m01 | vector-15, vector-16, vector-17, vector-18 | hyb-06 |
-| social sciences / sociology | 3,802 | mined | m02 | vector-19, vector-20, vector-21 | hyb-07, vec-07, vec-09, vec-10, vec-11, vec-15 |
-| engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05, vec-12, vec-17 |
-| (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03, vec-15, vec-17 |
-| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, hyb-07, vec-05, vec-12, vec-13, vec-15 |
-| medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05 |
-| engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, hyb-06, hyb-08, vec-05 |
-| natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05, vec-14, vec-15 |
-| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | hyb-09, vec-05, vec-12 |
+| natural sciences / biological sciences | 8,057 | mined | m10 | vector-01, vector-12, vector-49, vector-50, vector-51, vector-52 | hyb-06, hyb-09, hyb-10, vec-01, vec-05, vec-12, vec-13, vec-19, vec-20, vec-21, vec-22, vec-23, vec-25, vec-30, vec-31, vec-33, vec-34, vec-39, vec-41, vec-42 |
+| natural sciences / computer and information sciences | 7,654 | mined | m07 | vector-07, vector-34, vector-35, vector-36, vector-37, vector-38 | hyb-07, hyb-10, vec-01, vec-06, vec-10, vec-14, vec-17, vec-18, vec-19, vec-20, vec-27, vec-31, vec-32, vec-33, vec-40 |
+| natural sciences / physical sciences | 5,788 | mined | m11 | hybrid-10, vector-53, vector-54, vector-55, vector-56 | hyb-03, hyb-07, hyb-08, vec-04, vec-05, vec-13, vec-18, vec-20, vec-22, vec-24, vec-27, vec-29, vec-40, vec-42 |
+| engineering and technology / electrical engineering, electronic engineering, information engineering | 5,566 | mined | m12 | vector-05, vector-57, vector-58, vector-59, vector-60 | hyb-03, hyb-07, hyb-08, vec-01, vec-15, vec-17, vec-18, vec-19, vec-20, vec-22, vec-24, vec-29, vec-34, vec-35, vec-36, vec-40, vec-42 |
+| engineering and technology / environmental engineering | 5,178 | mined | m13 | vector-11, vector-61, vector-62, vector-63, vector-64 | hyb-03, hyb-07, vec-05, vec-13, vec-15, vec-20, vec-26, vec-34, vec-36 |
+| social sciences / economics and business | 4,711 | mined | m08 | vector-10, vector-39, vector-40, vector-41, vector-42, vector-43 | hyb-09, vec-05, vec-07, vec-10, vec-14, vec-15, vec-17, vec-18, vec-20, vec-25, vec-26, vec-34, vec-36, vec-37 |
+| medical and health sciences / clinical medicine | 4,661 | mined | m14 | vector-06, vector-13, vector-65, vector-66, vector-67, vector-68 | vec-02, vec-19, vec-21, vec-23, vec-25, vec-30, vec-31, vec-41, vec-42 |
+| natural sciences / chemical sciences | 4,331 | mined | m09 | vector-44, vector-45, vector-46, vector-47, vector-48 | hyb-03, hyb-07, vec-05, vec-08, vec-12, vec-13, vec-18, vec-20, vec-21, vec-24, vec-34, vec-36 |
+| medical and health sciences / basic medicine | 4,252 | mined | m01 | vector-15, vector-16, vector-17, vector-18 | hyb-06, hyb-10, vec-21, vec-22, vec-23, vec-30, vec-31, vec-42 |
+| social sciences / sociology | 3,802 | mined | m02 | vector-19, vector-20, vector-21 | hyb-07, vec-07, vec-09, vec-10, vec-11, vec-15, vec-19, vec-23, vec-25, vec-34, vec-37, vec-42 |
+| engineering and technology / mechanical engineering | 3,158 | mined | - | vector-03 | hyb-03, vec-05, vec-12, vec-17, vec-24, vec-26, vec-29, vec-31, vec-42 |
+| (unclassified - no euroSciVoc row) | 3,153 | mined | - | - | vec-03, vec-15, vec-17, vec-20, vec-37 |
+| natural sciences / earth and related environmental sciences | 2,922 | mined | - | hybrid-01, hybrid-05, vector-02 | hyb-01, hyb-07, vec-05, vec-12, vec-13, vec-15, vec-18, vec-24, vec-32, vec-34 |
+| medical and health sciences / health sciences | 2,679 | mined | - | - | vec-05, vec-19, vec-20, vec-21, vec-23, vec-25, vec-30, vec-42 |
+| engineering and technology / materials engineering | 2,605 | mined | - | hybrid-09 | hyb-03, hyb-06, hyb-08, vec-05, vec-19, vec-20, vec-29, vec-34, vec-36, vec-42 |
+| natural sciences / mathematics | 2,097 | mined | - | vector-09 | vec-04, vec-05, vec-14, vec-15, vec-19, vec-20, vec-36, vec-42 |
+| agricultural sciences / agriculture, forestry, and fisheries | 1,943 | mined | - | hybrid-04, hybrid-07 | hyb-09, vec-05, vec-12, vec-21, vec-25, vec-34 |
 | social sciences / political sciences | 1,795 | mined | m03 | vector-22, vector-23, vector-24 | vec-10, vec-11, vec-15 |
-| humanities / history and archaeology | 1,669 | mined | m04 | vector-08, vector-25, vector-26, vector-27 | vec-07, vec-11, vec-12, vec-15 |
-| engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03, hyb-06 |
-| medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02 |
-| social sciences / social geography | 870 | mined | m06 | vector-31, vector-32, vector-33 | vec-10, vec-17 |
-| social sciences / law | 866 | mined | m05 | vector-28, vector-29, vector-30 | vec-11, vec-15 |
-| engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05, vec-10 |
-| social sciences / psychology | 636 | unexplored | - | - | - |
-| engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05 |
-| humanities / philosophy, ethics and religion | 627 | mined | - | vector-04 | vec-15 |
-| engineering and technology / industrial biotechnology | 613 | mined | - | - | hyb-09 |
+| humanities / history and archaeology | 1,669 | mined | m04 | vector-08, vector-25, vector-26, vector-27 | vec-07, vec-11, vec-12, vec-15, vec-25, vec-27 |
+| engineering and technology / nanotechnology | 1,478 | mined | - | hybrid-02, hybrid-06 | hyb-03, hyb-06, vec-20, vec-42 |
+| medical and health sciences / medical biotechnology | 1,394 | mined | - | - | vec-02, vec-19, vec-20, vec-31, vec-42 |
+| social sciences / social geography | 870 | mined | m06 | vector-31, vector-32, vector-33 | vec-10, vec-17, vec-29 |
+| social sciences / law | 866 | mined | m05 | vector-28, vector-29, vector-30 | vec-11, vec-15, vec-18, vec-27, vec-40 |
+| engineering and technology / civil engineering | 844 | mined | - | hybrid-03, vector-14 | vec-05, vec-10, vec-34 |
+| social sciences / psychology | 636 | mapped | m15 | hybrid-11, hybrid-12, hybrid-13, hybrid-14, hybrid-15 | - |
+| engineering and technology / other engineering and technologies | 633 | mined | - | - | vec-05, vec-34, vec-40, vec-42 |
+| humanities / philosophy, ethics and religion | 627 | mined | - | vector-04 | vec-15, vec-38 |
+| engineering and technology / industrial biotechnology | 613 | mined | - | - | hyb-09, vec-33, vec-34 |
 | humanities / arts | 552 | mined | - | hybrid-08 | vec-14 |
-| humanities / languages and literature | 490 | unexplored | - | - | - |
-| engineering and technology / medical engineering | 472 | unexplored | - | - | - |
+| humanities / languages and literature | 490 | mapped | m16 | hybrid-16, hybrid-17, hybrid-18, hybrid-19, hybrid-20 | - |
+| engineering and technology / medical engineering | 472 | mined | m17 | hybrid-21, hybrid-22, hybrid-23, hybrid-24, hybrid-25 | hyb-10, vec-42 |
 | social sciences / other social sciences | 417 | mined | - | - | vec-15 |
-| agricultural sciences / animal and dairy science | 402 | unexplored | - | - | - |
-| social sciences / educational sciences | 308 | unexplored | - | - | - |
-| engineering and technology / chemical engineering | 288 | unexplored | - | - | - |
-| engineering and technology / environmental biotechnology | 286 | mined | - | - | hyb-09 |
+| agricultural sciences / animal and dairy science | 402 | mined | - | - | vec-21 |
+| social sciences / educational sciences | 308 | mapped | m18 | hybrid-26, hybrid-27, hybrid-28, hybrid-29, hybrid-30 | - |
+| engineering and technology / chemical engineering | 288 | mined | - | - | vec-34 |
+| engineering and technology / environmental biotechnology | 286 | mined | - | - | hyb-09, vec-34 |
 | social sciences / media and communications | 177 | mined | - | - | vec-06 |
 | humanities / other humanities | 164 | mined | - | - | vec-15 |
 | agricultural sciences / agricultural biotechnology | 104 | unexplored | - | - | - |
 | social sciences / (top-level only) | 46 | mined | - | - | vec-15 |
 | medical and health sciences / other medical sciences | 32 | unexplored | - | - | - |
 | humanities / (top-level only) | 19 | unexplored | - | - | - |
-| agricultural sciences / veterinary sciences | 15 | unexplored | - | - | - |
+| agricultural sciences / veterinary sciences | 15 | mined | - | - | vec-21 |
 | natural sciences / (top-level only) | 14 | unexplored | - | - | - |
 | medical and health sciences / (top-level only) | 13 | unexplored | - | - | - |
 | engineering and technology / (top-level only) | 2 | unexplored | - | - | - |
 
-`mapped 0/46 | mined 33/46 | unexplored 13/46`
+`mapped 3/46 | mined 37/46 | unexplored 6/46`
 
 No bucket is `mapped` yet: the map is new at cp3 and no region has a `## Corpus map` entry. 18 buckets are `mined` (a bank question was drawn from them, traced through `gold_project_ids`), and a further 4 carry cp1/cp2 candidate seeds with no bank question yet - the `seeds` column keeps that history, but seeds are not a map, so those buckets still read `unexplored`.
 
@@ -266,6 +268,54 @@ Append-only: entries are added as buckets are explored, never rewritten. Format:
   thin for: single-project L1 seeds - most clinical terms land at 3-11 corpus-wide, not 1; rare specialties (odontology 28, anaesthesiology 31, dermatology 36, emergency medicine 38) too small for stable subtopic clusters; anything assuming the embryology leaf is on-topic
   mapped: cp6
 
+- region: m15
+  bucket: social sciences / psychology
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='psychology'
+  size: 636 projects
+  about: Two very different populations share this tag. One is genuine behavioural and cognitive research - infant sensorimotor and action-perception work with MEG and EEG (BIPEDAL, 101027836), working memory, eye-tracking, autism, psycholinguistics. The other is applied and commercial work that acquired the tag through the ergonomics node: an e-sports tournament platform whose feasibility study covers in-game performance and ergonomics (Toor-IG-ICT37-2014, 651901) and a smart electric thermal storage demonstration with a behavioural-analysis work package (RealValue, 646116, EUR 11,987,429.73 - the largest member of the bucket). Cognitive psychology (133) and ergonomics (116) are the largest named third-level nodes; 216 members carry no third level at all.
+  texture: report_text coverage is corpus-level 98.1%; taxonomy labels are almost never echoed verbatim - RealValue's objective never says ergonomics or psychology, it says "behavioural analysis". Tags are noisiest at the top of the funding range and at the oldest start dates (both topic-blind extremes were non-psychology). Questions must be written from text terms (autism, working memory, eye-tracking, loneliness), never from the tag.
+  read: 646116, 101027836, 651901
+  read first: 646116, 651901, 101027836
+  good for: hybrid filter-read and filter-synthesize on scheme-scoped behavioural topics (loneliness x RIA = 3, eye-tracking x ERC-STG = 9, working memory x MSCA-IF* = 18); vector topical-multi on autism (147 corpus-wide). Third-level nodes are large enough (cognitive psychology 133, ergonomics 116) to sustain several disjoint topics.
+  thin for: any question that treats the tag as the topic, or assumes members are psychology research - a substantial share is applied engineering or commercial software with a human-factors component. Also thin for small SQL aggregates: the bucket's own scheme mix is dominated by MSCA-IF and offers little numeric contrast.
+  mapped: cp7
+
+- region: m16
+  bucket: humanities / languages and literature
+  slice: split_part(euroSciVocPath,'/',1)='humanities' AND split_part(euroSciVocPath,'/',2)='languages and literature'
+  size: 490 projects
+  about: The core is historical philology and textual scholarship - manuscripts, palaeography, editions and the transmission of texts - plus contemporary discourse analysis, e.g. CRISMET (101038047) studying pandemic metaphor and "coronationalism" in post-Yugoslav public discourse. Alongside it sits infrastructure and applied language work: the largest member is SSHOC (823782, EUR 14,455,594.08), a social-sciences-and-humanities open data cloud whose only language connection is Europe's multilingual data, and the oldest member CaBilAvi (641627) is an aviation pilot-training capacity-building project tagged here because it translates and disseminates training material. Literature studies (236) and linguistics (205) are the two big third-level nodes, general language studies (94) the third.
+  texture: the tag is reliable for the ERC/MSCA scholarly half and unreliable at the topic-blind extremes (largest = e-infrastructure, oldest = aviation training). Member text uses concrete scholarly terms (manuscript, edition, palaeography, metaphor, bilingual) rather than the taxonomy words, so text-term filters work and label-echo filters do not. Only 3 members lack a third level, so the third-level nodes are usable for scoping.
+  read: 823782, 101038047, 641627
+  read first: 823782, 641627, 101038047
+  good for: hybrid filter-read / filter-synthesize / filter-survey on scheme-, country- and date-scoped textual topics (manuscript x ERC-STG = 17, manuscript coordinated in IT = 26, bilingual x ERC-STG = 6, multilingual x IA = 16, translation since 2020 = 45). Coordinator country spreads well (manuscript: UK 31, IT 26, FR 15, DE 11).
+  thin for: numeric or comparative SQL over the bucket, and any question presupposing all members are humanities research - infrastructure and vocational-training projects sit inside it. Also thin for single-project L1 vector seeds: the recurring themes all have double-digit corpus-wide counts.
+  mapped: cp7
+
+- region: m17
+  bucket: engineering and technology / medical engineering
+  slice: split_part(euroSciVocPath,'/',1)='engineering and technology' AND split_part(euroSciVocPath,'/',2)='medical engineering'
+  size: 472 projects
+  about: Device and imaging engineering, split between platform-scale industrial consortia and single-fellow modelling work. Moore4Medical (876190, EUR 16,869,773.21, 68 specialists from 12 countries) builds open microfabrication platforms for active implantables, organ-on-chip, drug-adherence monitoring, smart ultrasound and point-of-care diagnostics; MD-PACS (650690, the oldest member) is an SME feasibility study for cost-cutting medical imaging archiving (PACS/HISE) aimed at small hospitals; PRO-ORATICA (101026865, the newest) is an MSCA fellowship applying image analysis and AI to predict cardiac toxicity after breast-cancer radiotherapy. Diagnostic imaging dominates the third level (337 of 472), then medical laboratory technology (107) and wearable medical technology (23).
+  texture: the tag is accurate here - all three topic-blind reads are genuinely medical devices or imaging - which is unusual for this corpus. The commercial half is heavily SME-1/SME-2 and writes in market language (market size, CAGR, business model, cost reduction) while the ERC/MSCA half writes in method language, so a scheme filter cleanly separates two writing styles inside one topic. Device terms appear verbatim in objectives (ultrasound, point-of-care, MRI, biopsy, wearable), so text-term filters are reliable.
+  read: 876190, 101026865, 650690
+  read first: 876190, 650690, 101026865
+  good for: hybrid filter-survey and filter-compare across scheme and country axes (point-of-care x SME = 46, MRI x ERC-STG = 30, wearable coordinated in CH = 27, biopsy x SME = 12, ultrasound x ERC-STG = 12); also good for compare questions contrasting commercial and academic framings of the same device class.
+  thin for: small filter-read sets on the headline imaging topics - ultrasound (182), MRI (215) and wearable (387) stay large under most single filters, so read-sized questions need a narrower device term. Also thin for L1 vector seeds for the same reason.
+  mapped: cp7
+
+- region: m18
+  bucket: social sciences / educational sciences
+  slice: split_part(euroSciVocPath,'/',1)='social sciences' AND split_part(euroSciVocPath,'/',2)='educational sciences'
+  size: 308 projects
+  about: Mostly commercial and applied learning technology - adaptive maths platforms, robotics-and-coding kits, e-learning and training products under the SME instrument and RIA - alongside school-effectiveness and intercultural-competence research on national pupil samples. A visible minority of members are not education projects at all and are tagged here because they promise MOOCs or summer schools as dissemination.
+  texture: Third-level split is didactics 250, pedagogy 70, special education 10, inclusive education 10, and 7 with no third level; the labels are almost never echoed verbatim in member text - objectives say learning, training, curriculum, pupils, not didactics. Coordinators concentrate in UK 65, ES 39, IT 29, NL 27. Tag noise is real: 958318 INITIATE is a steel-residual-gas-to-urea industrial process project whose only educational content is summer schools and a MOOC. Questions must be built from text terms, never from the taxonomy label.
+  read: 958318, 651009, 101030992, 961665
+  read first: 958318, 651009, 101030992
+  good for: hybrid filter-read / filter-synthesize / filter-compare with scheme, date and budget filters; vector L2/L3 topical-multi on serious games, MOOCs, STEM education, inclusive education.
+  thin for: Country-scoped surveys below the top four coordinator countries (PL 4, CY 3, LU 3, EE 2), and single-answer L1 seeds - recurring themes each match 8-33 projects corpus-wide, so unique-project questions are hard to isolate.
+  mapped: cp7
+
 ## Structural findings
 
 Corpus facts that are not topical and therefore have no bucket list to check off: trap pairs, verified absences, facts carried in both a structured column and free text, and value inventories. Feeds the SQL, Adversarial and Ambiguous routes. Append-only, no denominator.
@@ -282,13 +332,227 @@ Corpus facts that are not topical and therefore have no bucket list to check off
   evidence: `SELECT COUNT(DISTINCT split_part(euroSciVocPath,'/',1)) FROM euroscivoc` -> 6; `... ,'/',2))` -> 41 (40 named + the empty string on the 94 depth-1 rows). Branch counts: natural sciences 22,075 projects, engineering and technology 13,696, social sciences 10,099, medical and health sciences 8,580, humanities 2,699, agricultural sciences 2,302.
   serves: slice partitioning and the width rule, both of which are stated in terms of "top-level branches"; cp1/cp2 used second-level categories under that name.
 
+- id: sf-03
+  kind: trap-pair
+  claim: `project.ecMaxContribution` must never be summed across the join to `organization`. The correct corpus total is 68,334,361,180.95 EUR; summing the same column over the project-organization join gives 1,304,149,407,024.81 EUR, a 19.1x inflation, because the project row repeats once per participation (178,932 rows).
+  evidence: `SELECT SUM(ecMaxContribution) FROM project` -> 68334361180.95 ; `SELECT SUM(p.ecMaxContribution) FROM project p JOIN organization o ON o.projectID=p.id` -> 1304149407024.81 ; `SELECT SUM(ecContribution) FROM organization` -> 68177186800.02
+  serves: route=sql, subtypes aggregation and join-aggregate - any money question that also filters on an organisation attribute (country, role, SME, activityType)
+
+- id: sf-04
+  kind: trap-pair
+  claim: The per-project EU contribution and the sum of its organisations' EU contributions agree for all but 109 of 35,389 projects, and where they diverge the divergence is large, not rounding - ENG GAM 2018 (id 807085) is committed 171,920,071.33 EUR at project level but its organisation rows sum to 88,470,419.52, and OLGA (id 101036871) has 24,991,644.02 at project level against 0.00 summed across its organisations.
+  evidence: `SELECT COUNT(*) FROM (SELECT p.id, p.ecMaxContribution e, SUM(o.ecContribution) s FROM project p JOIN organization o ON o.projectID=p.id GROUP BY 1,2) t WHERE t.s IS NULL OR ABS(t.e-t.s) > 0.01*t.e` -> 109 ; `WITH t AS (SELECT p.id, p.acronym, p.ecMaxContribution e, SUM(o.ecContribution) s FROM project p JOIN organization o ON o.projectID=p.id GROUP BY 1,2,3) SELECT id, acronym, e, s, ROUND(s-e,2) AS diff FROM t WHERE s IS NULL OR ABS(e-s) > 0.01*e ORDER BY ABS(COALESCE(s,0)-e) DESC LIMIT 8` -> 807085 ENG GAM 2018 171920071.33 / 88470419.52 diff -83449651.81; 101036871 OLGA 24991644.02 / 0.00 diff -24991644.02; 807083 GAM AIR 2018 160974883.59 / 152652409.32 -8322474.27; 871072 EURIZON 24767360.43 / 20417631.73 -4349728.70; 810287 BCLLatlas 8333331.00 / 5179476.31 -3153854.69; 807097 LPA GAM 2018 184973049.81 / 182741111.48 -2231938.33; 818085 GMGalaxies 1741230.00 / 390401.41 -1350828.59; 851352 MAMEMS 1499830.00 / 179202.81 -1320627.19
+  serves: route=sql - grain-choice questions; also a gold-bounds hazard for any hybrid question that reports a single project's EU funding
+
+- id: sf-05
+  kind: value-inventory
+  claim: Money nullity and zeroing is entirely on the organisation side. `project.ecMaxContribution` and `project.totalCost` have zero NULLs (totalCost has 520 zeros, ecMaxContribution none); `organization.ecContribution` has 7,800 NULLs of which 7,658 are exactly the unfunded MSCA `partner` rows and 142 are other roles, plus 19,938 explicit zeros - including 129 coordinator rows funded at 0.00. `organization.totalCost` has 178 NULLs.
+  evidence: `SELECT COUNT(*) FROM project WHERE ecMaxContribution IS NULL` -> 0 ; `SELECT COUNT(*) FROM project WHERE ecMaxContribution = 0` -> 0 ; `SELECT COUNT(*) FROM organization WHERE ecContribution IS NULL` -> 7800 ; `SELECT COUNT(*) FROM organization WHERE role='partner' AND ecContribution IS NULL` -> 7658 ; `SELECT COUNT(*) FROM organization WHERE role<>'partner' AND ecContribution IS NULL` -> 142 ; `SELECT COUNT(*) FROM organization WHERE ecContribution = 0` -> 19938 ; `SELECT COUNT(*) FROM organization WHERE role='coordinator' AND ecContribution = 0` -> 129 ; `SELECT COUNT(*) FROM organization WHERE totalCost IS NULL` -> 178
+  serves: route=sql - any COUNT/AVG over organisation money (AVG silently drops 7,800 rows but includes 19,938 zeros, so mean funding per participation is wrong in two opposite directions at once)
+
+- id: sf-06
+  kind: trap-pair
+  claim: For country='IT', counting organization rows gives 17,243 while counting distinct projects gives 7,899; the same divergence at coordinator grain for DE is 20,854 rows / 9,955 distinct projects / 3,844 coordinator-role projects. Both numbers of each pair are computed, not asserted.
+  evidence: `SELECT COUNT(*) FROM organization WHERE country='IT'` -> 17243 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='IT'` -> 7899 ; `SELECT COUNT(*) FROM organization WHERE country='DE'` -> 20854 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE'` -> 9955 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE' AND role='coordinator'` -> 3844
+  serves: sql/aggregation; also the reference-answer discipline for any hybrid filter that joins organization
+
+- id: sf-07
+  kind: absence
+  claim: No project has more than one coordinator row, and exactly one project (id 101036871) has none. Near-miss checked: the >1 case is empty, so "exactly one coordinator per project" holds for 35,388 of 35,389.
+  evidence: `SELECT COUNT(*) FROM (SELECT p.id, SUM(CASE WHEN o.role='coordinator' THEN 1 ELSE 0 END) c FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.id) WHERE c>1` -> 0 ; `SELECT p.id FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.id HAVING SUM(CASE WHEN o.role='coordinator' THEN 1 ELSE 0 END)>1` -> 0 rows ; `SELECT p.id FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.id HAVING SUM(CASE WHEN o.role='coordinator' THEN 1 ELSE 0 END)=0` -> 101036871
+  serves: sql/lookup, adversarial (a question presuming multiple coordinators is unanswerable)
+
+- id: sf-08
+  kind: value-inventory
+  claim: `organization.role` has exactly 5 values - participant 124,070, coordinator 35,388, thirdParty 11,601, partner 7,658, internationalPartner 215 (178,932 rows total). All 7,658 'partner' rows have NULL ecContribution and are the dominant source of that NULL. The non-participant roles are thin at project grain: thirdParty touches 4,176 projects, partner 2,235, internationalPartner 105.
+  evidence: `SELECT role, COUNT(*) FROM organization GROUP BY role` -> participant 124070; coordinator 35388; thirdParty 11601; partner 7658; internationalPartner 215 ; `SELECT role, COUNT(*) FROM organization WHERE ecContribution IS NULL GROUP BY role` -> partner 7658; participant 135; coordinator 7 ; `SELECT role, COUNT(DISTINCT projectID) FROM organization WHERE role IN ('thirdParty','partner','internationalPartner') GROUP BY role` -> thirdParty 4176; partner 2235; internationalPartner 105
+  serves: sql/aggregation and sql/lookup; warns any funding-sum question that filtering by role changes the NULL population
+
+- id: sf-09
+  kind: trap-pair
+  claim: "Still running" has two divergent SQL readings: `status='SIGNED'` gives 2,964 projects, while `endDate > DATE '2026-07-29'` gives 1,542 - and 1,441 SIGNED projects have an end date already in the past, while 0 CLOSED projects have a future end date. The status column and the date column disagree on 1,441 projects.
+  evidence: `SELECT COUNT(*) FILTER (WHERE status='SIGNED') signed, COUNT(*) FILTER (WHERE endDate > DATE '2026-07-29') end_future, COUNT(*) FILTER (WHERE status='SIGNED' AND endDate < DATE '2026-07-29') signed_but_ended, COUNT(*) FILTER (WHERE status='CLOSED' AND endDate > DATE '2026-07-29') closed_but_future FROM project` -> 2964 | 1542 | 1441 | 0
+  serves: sql filter-count and aggregation; also an adversarial/ambiguous seed - the question "how many projects are still running?" has no single right answer without pinning status vs date.
+
+- id: sf-10
+  kind: value-inventory
+  claim: `legalBasis` on `project` has 40 distinct values, all beginning 'H2020', dominated by H2020-EU.1.3. (11,780 = MSCA) and H2020-EU.1.1. (7,850 = ERC); the long tail runs down to single-project codes, and one row carries three semicolon-joined codes. `frameworkProgramme` is constant 'H2020' and carries no information. masterCall equals subCall in 22,165 of 35,389 projects, so the two are not interchangeable.
+  evidence: `SELECT COALESCE(legalBasis,'(null)') v, COUNT(*) n FROM project GROUP BY 1 ORDER BY n DESC` -> 40 rows; H2020-EU.1.3. 11780; H2020-EU.1.1. 7850; H2020-EU.2.3. 3203; H2020-EU.2.1.1. 1922; H2020-EU.3.4. 1767; H2020-EU.3.3. 1475; H2020-EU.3.1. 1216; H2020-EU.3.2. 925; H2020-EU.3.5. 753; H2020-EU.1.2. 641; H2020-EU.3.6. 484; H2020-EU.2.1.6. 454; H2020-EU.3.7. 421; H2020-EU.2.1.2. 386; H2020-EU.1.4. 350; H2020-EU.2.1.5. 292; H2020-EC 225; H2020-EU.4.b. 209; H2020-EU.2.1.3. 184; H2020-EU.2.1.4. 130; H2020-EU.4. 130; H2020-Euratom 99; H2020-EU.4.a. 87; H2020-EU.5. 69; H2020-EU.3. 66; H2020-EU.4.c. 55; H2020-EU.5.a. 49; H2020-EU.5.c. 45; H2020-EU.5.f. 39; H2020-EU.5.b. 32; H2020-EU.5.d. 14; H2020-EU.2.2. 13; H2020-EU.5.h. 8; H2020-EU.4.f. 5; H2020-EU.5.e. 3; H2020-EU.4.e. 2; H2020-EU.2. 2; H2020-EU.2.1. 2; H2020-EU.5.g. 1; no NULLs ; `SELECT COUNT(DISTINCT masterCall) mc, COUNT(DISTINCT subCall) sc, COUNT(DISTINCT topics) tp, COUNT(*) FILTER (WHERE masterCall=subCall) mceqsc FROM project` -> 484 | 894 | 3489 | 22165
+  serves: sql filter-count / aggregation; tells drafters that programme-part questions are answerable off `project.legalBasis` alone
+
+- id: sf-11
+  kind: value-inventory
+  claim: Project start dates cluster hard on the 1st of the month and on January and September. January is the largest start month at 5,797 projects (5,488 of them on the 1st), September second at 5,148 (4,766 on the 1st); August is smallest at 1,716. Start-year totals peak in 2019 (5,561) and collapse in 2022 (934) and 2023 (14), with 12 nulls.
+  evidence: `SELECT EXTRACT(month FROM startDate) m, COUNT(*) n, COUNT(*) FILTER (WHERE EXTRACT(day FROM startDate)=1) day1 FROM project WHERE startDate IS NOT NULL GROUP BY 1 ORDER BY n DESC` -> 1:5797/5488; 9:5148/4766; 10:3552/3348; 6:3072/2912; 5:3028/2840; 3:2440/2266; 4:2427/2269; 2:2231/2120; 11:2131/2015; 7:2005/1865; 12:1830/1761; 8:1716/1553 ; `SELECT EXTRACT(year FROM startDate) y, COUNT(*) n FROM project GROUP BY 1 ORDER BY n DESC` -> 2019 5561; 2018 5066; 2017 4970; 2016 4945; 2015 4706; 2020 4506; 2021 4296; 2022 934; 2014 379; 2023 14; NULL 12
+  serves: sql aggregation and date-arithmetic seeds; warns drafters that any "projects starting in year X" question is shaped by the January/September intake and that 2022-2023 are near-empty tails
+
 ## Distributions
 
 Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
 
 ## SQL
 
-Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
+- id: sql-01
+  topic: Total EU funding committed across the whole corpus versus total project cost, and the EU share of cost
+  recommend: route=sql subtype=aggregation
+  counts: 35,389 projects; EU share 68,334,361,180.95 / 83,197,688,815.97 = 0.8214
+  bucket: -
+  evidence: `SELECT SUM(ecMaxContribution) AS ec, SUM(totalCost) AS tc FROM project` -> ec=68334361180.95, tc=83197688815.97 ; `SELECT COUNT(*) FROM project WHERE ecMaxContribution IS NULL` -> 0 ; `SELECT COUNT(*) FROM project WHERE totalCost IS NULL` -> 0
+  axes: column=ecMaxContribution,totalCost grain=project agg=sum
+  why: The single most confusable column pair in the schema - a wrong answer here is answering "EU funding" with total cost, and both columns are complete (no NULLs) so the gold is exact.
+
+- id: sql-02
+  topic: The largest EU contribution in the corpus and the project that received it
+  recommend: route=sql subtype=ranking
+  counts: 33 projects exceed 50M EUR; max is 678,800,000.00 (EUROfusion, id 633053)
+  bucket: -
+  evidence: `SELECT id, acronym, fundingScheme, ecMaxContribution, totalCost, ROUND(ecMaxContribution/NULLIF(totalCost,0),3) AS eu_share FROM project ORDER BY ecMaxContribution DESC LIMIT 10` -> 633053 EUROfusion COFUND-EJP 678800000.00 / 1329689211.50 share 0.510; 807097 LPA GAM 2018 CS2-IA 184973049.81 / 247978162.58 0.746; 681463 H2020 CSA 178169171.00 / 178169171.00 1.000; 945583 GAM-2020-LPA 173872776.94; 807085 ENG GAM 2018 171920071.33 ; `SELECT COUNT(*) FROM project WHERE ecMaxContribution > 50000000` -> 33 ; `SELECT MAX(ecMaxContribution), MIN(ecMaxContribution) FROM project` -> 678800000.00 | 3150.00
+  axes: column=ecMaxContribution grain=project agg=max ranking=top-n
+  why: The top of the money distribution is a natural user question and the ranking flips if a drafter ranks by totalCost instead.
+
+- id: sql-03
+  topic: EU funding received by organisations in a given country, summed over participations
+  recommend: route=sql subtype=join-aggregate
+  counts: 178,932 organisation rows; DE tops at 10,097,888,325.89 EUR over 20,854 participations
+  bucket: -
+  evidence: `SELECT country, COUNT(*) AS parts, ROUND(SUM(ecContribution),2) AS ec, ROUND(SUM(netEcContribution),2) AS net FROM organization GROUP BY 1 ORDER BY ec DESC NULLS LAST LIMIT 12` -> DE 20854 10097888325.89 / 10107906023.15; UK 17478 7809505363.13 / 7806242475.42; FR 17195 7476643472.06 / 7392787165.09; ES 18940 6372121178.40; IT 17243 5677129566.26; NL 11180 5359806180.71; BE 8470 3416789395.92; CH 5166 2419462233.49; SE 5236 2314116282.13; AT 5116 1961874769.24; DK 4002 1762916079.34; EL 5534 1719137194.30 ; `SELECT SUM(ecContribution) FROM organization` -> 68177186800.02 ; `SELECT SUM(ecMaxContribution) FROM project` -> 68334361180.95
+  axes: column=ecContribution grain=organization agg=sum-by-country
+  why: Per-country money is only expressible at organisation grain, and the org-level total is 157,174,380.93 short of the project-level total, so grain and column must both be right.
+
+- id: sql-04
+  topic: Projects recorded with a total cost of zero despite receiving EU funding
+  recommend: route=sql subtype=filter-count
+  counts: 520 projects with totalCost = 0; ERC-POC (207) and ERC-POC-LS (153) dominate
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM project WHERE totalCost = 0` -> 520 ; `SELECT COUNT(*) FROM project WHERE totalCost < ecMaxContribution` -> 520 ; `SELECT COUNT(*) FROM project WHERE ecMaxContribution = 0` -> 0 ; `SELECT fundingScheme, COUNT(*) FROM project WHERE totalCost=0 GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 6` -> ERC-POC 207; ERC-POC-LS 153; CSA 83; CSA-LSP 35; RIA 21; IA 19
+  axes: column=totalCost grain=project anomaly=zero-value
+  why: A clean data-quality question with an exact answer, and the two 520s are the same rows, so any ratio computed over the full table silently divides by zero.
+
+- id: sql-05
+  topic: How often the net EU contribution to an organisation differs from its gross EU contribution
+  recommend: route=sql subtype=filter-count
+  counts: 26,085 of 178,932 organisation rows differ; 10,678 have net > gross
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM organization WHERE netEcContribution IS DISTINCT FROM ecContribution` -> 26085 ; `SELECT COUNT(*) FROM organization WHERE netEcContribution > ecContribution` -> 10678 ; `SELECT SUM(netEcContribution) FROM organization` -> 68132441259.15 ; `SELECT SUM(ecContribution) FROM organization` -> 68177186800.02
+  axes: column=netEcContribution,ecContribution grain=organization
+  why: The net column is not merely a subtraction - 10,678 rows have net ABOVE gross, which defeats the intuitive reading and makes the 44,745,540.87 EUR gap a real checkable fact.
+
+- id: sql-06
+  topic: Projects funded at exactly the 50,000 EUR lump sum, and which scheme they belong to
+  recommend: route=sql subtype=filter-count
+  counts: 4,308 projects at exactly 50,000 EUR corpus-wide; 4,228 of them are SME-1
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM project WHERE ecMaxContribution = 50000` -> 4308 ; `SELECT COUNT(*) FROM project WHERE fundingScheme='SME-1' AND ecMaxContribution = 50000` -> 4228 ; `SELECT fundingScheme, COUNT(*) AS n, ROUND(SUM(ecMaxContribution)/SUM(totalCost),4) AS eu_share, ROUND(AVG(ecMaxContribution),2) AS avg_ec FROM project WHERE totalCost > 0 GROUP BY 1 HAVING COUNT(*) >= 500 ORDER BY eu_share ASC` -> IA 2060 0.6933 6628923.93; SME-2 1389 0.6998 1745824.79; SME-1 4228 0.7000 50000.00; RIA 4444 0.8703 5416092.14; MSCA-RISE 586 0.9394 930907.85; CSA 2819 0.9421 1377155.05; ERC-POC 760 0.9989 149286.46; ERC-ADG 1584 0.9993 2382718.64; MSCA-IF-EF-ST 3792 0.9995 178968.39; MSCA-IF 5037 0.9995 197836.41; MSCA-ITN 640 0.9999 3450627.02; ERC-COG 2254 1.0000 1946446.76; ERC-STG 2771 1.0000 1497695.97
+  axes: column=ecMaxContribution grain=project distribution=fixed-value
+  why: A degenerate money distribution with a crisp gold answer, and 80 non-SME-1 projects also sit on that value, so a naive scheme-scoped answer is off by 80.
+
+- id: sql-07
+  topic: How many projects involve at least one Italian organization - the classic double-count trap (join rows vs distinct projects)
+  recommend: route=sql subtype=aggregation
+  counts: 7899 corpus-wide (distinct projects); 17,243 organization rows
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM organization WHERE country='IT'` -> 17243 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='IT'` -> 7899
+  axes: table=organization grain=organization-vs-project column=country trap=double-count
+  why: A naive COUNT(*) over the join answers 17,243 where the true project count is 7,899 - a 2.2x divergence a drafter can build a precise gold answer on.
+
+- id: sql-08
+  topic: Which projects does Germany coordinate versus merely participate in - role-scoped country counting
+  recommend: route=sql subtype=aggregation
+  counts: 3844 corpus-wide (DE-coordinated projects)
+  bucket: -
+  evidence: `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE' AND role='coordinator'` -> 3844 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE'` -> 9955 ; `SELECT COUNT(*) FROM organization WHERE country='DE'` -> 20854
+  axes: table=organization grain=project role=coordinator column=country
+  why: Three defensible readings of "German projects" (20,854 / 9,955 / 3,844) make the role predicate load-bearing rather than decorative.
+
+- id: sql-09
+  topic: The single project in the corpus with no coordinator row, and confirming no project has two
+  recommend: route=sql subtype=lookup
+  counts: 1 corpus-wide
+  bucket: -
+  evidence: `SELECT p.id FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.id HAVING SUM(CASE WHEN o.role='coordinator' THEN 1 ELSE 0 END)=0` -> 101036871 ; `SELECT COUNT(*) FROM (SELECT p.id, SUM(CASE WHEN o.role='coordinator' THEN 1 ELSE 0 END) c FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.id) WHERE c>1` -> 0
+  axes: table=organization grain=project role=coordinator trap=exactly-one-assumption
+  why: A single-row exception to an invariant everyone assumes; the gold answer is one id and the "or two coordinators" near-miss is verified empty.
+
+- id: sql-10
+  topic: Consortium size - how many projects are single-organization, what the mean is, and which has the largest consortium
+  recommend: route=sql subtype=aggregation
+  counts: 20,653 single-org projects; 134 with >=50 organizations
+  bucket: -
+  evidence: `SELECT ROUND(AVG(c),2) FROM (SELECT COUNT(*) c FROM organization GROUP BY projectID)` -> 5.06 ; `SELECT COUNT(*) FROM (SELECT projectID FROM organization GROUP BY projectID HAVING COUNT(*)=1)` -> 20653 ; `SELECT COUNT(*) FROM (SELECT projectID FROM organization GROUP BY projectID HAVING COUNT(*)>=50)` -> 134 ; `SELECT p.acronym, p.id, COUNT(*) n, COUNT(DISTINCT o.country) c FROM project p JOIN organization o ON o.projectID=p.id GROUP BY p.acronym,p.id ORDER BY n DESC LIMIT 3` -> GrapheneCore2 785219 208 21; EUROfusion 633053 207 28; GrapheneCore3 881603 200 21
+  axes: table=organization grain=project measure=consortium-size
+  why: 58% of projects are single-organization, so the mean of 5.06 is deeply misleading - a real distribution question with a named extreme (GrapheneCore2, 208 orgs).
+
+- id: sql-11
+  topic: SME-flagged coordinators - how many projects are led by an SME and from which country most
+  recommend: route=sql subtype=aggregation
+  counts: 7513 corpus-wide SME coordinator rows
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM organization WHERE role='coordinator' AND sme` -> 7513 ; `SELECT country, COUNT(*) n FROM organization WHERE role='coordinator' AND sme GROUP BY country ORDER BY n DESC LIMIT 1` -> ES 1323 ; `SELECT COUNT(*) FROM organization WHERE sme IS NULL` -> 518
+  axes: table=organization grain=organization column=sme role=coordinator
+  why: SME x coordinator is a natural policy question, and the 518 NULL sme rows make the boolean's three-valued behaviour matter.
+
+- id: sql-12
+  topic: The organization appearing in the most projects - participations vs distinct projects vs coordinations
+  recommend: route=sql subtype=aggregation
+  counts: 41,946 distinct organisationIDs corpus-wide
+  bucket: -
+  evidence: `SELECT organisationID, MAX(name) nm, COUNT(DISTINCT projectID) np, COUNT(*) nrows FROM organization GROUP BY organisationID ORDER BY np DESC LIMIT 1` -> 999997930 CENTRE NATIONAL DE LA RECHERCHE SCIENTIFIQUE CNRS 1871 1885 ; `SELECT organisationID, COUNT(DISTINCT projectID) np FROM organization WHERE role='coordinator' GROUP BY organisationID ORDER BY np DESC LIMIT 1` -> 999997930 806 ; `SELECT COUNT(DISTINCT organisationID) FROM organization` -> 41946 ; `SELECT COUNT(*) FROM (SELECT projectID, organisationID FROM organization GROUP BY 1,2 HAVING COUNT(*)>1)` -> 411
+  axes: table=organization grain=organisationID entity=CNRS role=coordinator
+  why: CNRS has 1,885 rows but only 1,871 distinct projects (411 project-org pairs are duplicated corpus-wide), so even the entity-level count has a within-project double-count.
+
+- id: sql-13
+  topic: How many H2020 projects are in each status, and what share were terminated
+  recommend: route=sql subtype=aggregation
+  counts: 35,389 corpus-wide (CLOSED 30,298 / SIGNED 2,964 / TERMINATED 2,127)
+  bucket: -
+  evidence: `SELECT status, COUNT(*) n FROM project GROUP BY 1 ORDER BY n DESC` -> CLOSED 30298; SIGNED 2964; TERMINATED 2127 ; `SELECT status, fundingScheme, COUNT(*) n FROM project WHERE status='TERMINATED' AND fundingScheme IN ('ERC-STG','SME-1') GROUP BY 1,2` -> TERMINATED/ERC-STG 59; TERMINATED/SME-1 11
+  axes: column=status values=CLOSED,SIGNED,TERMINATED
+  why: The only three-valued status column, exhaustively enumerable, and a natural "how many were terminated" question with a single verifiable answer.
+
+- id: sql-14
+  topic: Bare `MSCA-IF` versus the whole MSCA-IF* variant family (EF-ST, GF, EF-RI, EF-CAR ...)
+  recommend: route=sql subtype=aggregation
+  counts: 5,037 exact-match vs 9,845 family-wide
+  bucket: -
+  evidence: `SELECT COUNT(*) FROM project WHERE fundingScheme='MSCA-IF'` -> 5037 ; `SELECT COUNT(*) FROM project WHERE fundingScheme LIKE 'MSCA-IF%'` -> 9845
+  axes: column=fundingScheme family=MSCA-IF
+  why: "How many Marie Curie Individual Fellowships" has two defensible SQL readings differing by 4,808 projects - a precise trap the drafter must pin down in the question wording.
+
+- id: sql-15
+  topic: Average project duration in months by funding scheme, from startDate/endDate arithmetic
+  recommend: route=sql subtype=aggregation
+  counts: 14 schemes compared; SME-1 4.14 months to ERC-COG 68.02 months
+  bucket: -
+  evidence: `SELECT fundingScheme, COUNT(*) n, ROUND(AVG(DATEDIFF('month', startDate, endDate)),2) avg_months, MIN(DATEDIFF('month',startDate,endDate)) minm, MAX(DATEDIFF('month',startDate,endDate)) maxm FROM project WHERE fundingScheme IN ('MSCA-IF','RIA','SME-1','MSCA-IF-EF-ST','CSA','ERC-STG','ERC-COG','IA','ERC-ADG','SME-2','ERC-POC','MSCA-ITN','MSCA-RISE','MSCA-COFUND') GROUP BY 1 ORDER BY avg_months DESC` -> ERC-COG 2254/68.02/30/105; ERC-STG 2771/67.48/23/103; ERC-ADG 1584/67.46/14/95; MSCA-COFUND 214/65.29/52/83; MSCA-RISE 586/56.02/23/85; MSCA-ITN 640/51.42/47/69; RIA 4465/45.17/8/119; IA 2079/42.39/11/111; SME-2 1389/28.65/8/77; CSA 2902/28.2/2/101; MSCA-IF 5037/27.56/11/86; MSCA-IF-EF-ST 3792/24.04/11/61; ERC-POC 967/17.96/10/41; SME-1 4228/4.14/0/20
+  axes: column=startDate,endDate metric=duration scheme=SME-1,ERC-COG
+  why: Requires real date arithmetic plus a group-by, and the SME-1 vs ERC family spread (4 vs 68 months) makes the answer memorable and checkable.
+
+- id: sql-16
+  topic: Projects whose EC grant signature came AFTER the action had already started (retroactive signature), and the largest lag
+  recommend: route=sql subtype=filter-count
+  counts: 2,898 projects signed after their start date; max lag 437 days
+  bucket: -
+  evidence: `SELECT COUNT(*) FILTER (WHERE ecSignatureDate > startDate) sig_after_start, COUNT(*) FILTER (WHERE ecSignatureDate > endDate) sig_after_end, MAX(DATEDIFF('day',startDate,ecSignatureDate)) maxlag FROM project` -> 2898 | 2 | 437 ; `SELECT id, acronym, fundingScheme, startDate, endDate, ecSignatureDate FROM project WHERE ecSignatureDate>endDate OR DATEDIFF('day',startDate,ecSignatureDate)=437 ORDER BY id` -> 116068 VSV-EBOPLUS RIA 2016-04-01/2023-03-31/2017-06-12; 699649 ZEP15 CSA 2015-07-20/2015-12-19/2016-03-07; 728895 RVCR SME-1 2016-06-01/2016-09-30/2016-10-04
+  axes: column=ecSignatureDate,startDate,endDate anomaly=retroactive-signature
+  why: A three-date comparison the vector route cannot do at all, with a tiny named extreme (2 projects signed after they had already ended) as a natural follow-up.
+
+- id: sql-17
+  topic: The 12 projects with no start or end date - what they all have in common
+  recommend: route=sql subtype=filter-list
+  counts: 12 corpus-wide, all TERMINATED MSCA-IF
+  bucket: -
+  evidence: `SELECT status, fundingScheme, COUNT(*) n FROM project WHERE startDate IS NULL GROUP BY 1,2` -> TERMINATED | MSCA-IF | 12 ; `SELECT COUNT(*) FILTER (WHERE startDate IS NULL) null_start, COUNT(*) FILTER (WHERE endDate IS NULL) null_end, COUNT(*) FILTER (WHERE endDate < startDate) end_before_start FROM project` -> 12 | 12 | 0 ; `SELECT id, acronym FROM project WHERE startDate IS NULL ORDER BY id` -> 653040 CONFAM; 661496 QSIPP; 699995 MULTIZONAL SCAFFOLD; 701561 ASUNDER; 743637 NanoOsmDiode; 753215 APPS; 846299 APApore4RNA; 891212 FLARe; 101024440 GUIDE-AF; 101026554 BREASTCANCERSTEM; 101030725 RADCODE; 101038075 POP1Seed
+  axes: column=startDate nullness=12 status=TERMINATED scheme=MSCA-IF
+  why: A fully enumerable 12-row gold set with a clean, surprising invariant - every missing-date project is a terminated individual fellowship.
+
+- id: sql-18
+  topic: The `nature` column - crisis-tagged projects and their timing
+  recommend: route=sql subtype=aggregation
+  counts: 575 non-null of 35,389 (crisisPreparedness 344, crisisRecovery 141, crisisResponse 90)
+  bucket: -
+  evidence: `SELECT COALESCE(nature,'(null)') v, COUNT(*) n FROM project GROUP BY 1 ORDER BY n DESC` -> (null) 34814; crisisPreparedness 344; crisisRecovery 141; crisisResponse 90 ; `SELECT COUNT(*) FROM project WHERE nature='crisisResponse' AND startDate>=DATE '2020-01-01'` -> 90 ; `SELECT COUNT(*) FROM project WHERE nature IS NOT NULL AND status='TERMINATED'` -> 4
+  axes: column=nature values=crisisPreparedness,crisisRecovery,crisisResponse dates=2020+
+  why: A rarely-touched, almost-entirely-null column with an exact-100% temporal fact (all 90 crisisResponse projects started in 2020 or later) that no retrieval route could establish.
 
 ## Vector
 
@@ -936,6 +1200,186 @@ Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
   axes: filter=funding=ecMaxContribution>P95(6.93M) topic=natural sciences/physical sciences/electromagnetism and electronics/superconductivity survivors=4 total=219
   why: The P95 money threshold isolates exactly 4 of 219 superconductivity projects, sharply contrastable application-by-application; the money is only the filter and the answer (what each does with superconductivity) is textual.
 
+- id: hybrid-11
+  topic: Autism research funded by ERC Starting Grants
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 147 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / psychology
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%autism%' OR p.title ILIKE '%autis%') AND p.fundingScheme='ERC-STG'` -> 28 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%autism%' OR p.title ILIKE '%autis%'` -> 147
+  axes: scheme=ERC-STG
+  why: Autism is stated verbatim in objectives and ERC-STG is a filter a user would really state; 28 survivors are enumerable for a survey.
+
+- id: hybrid-12
+  topic: Loneliness and social isolation in RIA-funded projects
+  recommend: route=hybrid level=L3 subtype=filter-read
+  counts: 8 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / psychology
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') AND p.fundingScheme='RIA'` -> 3 ; `SELECT id, acronym FROM project p WHERE (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') AND p.fundingScheme='RIA' ORDER BY id` -> 643808 MARIO; 769872 EMPATHIC; 945095 RECETAS
+  axes: scheme=RIA
+  why: Three named RIA projects attack loneliness from care robotics, virtual coaching and social prescribing - a small, contrastive, fully readable survivor set.
+
+- id: hybrid-13
+  topic: Working memory studied under Marie Sklodowska-Curie individual fellowships
+  recommend: route=hybrid level=L3 subtype=filter-synthesize
+  counts: 34 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / psychology
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%working memory%' OR p.title ILIKE '%working memory%') AND p.fundingScheme LIKE 'MSCA-IF%'` -> 18 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%working memory%' OR p.title ILIKE '%working memory%'` -> 34
+  axes: scheme=MSCA-IF*
+  why: Individual fellowships hold over half the corpus-wide working-memory work (18 of 34), giving a synthesis set with one funding instrument in common.
+
+- id: hybrid-14
+  topic: Eye-tracking methods in ERC Starting Grant projects
+  recommend: route=hybrid level=L3 subtype=filter-read
+  counts: 55 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / psychology
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%eye-tracking%' OR p.objective ILIKE '%eye tracking%') AND p.fundingScheme='ERC-STG'` -> 9 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%eye-tracking%' OR p.objective ILIKE '%eye tracking%'` -> 55
+  axes: scheme=ERC-STG
+  why: A method rather than a subject matter, stated verbatim in objectives; 9 survivors sit in the filter-read window.
+
+- id: hybrid-15
+  topic: Autism projects coordinated from the Netherlands
+  recommend: route=hybrid level=L3 subtype=filter-compare
+  counts: 147 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / psychology
+  evidence: `SELECT count(DISTINCT p.id) FROM project p JOIN organization o ON o.projectID=p.id AND o.role='coordinator' WHERE (p.objective ILIKE '%autism%' OR p.title ILIKE '%autis%') AND o.country='NL'` -> 13 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%autism%' OR p.title ILIKE '%autis%'` -> 147
+  axes: country=NL
+  why: Coordinator country is a filter users state naturally and NL (13) is mid-pack behind UK 31 and IT 27, so the set is comparable without being unmanageable.
+
+- id: hybrid-16
+  topic: Medieval and early-modern manuscript studies under ERC Starting Grants
+  recommend: route=hybrid level=L3 subtype=filter-synthesize
+  counts: 131 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: humanities / languages and literature
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%manuscript%' OR p.title ILIKE '%manuscript%') AND p.fundingScheme='ERC-STG'` -> 17 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%manuscript%' OR p.title ILIKE '%manuscript%'` -> 131
+  axes: scheme=ERC-STG
+  why: Survivors read as one coherent scholarly programme - BIFLOW (Florentine bilingual works), HandsandBible (Dead Sea Scrolls palaeography), MedPub, PASSIM, TiNT - ideal for synthesis.
+
+- id: hybrid-17
+  topic: Bilingualism research funded by ERC Starting Grants
+  recommend: route=hybrid level=L3 subtype=filter-read
+  counts: 51 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: humanities / languages and literature
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%bilingual%' OR p.title ILIKE '%bilingual%') AND p.fundingScheme='ERC-STG'` -> 6 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%bilingual%' OR p.title ILIKE '%bilingual%'` -> 51
+  axes: scheme=ERC-STG
+  why: Bilingualism spans historical philology and psycholinguistics in this corpus; the 6 ERC-STG survivors can be read in full.
+
+- id: hybrid-18
+  topic: Multilingual technology and multilingualism in Innovation Actions
+  recommend: route=hybrid level=L3 subtype=filter-compare
+  counts: 136 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: humanities / languages and literature
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%multilingual%' OR p.title ILIKE '%multilingual%') AND p.fundingScheme='IA'` -> 16 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%multilingual%' OR p.title ILIKE '%multilingual%'` -> 136
+  axes: scheme=IA
+  why: The IA filter isolates the applied, platform-building half of a 136-project theme, leaving 16 directly comparable deployments.
+
+- id: hybrid-19
+  topic: Translation-focused projects that started in 2020 or later
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 152 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: humanities / languages and literature
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%literary translation%' OR p.title ILIKE '%translation%') AND p.startDate >= DATE '2020-01-01'` -> 45 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%literary translation%' OR p.title ILIKE '%translation%'` -> 152
+  axes: dates=2020-2023
+  why: A date filter a user would state unprompted, and 45 survivors of 152 is a genuine recent-work survey inside the window.
+
+- id: hybrid-20
+  topic: Manuscript research coordinated from Italy
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 131 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: humanities / languages and literature
+  evidence: `SELECT count(DISTINCT p.id) FROM project p JOIN organization o ON o.projectID=p.id AND o.role='coordinator' WHERE (p.objective ILIKE '%manuscript%' OR p.title ILIKE '%manuscript%') AND o.country='IT'` -> 26 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%manuscript%' OR p.title ILIKE '%manuscript%'` -> 131
+  axes: country=IT
+  why: Italy is the second-largest coordinator of manuscript work (26, behind UK 31), so a country-scoped survey covers a real national concentration.
+
+- id: hybrid-21
+  topic: Ultrasound technology in ERC Starting Grant projects
+  recommend: route=hybrid level=L3 subtype=filter-synthesize
+  counts: 182 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / medical engineering
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%ultrasound%' OR p.title ILIKE '%ultrasound%') AND p.fundingScheme='ERC-STG'` -> 12 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%ultrasound%' OR p.title ILIKE '%ultrasound%'` -> 182
+  axes: scheme=ERC-STG
+  why: Cuts a 182-project device theme down to its 12 exploratory-research members, which share method language and synthesise cleanly.
+
+- id: hybrid-22
+  topic: Point-of-care diagnostics pursued by SME Instrument projects
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 137 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / medical engineering
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%point-of-care%' OR p.title ILIKE '%point-of-care%') AND p.fundingScheme IN ('SME-1','SME-2')` -> 46 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%point-of-care%' OR p.title ILIKE '%point-of-care%'` -> 137
+  axes: scheme=SME-1/SME-2
+  why: The commercialisation third of the point-of-care theme; 46 survivors is a real survey set and the SME cut is exactly how a user would ask about products rather than research.
+
+- id: hybrid-23
+  topic: Biopsy technologies (including liquid biopsy) in SME Instrument projects
+  recommend: route=hybrid level=L3 subtype=filter-compare
+  counts: 45 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / medical engineering
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%liquid biopsy%' OR p.title ILIKE '%biopsy%') AND p.fundingScheme IN ('SME-1','SME-2')` -> 12 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%liquid biopsy%' OR p.title ILIKE '%biopsy%'` -> 45
+  axes: scheme=SME-1/SME-2
+  why: 12 SME-funded biopsy ventures out of 45 corpus-wide - a compact set whose diagnostic approaches can be set against one another.
+
+- id: hybrid-24
+  topic: Magnetic resonance imaging work under ERC Starting Grants
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 215 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / medical engineering
+  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%magnetic resonance imaging%' OR p.title ILIKE '%MRI%') AND p.fundingScheme='ERC-STG'` -> 30 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%magnetic resonance imaging%' OR p.title ILIKE '%MRI%'` -> 215
+  axes: scheme=ERC-STG
+  why: Diagnostic imaging is the dominant node of this bucket (337 of 472) and the ERC-STG cut turns a 215-project theme into 30 enumerable projects.
+
+- id: hybrid-25
+  topic: Wearable devices in projects coordinated from Switzerland
+  recommend: route=hybrid level=L3 subtype=filter-survey
+  counts: 387 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: engineering and technology / medical engineering
+  evidence: `SELECT count(DISTINCT p.id) FROM project p JOIN organization o ON o.projectID=p.id AND o.role='coordinator' WHERE (p.objective ILIKE '%wearable%' OR p.title ILIKE '%wearable%') AND o.country='CH'` -> 27 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%wearable%' OR p.title ILIKE '%wearable%'` -> 387
+  axes: country=CH
+  why: Switzerland is the top coordinator country for wearables (27, ahead of DE 25) despite its size - a country filter a user would state and a non-obvious survey.
+
+- id: hybrid-26
+  topic: Serious games / game-based learning for education and training
+  recommend: route=hybrid level=L3 subtype=filter-read
+  counts: 33 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / educational sciences
+  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%serious game%' OR p.objective ILIKE '%game-based learning%') AND (p.objective ILIKE '%learn%' OR p.objective ILIKE '%educat%' OR p.objective ILIKE '%training%') AND p.fundingScheme LIKE 'SME%'` -> n=3 ; `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%serious game%' OR p.objective ILIKE '%game-based learning%') AND (p.objective ILIKE '%learn%' OR p.objective ILIKE '%educat%' OR p.objective ILIKE '%training%')` -> n=33
+  axes: scheme=SME-1/SME-2
+  why: Small enumerable survivor set; the bare gamification term is noisy (855133 MUNDOARTI is an art-contest platform), so the learning co-term is what keeps it on theme.
+
+- id: hybrid-27
+  topic: STEM education projects starting in 2020 or later
+  recommend: route=hybrid level=L3 subtype=filter-synthesize
+  counts: 12 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / educational sciences
+  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%STEM education%' OR p.title ILIKE '%STEM education%') AND p.startDate >= DATE '2020-01-01'` -> n=5 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%STEM education%' OR p.title ILIKE '%STEM education%'` -> n=12
+  axes: dates=2020-2023
+  why: Date filter a user states naturally; survivors read as a coherent mix of school robotics/coding (961665 Robo Wunderkind) and STEM-skills programmes.
+
+- id: hybrid-28
+  topic: MOOCs / massive open online courses in large-budget projects
+  recommend: route=hybrid level=L3 subtype=filter-synthesize
+  counts: 29 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / educational sciences
+  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%MOOC%' OR p.title ILIKE '%MOOC%') AND p.ecMaxContribution >= 2000000` -> n=11 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%MOOC%' OR p.title ILIKE '%MOOC%'` -> n=29
+  axes: funding=ecMaxContribution>=2000000
+  why: Budget threshold separates MOOC-as-dissemination in large consortia from small e-learning ventures.
+
+- id: hybrid-29
+  topic: Preschool / early childhood learning studies funded by the ERC
+  recommend: route=hybrid level=L3 subtype=filter-compare
+  counts: 22 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / educational sciences
+  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%early childhood education%' OR p.objective ILIKE '%preschool%' OR p.objective ILIKE '%kindergarten%') AND p.fundingScheme LIKE 'ERC%'` -> n=6 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%early childhood education%' OR p.objective ILIKE '%preschool%' OR p.objective ILIKE '%kindergarten%'` -> n=22
+  axes: scheme=ERC-*
+  why: ERC survivors are basic developmental-learning science (726114 DEVOMIND, infant mentalizing), a clean contrast with the SME/RIA edtech majority.
+
+- id: hybrid-30
+  topic: Inclusive education / special educational needs research carried by individual fellowships
+  recommend: route=hybrid level=L3 subtype=filter-read
+  counts: 8 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)
+  bucket: social sciences / educational sciences
+  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%inclusive education%' OR p.objective ILIKE '%special educational needs%') AND p.fundingScheme LIKE 'MSCA-IF%'` -> n=4 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%inclusive education%' OR p.objective ILIKE '%special educational needs%'` -> n=8
+  axes: scheme=MSCA-IF*
+  why: Half of all inclusive-education projects corpus-wide are individual fellowships; four survivors are readable end to end (includes 101030992 INCLUDed, intercultural competence in Italian lower-secondary schools).
+
 ## Adversarial
 
 Not yet explored (scoped run "find 15 vector topics", 2026-07-23).
@@ -1030,4 +1474,16 @@ The run's three aims were met. Counts split exactly 10 at corpus-wide 2-4 (vecto
 Paraphrase supply improved but is narrower than the headline suggests. Of the 20, 10 are `term_style=exact`, 7 paraphrase, 3 mixed. At >= 5 - the band that can reach vector-L3 - 5 are paraphrase (vector-51 social-insect colonies 34, -55 atom interferometry 6, -60 spiking hardware 17, -63 nutrient recovery 21, -68 pressure injury 11) and one mixed. But only two seeds are recommended `topical-survey` (vector-63 and -68); the other eighteen are `topical-multi`. So the EMPTY vector-L3-survey-paraphrase cell is served by two candidates, not ten, and two of the paraphrase large seeds (34 and 21 members) will cost a drafter a heavy gold enumeration.
 
 Branch spread is the run's weakest axis: 8 candidates engineering, 8 natural sciences, 4 medical, and zero from social sciences, humanities or agricultural sciences - by design, since all five assigned buckets were STEM. Every seed varies on topic and term style only; no seed is built on funding scheme, country, date range or activity type, so drafting the whole of cp6 gives twenty questions of one shape ("which projects work on X"). The electrical-engineering map entry states its own limit plainly - device objectives name their technology verbatim, so paraphrase seeds are scarce there - and physical sciences flags fusion (2 projects naming tokamak/stellarator/divertor), plasma physics (40) and molecular/chemical physics (40) as too thin to mine.
+
+**cp7 (2026-07-28)**
+
+This run (cp7, 2026-07-28) was scope-limited to `hybrid=20`: four topical slices, all VERIFIED (117 evidence checks, 0 FAIL), 20/20 hybrid candidates supplied. Newly mapped buckets: social sciences / psychology (636), humanities / languages and literature (490), engineering and technology / medical engineering (472), social sciences / educational sciences (308). SQL, vector, adversarial, ambiguous and distribution material was not gathered by design and those profile sections are stubs, not findings.
+
+Hybrid subtype coverage is even and every seed sits inside its section-7 survivor window: filter-survey 6 (28, 45, 26, 46, 30, 27 survivors), filter-read 5 (3, 9, 6, 3, 4), filter-synthesize 5 (18, 17, 12, 5, 11), filter-compare 4 (13, 16, 12, 6). All 20 derived to L3 - the smallest corpus-wide topic count in the run is 8 - so this run supplies no L1 or L2 hybrid material at all.
+
+The filter axis is narrow. 14 of 20 seeds filter on funding scheme, and ERC-STG alone carries 6 of them (hybrid-11, -14, -16, -17, -21, -24); country carries 3 (NL, IT, CH), start date 2 (both "2020 or later"), budget 1 (hybrid-28). No seed uses UK, DE, ES or FR as coordinator country, although across the four buckets UK coordinates 345 projects, DE 188, NL 177, ES 166, IT 165. No seed uses an end-date, duration, consortium-size, participant-role or organization-type filter.
+
+Every topic filter is a verbatim `ILIKE` on a term the map entries confirm appears literally in the objectives, so all 20 seeds are `exact-term` material. Nothing in this run supports a `paraphrase` hybrid cell.
+
+The frontier is nearly exhausted: 6 of 46 buckets remain unexplored and they total roughly 184 projects (agricultural biotechnology 104, other medical sciences 32, plus four top-level-only remainders of 19, 14, 13 and 2). Largest-first over the frontier is no longer the interesting move - one slice can absorb all six.
 

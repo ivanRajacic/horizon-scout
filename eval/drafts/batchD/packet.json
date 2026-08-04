@@ -1,0 +1,109 @@
+{
+  "kind": "packet",
+  "output_dir": "eval/drafts/batchD/",
+  "order": "Three vector slots, ids vec-35..37 pre-assigned by /draft-questions: vec-35 = L1 identify exact-term, vec-36 = L2 comparison paraphrase, vec-37 = L2 synthesis paraphrase. Cells chosen from gap-report on 2026-07-28 (bank at 48): vector L2 is the shortest level at 12/16, comparison and synthesis sit at 6 each, identify is the thinnest vector subtype at 4, and term_style is 16/16 so 1 exact-term + 2 paraphrase keeps the balance. No slot exceeds its cell target.",
+  "siblings": "None - this is the only group in this run. Batches A, B and C of 2026-07-28 are finished and promoted (bank at 48); all nine candidates below were checked against every existing vector bank question and against each other, so no topic here collides with anything already banked.",
+  "versions": {
+    "corpus_profile": {
+      "version": "cp6",
+      "content_hash": "9ef64ea4679d"
+    },
+    "schema_docs": {
+      "version": "sd2",
+      "content_hash": "f8c001e8cc8f"
+    },
+    "bank_brief": {
+      "version": "bb3",
+      "content_hash": "e5cd123c8cb2"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "vec-35",
+      "cell": {
+        "route": "vector",
+        "level": "L1",
+        "subtype": "identify",
+        "term_style": "exact-term"
+      },
+      "candidates": [
+        {
+          "topic": "Ultra-high-capacity 5G wireless backhaul above 100 GHz powered by newly designed millimetre-wave traveling wave tubes",
+          "seed_id": "vector-05",
+          "block": "- id: vector-05\n  topic: A project building an ultra-high-capacity 5G wireless backhaul layer operating above 100 GHz, powered by newly designed millimetre-wave traveling wave tubes.\n  recommend: route=vector level=L1 subtype=identify term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE euroSciVocTitle='fixed wireless network'` -> 1 (project 762119 ULTRAWAVE). Text read: D-band/G-band point-to-multipoint wireless backhaul, \"traveling wave tubes\", vacuum + solid-state electronics + photonics.\n  axes: branch=electrical-engineering leaf=fixed-wireless-network satisfying=1 report_coverage=1/1 term_style=exact-term sample_ids=762119 sample_acr=ULTRAWAVE\n  why: Highly distinctive engineering vocabulary (\"traveling wave tubes\", \"millimetre wave backhaul\") - strong exact-term identify seed."
+        },
+        {
+          "topic": "Philosophers and physicists jointly re-examining how time is represented at the beginning of the universe",
+          "seed_id": "vector-04",
+          "block": "- id: vector-04\n  topic: A project in which philosophers and physicists together re-examined how time is represented at the beginning of the universe, contrasting Plato's and Kant's conceptions with emergent time in quantum gravity and quantum cosmology.\n  recommend: route=vector level=L1 subtype=identify term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE euroSciVocTitle='history of philosophy'` -> 1 (project 758145 PROTEUS). Text read: history/philosophy of cosmology, Plato & Kant vs quantum gravity, \"time and timelessness in fundamental physics\".\n  axes: branch=philosophy-ethics-and-religion leaf=history-of-philosophy satisfying=1 report_coverage=1/1 term_style=exact-term sample_ids=758145 sample_acr=PROTEUS\n  why: Humanities-x-physics seed with strongly distinctive vocabulary (Plato, Kant, quantum gravity) - anchors a branch the bank never touches."
+        },
+        {
+          "topic": "Eliminating CAPTCHAs and passwords via a phone-as-security-token distributed cryptographic authentication platform",
+          "seed_id": "vector-35",
+          "block": "- id: vector-35\n  topic: Eliminating CAPTCHAs and passwords via a phone-as-security-token distributed cryptographic authentication platform\n  recommend: route=vector level=L1 subtype=topical-multi\n  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: natural sciences / computer and information sciences\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 684168 | Excalibur 2.0 | Revolutionary trustworthy platform for seamless authentication of Internet users ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%CAPTCHA%'` -> 1\n  axes: topic=usable-security; technique=distributed cryptographic scheme, behaviometrics, proximity detection; artefact=cloud password manager\n  why: Read 684168: the objective names CAPTCHAs, logins and verification emails as the friction it removes, using the phone as a universal security token - the only corpus objective mentioning CAPTCHA.",
+          "bucket_map": "good for: Vector L1 seeds: the bucket is large and heterogeneous enough that sharply-worded technique phrases isolate exactly one project corpus-wide (deepfake, CAPTCHA, satisfiability modulo theories). Also supports L2/L3 technique clusters (program synthesis, differential privacy, serverless computing) whose members are genuinely comparable CS research.\nthin for: Poor for questions keyed on the euroSciVoc leaf label itself, because members are tagged into computing for applying it as much as for researching it. Also thin for absence claims, since almost any computing term returns something across 7,654 members.\ntexture: 7581 of 7654 members carry a report row (99.0%), above the 98.1% corpus rate, so report teasers are usable evidence here. Member text names its techniques in its own words (satisfiability modulo theories, deepfakes, serverless) rather than echoing euroSciVoc labels, so topic questions should be written from text phrases, not tag names. Tag noise is real: 785907 (Human Brain Project) and 796752 (FLOODARC, a Mediterranean flood-archive project) both sit in this bucket, and corpus-wide singleton leaf tags reachable from here include hydrometeorology and other medical sciences - leaf labels are unreliable as topic proxies."
+        }
+      ]
+    },
+    {
+      "question_id": "vec-36",
+      "cell": {
+        "route": "vector",
+        "level": "L2",
+        "subtype": "comparison",
+        "term_style": "paraphrase"
+      },
+      "candidates": [
+        {
+          "topic": "Projects developing permanent magnets that avoid or minimise rare-earth elements",
+          "seed_id": "vector-11",
+          "block": "- id: vector-11\n  topic: Projects developing permanent magnets that avoid or minimise rare-earth elements, to cut Europe's dependence on critical raw materials for electric vehicles and wind turbines.\n  recommend: route=vector level=L2 subtype=comparison term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE euroSciVocTitle='rare earths'` -> 2 (686056 NOVAMAG, 636876 REDMUD). Text read (NOVAMAG): \"rare earths\", \"critical raw materials\", RE-free/lean permanent magnets by computational screening, reduce dependence on China.\n  axes: branch=environmental-engineering leaf=rare-earths satisfying=2 report_coverage=2/2 term_style=exact-term sample_ids=686056,636876 sample_acr=NOVAMAG,REDMUD\n  why: Clean two-project materials cluster (NOVAMAG designs RE-free magnets; REDMUD recovers rare earths) with vocabulary echoed verbatim - solid L2 comparison."
+        },
+        {
+          "topic": "Terahertz imaging used as an investigative technique",
+          "seed_id": "vector-57",
+          "block": "- id: vector-57\n  topic: terahertz imaging used as an investigative technique\n  recommend: route=vector level=L2 subtype=topical-multi\n  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%'` -> 2 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%' ORDER BY p.id` -> 660783 TERA-NANO; 885222 GreekSchools ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%terahertz imaging%' OR p.title ILIKE '%terahertz imaging%'` -> 1\n  axes: branch=engineering bucket=electrical-engineering topic=terahertz-imaging term_style=exact satisfying=2\n  why: Two projects corpus-wide in completely different fields. GreekSchools (885222), read directly, is a Greek philosophy papyrus edition listing terahertz imaging alongside SWIR hyperspectral imaging, OCT and XRF as its reading methods. A user can ask which projects use terahertz imaging without knowing either is electronics-tagged; only one of the two is in the bucket.",
+          "bucket_map": "good for: Device- and material-specific vector questions (phase-change metasurfaces, memristive and spiking hardware, quantum-secure optical links); cross-domain instrument questions where an electronics technique is applied in a humanities or biomedical project\nthin for: Paraphrase-only questions - most members name their own technology verbatim in the objective; also thin for pure electrical-power engineering, only 527 projects\ntexture: Device-physics objectives are dense with specific material and structure names (GeSbTe, chalcogenide, nanoresonator, crossbar microheater), which makes exact-term retrieval easy and paraphrase questions rare. The tag travels far outside electronics: the same second-level label sits on the Human Brain Project and on a Herculaneum papyrus edition project (GreekSchools) that uses terahertz imaging as an instrument, so tag membership alone is a poor guide to what a project is about. Start dates run 2014-01-01 (SYS GAM 2018) to 2023-01-30 (DReM-PCM)."
+        },
+        {
+          "topic": "Chiral phosphoric acid organocatalysis and the push past its substrate limits in asymmetric synthesis",
+          "seed_id": "vector-47",
+          "block": "- id: vector-47\n  topic: Chiral phosphoric acid organocatalysis and the push past its substrate limits in asymmetric synthesis\n  recommend: route=vector level=L2 subtype=topical-multi\n  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: natural sciences / chemical sciences\n  evidence: `SELECT COUNT(*) c FROM project p WHERE p.objective ILIKE '%chiral phosphoric acid%' OR p.title ILIKE '%chiral phosphoric acid%'` -> c=2 ; `SELECT id, acronym FROM project p WHERE p.objective ILIKE '%chiral phosphoric acid%' OR p.title ILIKE '%chiral phosphoric acid%'` -> 694228 CHAOS, 752405 DUAL-PHOSCAT\n  axes: subfield=organic chemistry/catalysis; property=enantioselectivity\n  why: Read CHAOS: it introduces C-H acids precisely because chiral phosphoric acid catalysts are limited to reactive substrates like imines; DUAL-PHOSCAT is the phosphorus-organocatalyst sibling for stereoselective ring-opening polymerisation.",
+          "bucket_map": "good for: Narrow single-project vector questions, because distinctive method phrases really are unique here - thermophilic microbial, composite solid electrolyte and relativistic quantum chemistry each match exactly 1 project corpus-wide. Also small 2-4 project clusters around named chemistries (chiral phosphoric acid 2, carbon nitride 4) that are enumerable as gold.\nthin for: Broad chemistry questions: head terms like catalysis, battery or CO2 conversion return hundreds of projects spread across engineering and energy buckets and cannot be enumerated. Also weak for quantitative chemistry questions - yields, conversions and temperatures live only in free text, never in a column.\ntexture: 4248 of 4331 members (98.1%) have a report row. Member text uses working technical vocabulary, never the taxonomy label: MACC-III never says chemical sciences and CSE-LBATTS never says electrochemistry though it is filed there, so questions must be built from substantive phrases (composite solid electrolyte, photoelectrochemical cell, C-H acid) rather than euroSciVoc wording. Only ONE euroSciVoc leaf in this whole bucket is unique corpus-wide (nuclear chemistry on PCCDX, 702635), so L1 seeds here have to come from distinctive free-text phrases, not from leaf tags."
+        }
+      ]
+    },
+    {
+      "question_id": "vec-37",
+      "cell": {
+        "route": "vector",
+        "level": "L2",
+        "subtype": "synthesis",
+        "term_style": "paraphrase"
+      },
+      "candidates": [
+        {
+          "topic": "Projects evaluating the economic burden and cost-effectiveness of responses to infectious-disease epidemics",
+          "seed_id": "vector-10",
+          "block": "- id: vector-10\n  topic: Projects evaluating the economic burden and cost-effectiveness of responses to infectious-disease epidemics - e.g. the health-economics of community active case finding for tuberculosis in low- and middle-income countries.\n  recommend: route=vector level=L2 subtype=synthesis term_style=paraphrase\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE euroSciVocTitle='economic impact of epidemics'` -> 4 (733174 IMPACT TB, 826722 TLA-Gut, 812021 SIGNIA). Text read (IMPACT TB): \"economic and social impacts of the TB pandemic\", cost-per-case, epidemic transmission modelling in Vietnam/Nepal.\n  axes: branch=economics-and-business leaf=economic-impact-of-epidemics satisfying=4 report_coverage=4/4 term_style=paraphrase sample_ids=733174,826722,812021 sample_acr=\"IMPACT TB\",TLA-Gut,SIGNIA\n  why: The tag's phrase is not echoed verbatim (paraphrase material); drafting must confirm the four members share the epidemic-economics theme - advisory L2 synthesis."
+        },
+        {
+          "topic": "Loneliness and social isolation of older adults addressed with companion technology",
+          "seed_id": "vector-20",
+          "block": "- id: vector-20\n  topic: Loneliness and social isolation of older adults addressed with companion technology\n  recommend: route=vector level=L2 subtype=topical-multi\n  bucket: social sciences / sociology\n  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%')` -> n=3 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='social sciences' AND split_part(e.euroSciVocPath,'/',2)='sociology' AND (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') ORDER BY p.id` -> 3 rows: 643808 MARIO, 769872 EMPATHIC, 868008 ADOPT GRANDPARENTS\n  axes: domain=sociology term_style=lay theme=loneliness-ageing satisfying=3\n  why: Three sociology-tagged projects name loneliness, all on older-adult isolation and assistive/companion technology - a tight L2 set.",
+          "bucket_map": "good for: Vector route across all levels: lay-vocabulary themes give small clean sets (domestic worker=1, loneliness=3, gentrification=7), exactly the L1/L2/L3 ladder. Good for term_style=lay questions.\nthin for: Numeric or comparative SQL questions - almost nothing here is quantified in a column - and tag-based filters, because the sociology tag is shared with another branch on three quarters of members.\ntexture: 3,725 of 3,802 members have a report row (98.0%). Labels are paraphrased, not echoed - members write neighbourhood revitalisation or socio-spatial inequality rather than the tag words. Tag noise is high: 2,940 of 3,802 members also carry a tag under a different top-level branch, and MSCA-IF fellowships bring in projects whose tag reflects one work package only. Many objectives are non-EU field sites (US, Canada, Colombia), so a question assuming a European setting will mis-scope."
+        },
+        {
+          "topic": "Direct air capture of CO2 as feedstock for synthetic fuels",
+          "seed_id": "vector-61",
+          "block": "- id: vector-61\n  topic: direct air capture of CO2 as feedstock for synthetic fuels\n  recommend: route=vector level=L2 subtype=topical-multi\n  counts: 2 corpus-wide, 2 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / environmental engineering\n  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%'` -> 2 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%' ORDER BY p.id` -> 763909 KEROGREEN; 101006701 EcoFuel ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%direct air capture%' OR p.title ILIKE '%direct air capture%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 2\n  axes: branch=engineering bucket=environmental-engineering topic=direct-air-capture term_style=exact satisfying=2\n  why: Read KEROGREEN (763909) - plasma-driven CO2 dissociation plus Fischer-Tropsch to jet-grade kerosene, with CO2 emitted on fuel use recirculated as feedstock by direct air capture. Both members sit in the bucket's carbon capture engineering node (56 projects); a tight, nameable pair.",
+          "bucket_map": "good for: water and wastewater treatment technologies; nutrient and material recovery from waste streams; landfill and leachate and mining residues; CO2 capture and conversion to fuels; urban groundwater and runoff quality\nthin for: environmental impact assessment, environmental law and policy, soil geotechnics (geological engineering 9, geotechnics 8 - too few members to sustain question families)\ntexture: Two populations sharing one tag: a handful of very large multi-hundred-million-euro industrial and aviation programme grants (Clean Sky GAMs) at one end, and a long tail of MSCA fellowships and SME-instrument projects on water, waste and emissions at the other. SME texts read like business plans (EBBR, 673683: market size, licensees, TRL7 prototypes); MSCA texts read like research plans with host-institution detail. Circular-economy vocabulary - valorisation, recovery, recycling of nutrients and metals - is pervasive across the waste and water nodes."
+        }
+      ]
+    }
+  ]
+}
