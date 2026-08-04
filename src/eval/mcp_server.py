@@ -66,7 +66,8 @@ from src.config import (BANK_PATH, CORPUS_PROFILE_PATH,
                         CORPUS_PROFILE_VERSION, DB_PATH, DRAFT_MCP_LOG_PATH,
                         INDEX_META_PATH, RUNTIME_RETRIEVER, SCHEMA_DOCS_PATH,
                         SCHEMA_DOCS_VERSION, SQL_TIMEOUT_S)
-from src.eval.bank import HYBRID_SUBTYPE_GOLD_BOUNDS, ROUTES
+from src.eval.bank import (HYBRID_SUBTYPE_GOLD_BOUNDS, ROUTES,
+                           TWINNED_ADV_SUBTYPES)
 from src.eval.explore import (LEVEL_WINDOWS, SURVIVOR_CEILING,
                               SURVIVOR_WINDOWS,
                               profile_sections as _profile_sections,
@@ -283,6 +284,52 @@ def get_bank_questions(route: str) -> dict:
         })
     _log("get_bank_questions", route=route, ok=True, n=len(questions))
     return {"route": route, "questions": questions}
+
+
+def _bank_record(question_id: str) -> dict | None:
+    """One raw bank entry by id, or None. Shared by `get_bank_record` and the
+    adversarial twin checks in `precheck_record`."""
+    if not cfg.bank_path.exists():
+        return None
+    for line in cfg.bank_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and obj.get("question_id") == question_id:
+            return obj
+    return None
+
+
+@traced
+def get_bank_record(question_id: str) -> dict:
+    """One COMPLETE bank entry - every field, gold and reference included.
+
+    Narrow on purpose. `get_bank_questions` hands back id/text/level/subtype
+    and nothing else precisely so a drafter is never tempted to copy someone
+    else's reference answer, and that still holds for the ladder. It does not
+    hold for an ADVERSARIAL draft, where a bank question is the raw material:
+    its gold is what tells the drafter which fact to negate or which filter to
+    shift, and re-executing that gold is half the proof that the perturbation
+    is a near miss rather than an unrelated empty corner. Use it for that.
+
+    An unknown id comes back as {"error": ...}.
+    """
+    if not isinstance(question_id, str) or not question_id.strip():
+        error = "question_id must be a non-empty string"
+        _log("get_bank_record", ok=False, error=error)
+        return {"error": error}
+    record = _bank_record(question_id)
+    if record is None:
+        error = (f"no bank question with question_id {question_id!r} "
+                 f"(bank: {cfg.bank_path})")
+        _log("get_bank_record", question_id=question_id, ok=False, error=error)
+        return {"error": error}
+    _log("get_bank_record", question_id=question_id, ok=True,
+         level=record.get("level"), route=record.get("expected_route"))
+    return {"record": record}
 
 
 @traced
@@ -692,6 +739,46 @@ def _precheck_execute(con, sql: str, fetch: int) -> tuple[list[str], list[tuple]
     return columns, rows, None
 
 
+def _is_empty_result(rows: list[tuple]) -> bool:
+    """Does this result prove emptiness?
+
+    No rows at all - or the one idiom that means the same thing and is the
+    natural way to write it, a single-cell COUNT that came back 0. Anything
+    else is a result rather than an absence, a count of 3 included.
+    """
+    if not rows:
+        return True
+    if len(rows) != 1 or len(rows[0]) != 1:
+        return False
+    value = rows[0][0]
+    if isinstance(value, bool) or not isinstance(
+            value, (int, float, decimal.Decimal)):
+        return False
+    return value == 0
+
+
+def _missing_project_text(con, ids: list[int]) -> tuple[list[int], list[int], str | None]:
+    """(absent, textless, error) for project ids - which are not in the
+    database at all, and which are there but carry no stored text."""
+    placeholders = ", ".join("?" for _ in ids)
+    try:
+        rows = con.execute(
+            "SELECT p.id, (COALESCE(NULLIF(TRIM(p.objective), ''),"
+            " NULLIF(TRIM(r.summary), ''),"
+            " NULLIF(TRIM(r.teaser), ''),"
+            " NULLIF(TRIM(r.workPerformed), ''),"
+            " NULLIF(TRIM(r.finalResults), '')) IS NOT NULL) "
+            "FROM project p LEFT JOIN report_text r "
+            "ON r.projectID = p.id "
+            f"WHERE p.id IN ({placeholders})", ids).fetchall()
+    except duckdb.Error as e:
+        return [], [], f"{type(e).__name__}: {e}"
+    found = {pid: bool(has_text) for pid, has_text in rows}
+    absent = [i for i in ids if i not in found]
+    textless = sorted(i for i, ok in found.items() if not ok)
+    return absent, textless, None
+
+
 def _id_column(columns: list[str]) -> int:
     for i, name in enumerate(columns):
         if name.lower() in _ID_COLUMN_NAMES:
@@ -719,6 +806,17 @@ def precheck_record(record: dict | str) -> dict:
       GOLD-BOUNDS      |gold_project_ids| against the route's bound - the
                        hybrid subtype's gold bound, or the vector level
                        window (vector level is DEFINED by the count)
+      GOLD-EMPTY       (ADV) zero-match carries an empty gold set
+      ABSENCE-QUERIES  (ADV) EVERY absence_evidence entry re-executed - each
+                       expect="zero" query still comes back empty, each
+                       expect="rows" query still comes back full. This is what
+                       makes "absence proven by execution" a fact about the
+                       record rather than a sentence in its notes
+      TWIN-EXISTS      (ADV) twin_id resolves to a bank question that is not
+                       itself ADV - the twin is the ANSWERABLE control
+      TWIN-LIVE        (ADV) the twin's own gold still holds, so the
+                       adversarial question is one shift away from a real
+                       answer rather than off in an unrelated empty corner
       SCHEMA-DOCS      recorded schema_docs hashes match the live document
 
     `ok` is true iff nothing FAILed (a WARN never gates). A drafter must not emit a package until
@@ -822,24 +920,10 @@ def precheck_record(record: dict | str) -> dict:
             check("GOLD-TEXT", "FAIL",
                   "gold_project_ids must be integers")
         else:
-            placeholders = ", ".join("?" for _ in gold_ids)
-            try:
-                rows = con.execute(
-                    "SELECT p.id, (COALESCE(NULLIF(TRIM(p.objective), ''),"
-                    " NULLIF(TRIM(r.summary), ''),"
-                    " NULLIF(TRIM(r.teaser), ''),"
-                    " NULLIF(TRIM(r.workPerformed), ''),"
-                    " NULLIF(TRIM(r.finalResults), '')) IS NOT NULL) "
-                    "FROM project p LEFT JOIN report_text r "
-                    "ON r.projectID = p.id "
-                    f"WHERE p.id IN ({placeholders})", gold_ids).fetchall()
-            except duckdb.Error as e:
-                check("GOLD-TEXT", "FAIL",
-                      f"gold text lookup failed: {type(e).__name__}: {e}")
+            absent, textless, error = _missing_project_text(con, gold_ids)
+            if error is not None:
+                check("GOLD-TEXT", "FAIL", f"gold text lookup failed: {error}")
             else:
-                found = {pid: bool(has_text) for pid, has_text in rows}
-                absent = [i for i in gold_ids if i not in found]
-                textless = sorted(i for i, ok in found.items() if not ok)
                 if absent or textless:
                     check("GOLD-TEXT", "FAIL",
                           f"not in the database: {absent or 'none'}; "
@@ -976,6 +1060,131 @@ def precheck_record(record: dict | str) -> dict:
         else:
             check("GOLD-BOUNDS", "N/A",
                   "no bound applies to this route/subtype")
+
+        # --- ADV: GOLD-EMPTY, ABSENCE-QUERIES, TWIN-EXISTS, TWIN-LIVE ---
+        # The claim an adversarial entry makes is that its absence was proven
+        # by execution. That is only true while something re-executes it, so
+        # every recorded query runs again here, inside the drafter's own loop,
+        # where a broken proof is cheap to find.
+        adv = level == "ADV"
+
+        if not adv or subtype != "zero-match":
+            check("GOLD-EMPTY", "N/A", "not a zero-match record")
+        elif gold_ids != []:
+            check("GOLD-EMPTY", "FAIL",
+                  f"zero-match requires gold_project_ids == [], "
+                  f"got {gold_ids!r}")
+        else:
+            check("GOLD-EMPTY", "PASS", "empty gold set, as zero-match needs")
+
+        absence = record.get("absence_evidence")
+        if not adv:
+            check("ABSENCE-QUERIES", "N/A", "not an ADV record")
+        elif not isinstance(absence, list) or not absence:
+            check("ABSENCE-QUERIES", "FAIL",
+                  "no absence_evidence recorded - an ADV entry carries the "
+                  "typed, re-executable proof of its own emptiness; an "
+                  "absence written in prose is an assertion")
+        else:
+            broken, zeros = [], 0
+            for i, item in enumerate(absence):
+                at = f"absence_evidence[{i}]"
+                if not isinstance(item, dict):
+                    broken.append(f"{at}: not an object")
+                    continue
+                sql, expect = item.get("sql"), item.get("expect")
+                if not isinstance(sql, str) or not sql.strip():
+                    broken.append(f"{at}: no sql to run")
+                    continue
+                if expect not in ("zero", "rows"):
+                    broken.append(f"{at}: expect={expect!r} is not zero|rows")
+                    continue
+                _, rows, error = _precheck_execute(con, sql, fetch=2)
+                if error is not None:
+                    broken.append(f"{at}: did not execute ({error})")
+                elif expect == "rows":
+                    if not rows:
+                        broken.append(
+                            f"{at}: expected rows, got none - nothing here "
+                            "refutes anything")
+                elif _is_empty_result(rows):
+                    zeros += 1
+                else:
+                    broken.append(
+                        f"{at}: expected emptiness, got {len(rows)} row(s) "
+                        f"({rows[0]!r}) - the absence does not hold, so the "
+                        "question has an answer and the refusal is wrong")
+            if broken:
+                check("ABSENCE-QUERIES", "FAIL", "; ".join(broken))
+            else:
+                check("ABSENCE-QUERIES", "PASS",
+                      f"all {len(absence)} claim(s) reproduce: {zeros} empty, "
+                      f"{len(absence) - zeros} non-empty")
+
+        twin_id, twin = record.get("twin_id"), None
+        needs_twin = adv and subtype in TWINNED_ADV_SUBTYPES
+        if not adv:
+            check("TWIN-EXISTS", "N/A", "not an ADV record")
+        elif twin_id is None:
+            check("TWIN-EXISTS", "FAIL" if needs_twin else "N/A",
+                  "no twin_id recorded"
+                  + (f" - ADV subtype {subtype!r} requires the answerable "
+                     "question it was derived from" if needs_twin else ""))
+        elif not isinstance(twin_id, str) or not twin_id.strip():
+            check("TWIN-EXISTS", "FAIL", "twin_id must be a non-empty string")
+        elif twin_id == qid:
+            check("TWIN-EXISTS", "FAIL", "twin_id points at this question")
+        else:
+            found = _bank_record(twin_id)
+            if found is None:
+                check("TWIN-EXISTS", "FAIL",
+                      f"twin_id {twin_id!r} is not a question in the bank")
+            elif found.get("level") == "ADV":
+                check("TWIN-EXISTS", "FAIL",
+                      f"twin {twin_id!r} is itself ADV - the twin is the "
+                      "ANSWERABLE control, so it must be on the ladder")
+            else:
+                twin = found
+                check("TWIN-EXISTS", "PASS",
+                      f"{twin_id} ({found.get('expected_route')}/"
+                      f"{found.get('level')}) is the answerable twin")
+
+        twin_sql = twin.get("gold_sql") if twin else None
+        twin_gold = twin.get("gold_project_ids") if twin else None
+        if twin is None:
+            check("TWIN-LIVE", "N/A", "no resolved twin to re-execute")
+        elif isinstance(twin_sql, str) and twin_sql.strip():
+            _, rows, error = _precheck_execute(con, twin_sql, fetch=1)
+            if error is not None:
+                check("TWIN-LIVE", "FAIL",
+                      f"the twin's gold_sql no longer executes ({error})")
+            elif not rows:
+                check("TWIN-LIVE", "FAIL",
+                      "the twin's gold_sql returns nothing now - the "
+                      "answerable control is no longer answerable, so this "
+                      "question is not a near miss of anything")
+            else:
+                check("TWIN-LIVE", "PASS",
+                      "the twin's gold_sql still returns rows - one shift "
+                      "away from this question, the answer exists")
+        elif (isinstance(twin_gold, list) and twin_gold
+              and all(isinstance(i, int) and not isinstance(i, bool)
+                      for i in twin_gold)):
+            absent, textless, error = _missing_project_text(con, twin_gold)
+            if error is not None:
+                check("TWIN-LIVE", "FAIL", f"twin gold lookup failed: {error}")
+            elif absent or textless:
+                check("TWIN-LIVE", "FAIL",
+                      f"the twin's gold projects are not all readable: "
+                      f"missing {absent or 'none'}, textless "
+                      f"{textless or 'none'}")
+            else:
+                check("TWIN-LIVE", "PASS",
+                      f"all {len(twin_gold)} of the twin's gold project(s) "
+                      "still exist and carry text")
+        else:
+            check("TWIN-LIVE", "N/A",
+                  "the twin carries neither gold_sql nor gold_project_ids")
     finally:
         con.close()
 
@@ -1094,7 +1303,7 @@ def main() -> None:
     from mcp.server.fastmcp import FastMCP
 
     server = FastMCP("horizon-scout-draft")
-    for fn in (run_sql, get_schema_docs, get_bank_questions,
+    for fn in (run_sql, get_schema_docs, get_bank_questions, get_bank_record,
                search_corpus, get_project_text, get_corpus_profile,
                precheck_record, precheck_candidate):
         server.tool()(fn)

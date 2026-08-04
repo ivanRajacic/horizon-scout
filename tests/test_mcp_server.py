@@ -13,9 +13,10 @@ from src.config import (CORPUS_PROFILE_VERSION, RUNTIME_RETRIEVER,
                         SCHEMA_DOCS_VERSION)
 from src.eval import mcp_server
 from src.eval.mcp_server import (ServerConfig, get_bank_questions,
-                                 get_corpus_profile, get_project_text,
-                                 get_schema_docs, precheck_candidate,
-                                 precheck_record, run_sql, search_corpus)
+                                 get_bank_record, get_corpus_profile,
+                                 get_project_text, get_schema_docs,
+                                 precheck_candidate, precheck_record, run_sql,
+                                 search_corpus)
 from src.llm import fingerprint
 from src.retrieval.base import SearchResult
 
@@ -38,6 +39,14 @@ BANK_RECORDS = [
      "gold_sql": "SELECT name FROM t ORDER BY i DESC LIMIT 1"},
     {"question_id": "b-vec-01", "text": "Find rows about widgets.",
      "expected_route": "vector", "complexity": "L1"},
+    # Twin candidates for the adversarial checks: one whose gold is a project
+    # set, and one whose gold_sql has gone dead.
+    {"question_id": "b-vec-02", "text": "Which project is about alpha?",
+     "expected_route": "vector", "level": "L1", "subtype": "identify",
+     "gold_project_ids": [1]},
+    {"question_id": "b-sql-dead", "text": "Which rows are past the end?",
+     "expected_route": "sql", "level": "L1", "subtype": "lookup",
+     "gold_sql": "SELECT name FROM t WHERE i > 999"},
 ]
 
 
@@ -158,8 +167,8 @@ def test_get_schema_docs(server):
 def test_get_bank_questions_filters_and_maps_levels(server):
     result = get_bank_questions("sql")
     assert [q["question_id"] for q in result["questions"]] == [
-        "b-sql-01", "b-sql-02"]
-    legacy, migrated = result["questions"]
+        "b-sql-01", "b-sql-02", "b-sql-dead"]
+    legacy, migrated = result["questions"][:2]
     assert legacy["level"] == "L1" and legacy["subtype"] is None
     assert migrated["level"] == "L3" and migrated["subtype"] == "rank"
     assert all(set(q) == {"question_id", "text", "level", "subtype"}
@@ -603,13 +612,102 @@ def test_precheck_checks_gold_projects_exist_and_carry_text(server):
     assert "no stored text: [4]" in status_detail(textless, "GOLD-TEXT")
 
 
-def test_precheck_zero_match_gold_is_not_a_text_failure(server):
-    result = precheck_record({
+def adv_record(**overrides):
+    record = {
         "question_id": "adv-90", "text": "Any projects on warp drives?",
         "expected_route": "vector", "level": "ADV", "subtype": "zero-match",
-        "gold_project_ids": []})
+        "gold_project_ids": [], "twin_id": "b-vec-02",
+        "absence_evidence": [
+            {"sql": "SELECT id FROM project WHERE title ILIKE '%warp%'",
+             "expect": "zero", "key_result": "no project mentions warp"},
+        ]}
+    record.update(overrides)
+    return record
+
+
+def test_precheck_zero_match_gold_is_not_a_text_failure(server):
+    result = precheck_record(adv_record())
     assert status_of(result, "GOLD-TEXT") == "N/A"
-    assert result["ok"]
+    assert status_of(result, "GOLD-EMPTY") == "PASS"
+    assert result["ok"], result["failures"]
+
+
+def test_precheck_reexecutes_every_absence_claim(server):
+    # The whole point of the field: a zero that is no longer a zero must fail
+    # here, in the drafter's own loop, and say what came back.
+    result = precheck_record(adv_record(absence_evidence=[
+        {"sql": "SELECT id FROM project WHERE title ILIKE '%alpha%'",
+         "expect": "zero", "key_result": "claimed empty, is not"}]))
+    assert "ABSENCE-QUERIES" in result["failures"]
+    assert "the absence does not hold" in status_detail(
+        result, "ABSENCE-QUERIES")
+
+    # A refutation that refutes nothing fails the other way.
+    refuted = precheck_record(adv_record(
+        subtype="false-presupposition", gold_project_ids=None,
+        absence_evidence=[
+            {"sql": "SELECT id FROM project WHERE id > 999",
+             "expect": "rows", "key_result": "the true fact"}]))
+    assert "ABSENCE-QUERIES" in refuted["failures"]
+    assert "expected rows, got none" in status_detail(
+        refuted, "ABSENCE-QUERIES")
+
+    broken = precheck_record(adv_record(absence_evidence=[
+        {"sql": "DROP TABLE project", "expect": "zero", "key_result": "x"}]))
+    assert "ABSENCE-QUERIES" in broken["failures"]
+    assert "did not execute" in status_detail(broken, "ABSENCE-QUERIES")
+
+
+def test_precheck_reads_a_zero_count_as_an_absence(server):
+    # Both idioms mean empty: no rows, or COUNT(*) = 0. A count of 3 does not.
+    counted = precheck_record(adv_record(absence_evidence=[
+        {"sql": "SELECT COUNT(*) FROM project WHERE title ILIKE '%warp%'",
+         "expect": "zero", "key_result": "0 warp projects"}]))
+    assert counted["ok"], counted["failures"]
+
+    nonzero = precheck_record(adv_record(absence_evidence=[
+        {"sql": "SELECT COUNT(*) FROM project", "expect": "zero",
+         "key_result": "claimed 0"}]))
+    assert "ABSENCE-QUERIES" in nonzero["failures"]
+
+
+def test_precheck_resolves_the_twin(server):
+    missing = precheck_record(adv_record(twin_id="b-nope"))
+    assert "TWIN-EXISTS" in missing["failures"]
+    assert "not a question in the bank" in status_detail(
+        missing, "TWIN-EXISTS")
+
+    untwinned = precheck_record(adv_record(twin_id=None))
+    assert "TWIN-EXISTS" in untwinned["failures"]
+    assert status_of(untwinned, "TWIN-LIVE") == "N/A"
+
+    # unanswerable derives from nothing, so no twin is the correct state.
+    alone = precheck_record(adv_record(
+        subtype="unanswerable", twin_id=None, gold_project_ids=None))
+    assert status_of(alone, "TWIN-EXISTS") == "N/A"
+    assert alone["ok"], alone["failures"]
+
+
+def test_precheck_requires_the_twin_to_still_be_answerable(server):
+    # A control whose own gold has gone empty controls for nothing, and the
+    # adversarial question is no longer a near miss of anything.
+    dead = precheck_record(adv_record(twin_id="b-sql-dead"))
+    assert "TWIN-LIVE" in dead["failures"]
+    assert "no longer answerable" in status_detail(dead, "TWIN-LIVE")
+
+    alive = precheck_record(adv_record(twin_id="b-sql-02"))
+    assert status_of(alive, "TWIN-LIVE") == "PASS"
+
+    # A twin labelled by projects rather than SQL is checked the same way.
+    assert status_of(precheck_record(adv_record()), "TWIN-LIVE") == "PASS"
+
+
+def test_get_bank_record_returns_the_whole_entry(server):
+    result = get_bank_record("b-sql-02")
+    assert "error" not in result
+    assert result["record"]["gold_sql"].startswith("SELECT name")
+    assert "error" in get_bank_record("b-nope")
+    assert "error" in get_bank_record("")
 
 
 def test_precheck_catches_drifted_filter_survivors(server):
