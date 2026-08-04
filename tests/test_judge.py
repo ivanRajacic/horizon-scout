@@ -40,7 +40,9 @@ def test_derive_pass_rule():
     assert derive_pass("full", [])
     assert not derive_pass("partial", [])
     assert not derive_pass("none", [])
-    assert not derive_pass("full", ["invented claim"])
+    # v0.2: extras are recorded but do not gate the pass.
+    assert derive_pass("full", ["extra claim"])
+    assert not derive_pass("partial", ["extra claim"])
 
 
 def test_parse_rubric_extracts_from_noise():
@@ -79,12 +81,12 @@ def test_verdict_and_log(tmp_path):
     assert logged["model"] == v.model and logged["prompt"] == v.prompt_version
 
 
-def test_unsupported_claim_fails(tmp_path):
-    bad = json.dumps({"coverage": "full", "missing_facts": [],
-                      "unsupported_claims": ["invented wind turbines"],
-                      "reasoning": "extra claim"})
-    v = mk_judge(tmp_path, FakeTransport([bad])).judge("q?", "ref", "ans")
-    assert not v.passed and v.unsupported_claims
+def test_unsupported_claim_recorded_not_penalized(tmp_path):
+    extra = json.dumps({"coverage": "full", "missing_facts": [],
+                        "unsupported_claims": ["extra wind turbines"],
+                        "reasoning": "extra claim"})
+    v = mk_judge(tmp_path, FakeTransport([extra])).judge("q?", "ref", "ans")
+    assert v.passed and v.unsupported_claims == ["extra wind turbines"]
 
 
 def test_retry_then_success(tmp_path):

@@ -26,7 +26,7 @@ from src.claude_cli import ClaudeCliError, call_claude  # noqa: F401  (call_clau
 from src.config import JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS
 from src.llm import fingerprint
 
-JUDGE_PROMPT_VERSION = "j0.1-pilot"
+JUDGE_PROMPT_VERSION = "j0.2"
 
 COVERAGE_LEVELS = ("full", "partial", "none")
 
@@ -98,9 +98,16 @@ def _parse_rubric(text: str) -> dict:
 
 
 def derive_pass(coverage: str, unsupported_claims: list[str]) -> bool:
-    """The pass rule, in code (frozen with the rubric): adequate coverage AND
-    no unsupported claims. v0.1 sets adequate = full."""
-    return coverage == "full" and not unsupported_claims
+    """The pass rule, in code (frozen with the rubric): the reference's key
+    facts must all appear (coverage = full). v0.1 also failed any answer with
+    unsupported_claims; v0.2 (2026-08-04, user decision) records them for
+    audit but does not penalize - the judge cannot tell a true extra fact
+    from an invented one, and penalizing extras lands asymmetrically on the
+    condition that retrieves more (see adv-07's round-2 finding). Wrong
+    answers to adversarial questions still fail on coverage: the rubric
+    grades an answer that supplies results against a refusal reference as
+    coverage none."""
+    return coverage == "full"
 
 
 class Judge:
