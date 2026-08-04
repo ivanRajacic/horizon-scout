@@ -41,7 +41,12 @@ ARCHIVE_DIR = ROOT / "eval" / "archive"
 # Routes /question-orchestrator can fill, and their id prefixes. The other allocation
 # rows (ambiguous, adversarial, compositional) are interactive-only.
 ROUTE_PREFIX = {"sql": "sql", "vector": "vec", "hybrid": "hyb"}
-ID_RE = re.compile(r"^(sql|vec|hyb)-(\d+)$")
+
+# Cells the batch can fill, and their id prefixes. `adversarial` is a LEVEL,
+# not a route - an ADV record's expected_route is a costume (sql|vector|hybrid)
+# - so it is a cell key here but never a row of the route x level table.
+CELL_PREFIX = {**ROUTE_PREFIX, "adversarial": "adv"}
+ID_RE = re.compile(r"^(sql|vec|hyb|adv)-(\d+)$")
 
 SLOT_STATUSES = ("DRAFTING", "REVIEWING", "JUDGING", "FIXING",
                  "ACCEPTED", "FAILED", "BLOCKED")
@@ -155,6 +160,56 @@ def staged_files(drafts_dir: Path = DRAFTS_DIR) -> list[Path]:
     return sorted(drafts_dir.glob("draft-bank-*.jsonl"))
 
 
+def packet_claims(drafts_dir: Path = DRAFTS_DIR) -> tuple[set[str], set[str]]:
+    """(question_ids, twin_ids) claimed by packets, including in-flight ones.
+
+    A packet is a claim made BEFORE any draft file exists: a tab writes its
+    `draft-bank-<date>.jsonl` only at close-out, so between launch and
+    close-out its ids and its parents are invisible to everything that reads
+    the bank and the staged files. Launch a second run in that window and it
+    reissues the first run's ids and re-offers its parents.
+
+    `/draft-questions` avoids this by assigning everything for a run in one
+    pass - but that only holds WITHIN a run, and runs are sequential in
+    practice. Reading the packets closes the window. Old packets keep their
+    ids claimed, which is the same rule archived ids follow: a number handed
+    out once is never handed out again, and a failed slot leaving a gap is
+    harmless.
+
+    Ids are claimed from EVERY packet, in-flight or finished. Parents only
+    from in-flight ones: a slot holds three and uses one, so once the group
+    has written its draft file the two it did not use are free again - and the
+    one it did use is recorded as a `twin_id` in that file, where
+    `twinned_ids` already sees it.
+
+    Tolerant: an unreadable or malformed packet is skipped, never fatal.
+    """
+    ids: set[str] = set()
+    twins: set[str] = set()
+    for path in sorted(drafts_dir.glob("**/packet.json")):
+        try:
+            packet = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(packet, dict):
+            continue
+        in_flight = not any(path.parent.glob("draft-bank-*.jsonl"))
+        for slot in packet.get("slots") or []:
+            if not isinstance(slot, dict):
+                continue
+            qid = slot.get("question_id")
+            if isinstance(qid, str) and qid.strip():
+                ids.add(qid)
+            if not in_flight:
+                continue
+            for parent in slot.get("parents") or []:
+                if isinstance(parent, dict):
+                    twin = parent.get("twin_id")
+                    if isinstance(twin, str) and twin.strip():
+                        twins.add(twin)
+    return ids, twins
+
+
 def archived_ids(archive_dir: Path = ARCHIVE_DIR) -> set[str]:
     """Ids `archive-questions` moved out of the bank.
 
@@ -225,15 +280,18 @@ def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
 def next_ids(counts: dict[str, int], bank_path: Path = BANK_PATH,
              drafts_dir: Path = DRAFTS_DIR,
              archive_dir: Path = ARCHIVE_DIR) -> dict[str, list[str]]:
-    """Assign the next free `sql-NN` / `vec-NN` / `hyb-NN` per route.
+    """Assign the next free `sql-NN` / `vec-NN` / `hyb-NN` / `adv-NN` per cell.
 
-    Counts the bank, every staged draft file AND the archive: a staged id is
-    taken even before promotion, and an archived id stays taken forever. Failed
-    and archived slots leave id gaps, which is harmless - the counter never
-    reuses a number.
+    Counts the bank, every staged draft file, every packet AND the archive: a
+    staged id is taken even before promotion, a packet's id is taken from the
+    moment the packet is written (a tab writes its draft file only at
+    close-out, so between launch and close-out the packet is the only record
+    that its ids are spoken for), and an archived id stays taken forever.
+    Failed and archived slots leave id gaps, which is harmless - the counter
+    never reuses a number.
     """
-    highest: dict[str, int] = {p: 0 for p in ROUTE_PREFIX.values()}
-    taken = archived_ids(archive_dir)
+    highest: dict[str, int] = {p: 0 for p in CELL_PREFIX.values()}
+    taken = archived_ids(archive_dir) | packet_claims(drafts_dir)[0]
     for path in [bank_path, *staged_files(drafts_dir)]:
         for record in read_records(path):
             taken.add(str(record.get("question_id", "")))
@@ -243,16 +301,81 @@ def next_ids(counts: dict[str, int], bank_path: Path = BANK_PATH,
             prefix, number = match.group(1), int(match.group(2))
             highest[prefix] = max(highest[prefix], number)
     assigned: dict[str, list[str]] = {}
-    for route, n in counts.items():
-        prefix = ROUTE_PREFIX.get(route)
+    for cell, n in counts.items():
+        prefix = CELL_PREFIX.get(cell)
         if prefix is None:
-            raise BatchError(f"route {route!r} has no id prefix; /question-orchestrator "
-                             f"fills {', '.join(ROUTE_PREFIX)} only")
+            raise BatchError(f"cell {cell!r} has no id prefix; /question-orchestrator "
+                             f"fills {', '.join(CELL_PREFIX)} only")
         start = highest[prefix]
-        assigned[route] = [f"{prefix}-{start + i:02d}"
-                           for i in range(1, max(0, n) + 1)]
+        assigned[cell] = [f"{prefix}-{start + i:02d}"
+                          for i in range(1, max(0, n) + 1)]
         highest[prefix] = start + max(0, n)
     return assigned
+
+
+def twinned_ids(bank_path: Path = BANK_PATH,
+                drafts_dir: Path = DRAFTS_DIR) -> set[str]:
+    """Question ids already used as some adversarial question's twin.
+
+    A parent used twice gives two ADV questions the same control, which halves
+    what the pair measures - so `pick_parents` never proposes one again. Staged
+    drafts count: their twins are claimed the moment they are written, not at
+    promotion. So do the parents of a packet still in flight - all three of a
+    slot's, since the tab may fall back to any of them, until it closes out and
+    the two it did not use come free.
+    """
+    # Recursive, unlike `staged_files`: a group writes its draft file into its
+    # own subdirectory, and a parent claimed there must stay claimed in the
+    # window between close-out and promotion. Missing it would free the used
+    # parent for a third run to pick up again.
+    used = packet_claims(drafts_dir)[1]
+    drafted = sorted(drafts_dir.glob("**/draft-bank-*.jsonl"))
+    for path in [bank_path, *drafted]:
+        for record in read_records(path):
+            twin = record.get("twin_id")
+            if isinstance(twin, str) and twin.strip():
+                used.add(twin)
+    return used
+
+
+def pick_parents(n: int, bank_path: Path = BANK_PATH,
+                 drafts_dir: Path = DRAFTS_DIR,
+                 exclude: tuple[str, ...] = ()) -> list[dict]:
+    """The answerable bank questions an adversarial batch derives from.
+
+    Deterministic, because "a good spread" has a right answer and the
+    project's rule is that anything with a right answer is code. Eligible
+    parents are ladder questions on a costume-capable route; already-twinned
+    ones and `exclude` (the ids sibling tabs have claimed) are out. The order
+    is a round robin that takes the least-used route first, then the
+    least-used subtype, then the id - so three parents off the top of the list
+    are three different kinds of question rather than three of a kind.
+
+    Whether a given parent SUITS a given subtype stays the drafter's call: a
+    shiftable filter value is not something a counter can see.
+    """
+    blocked = twinned_ids(bank_path, drafts_dir) | set(exclude)
+    eligible = [r for r in read_records(bank_path)
+                if r.get("level") in LADDER
+                and r.get("expected_route") in ROUTE_PREFIX
+                and r.get("question_id") not in blocked]
+
+    picked: list[dict] = []
+    routes: Counter = Counter()
+    subtypes: Counter = Counter()
+    levels: Counter = Counter()
+    remaining = sorted(eligible, key=lambda r: str(r.get("question_id")))
+    while remaining and len(picked) < max(0, n):
+        best = min(remaining, key=lambda r: (routes[r.get("expected_route")],
+                                             subtypes[r.get("subtype")],
+                                             levels[r.get("level")],
+                                             str(r.get("question_id"))))
+        remaining.remove(best)
+        picked.append(best)
+        routes[best.get("expected_route")] += 1
+        subtypes[best.get("subtype")] += 1
+        levels[best.get("level")] += 1
+    return picked
 
 
 def _tally(records: list[dict]) -> Counter:
@@ -307,27 +430,48 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
         cells.append(f"{f}+{s}/{row.get('total', '?')}")
         out.append(f"| {route} | " + " | ".join(cells) + " |")
 
-    out += ["", "interactive only - NOT draftable by /question-orchestrator:"]
-    for route in ("ambiguous", "adversarial", "compositional"):
-        row = targets.get(route, {})
-        if route == "adversarial":
-            f = sum(n for (_, level), n in filled.items() if level == "ADV")
-            s = sum(n for (_, level), n in pending.items() if level == "ADV")
-        else:
+    # Adversarial is a level, not a route, so it gets its own line rather than
+    # a table row - but it IS draftable by /question-orchestrator.
+    adv_f = sum(n for (_, level), n in filled.items() if level == "ADV")
+    adv_s = sum(n for (_, level), n in pending.items() if level == "ADV")
+    out += ["", f"  adversarial (level ADV, any costume route)   "
+            f"{adv_f}+{adv_s}/{targets.get('adversarial', {}).get('total', '?')}"]
+
+    # Cells absent from the allocation table are dropped from the bank's
+    # design (2026-08-04: ambiguous and compositional), not pending work -
+    # print only the ones with a stated target.
+    interactive = [route for route in ("ambiguous", "compositional")
+                   if targets.get(route, {}).get("total") is not None]
+    if interactive:
+        out += ["", "interactive only - NOT draftable by /question-orchestrator:"]
+        for route in interactive:
             f = sum(n for (r, _), n in filled.items() if r == route)
             s = sum(n for (r, _), n in pending.items() if r == route)
-        out.append(f"  {route:14s} {f}+{s}/{row.get('total', '?')}")
+            out.append(f"  {route:14s} {f}+{s}/{targets[route]['total']}")
 
     out.append("")
+    # Ladder subtypes only. An ADV entry wears a costume route, so counting its
+    # subtype under that route would report zero-match as a vector subtype.
     for route in ROUTE_PREFIX:
         subs = Counter(r.get("subtype") for r in bank
-                       if r.get("expected_route") == route)
+                       if r.get("expected_route") == route
+                       and r.get("level") in LADDER)
         subs_staged = Counter(r.get("subtype") for r in staged
-                              if r.get("expected_route") == route)
+                              if r.get("expected_route") == route
+                              and r.get("level") in LADDER)
         both = sorted(set(subs) | set(subs_staged))
         detail = ", ".join(f"{s}={subs[s]}+{subs_staged[s]}" for s in both
                            if s is not None) or "none yet"
         out.append(f"  subtypes {route:7s} {detail}")
+
+    adv_subs = Counter(r.get("subtype") for r in bank
+                       if r.get("level") == "ADV")
+    adv_subs_staged = Counter(r.get("subtype") for r in staged
+                              if r.get("level") == "ADV")
+    both = sorted(set(adv_subs) | set(adv_subs_staged))
+    detail = ", ".join(f"{s}={adv_subs[s]}+{adv_subs_staged[s]}"
+                       for s in both if s is not None) or "none yet"
+    out.append(f"  subtypes {'ADV':7s} {detail}")
 
     out.append("")
     for route in ("vector", "hybrid"):
@@ -341,10 +485,17 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
             f"paraphrase={styles['paraphrase']}+{styles_staged['paraphrase']}"
             "  (aim ~50/50 within each route)")
 
-    free = next_ids({r: 1 for r in ROUTE_PREFIX}, bank_path, drafts_dir,
+    free = next_ids({c: 1 for c in CELL_PREFIX}, bank_path, drafts_dir,
                     archive_dir)
-    out += ["", "next free id per route: "
-            + ", ".join(f"{route}={ids[0]}" for route, ids in free.items())]
+    out += ["", "next free id per cell: "
+            + ", ".join(f"{cell}={ids[0]}" for cell, ids in free.items())]
+
+    available = pick_parents(3, bank_path, drafts_dir)
+    out += ["", "adversarial parents available (untwinned, spread): "
+            + (", ".join(f"{r.get('question_id')}"
+                         f"({r.get('expected_route')}/{r.get('level')})"
+                         for r in available) or "none")
+            + f"  [{len(twinned_ids(bank_path, drafts_dir))} already twinned]"]
     return "\n".join(out)
 
 
@@ -376,7 +527,10 @@ should will would does project projects question answer eu european union
 # collision actually means something.)
 _GENERIC_ACRONYMS = frozenset({
     "ERC", "MSCA", "H2020", "FP7", "HORIZON", "SME", "SMES", "ICT", "CSA",
-    "TRL", "III"})
+    "TRL", "III",
+    # EUR is the currency every money answer quotes, not a named entity - it
+    # collided across 8 questions on the 2026-08-04 batch.
+    "EUR"})
 
 _ACRONYM_RE = re.compile(r"\b[A-Z][A-Z0-9]{2,}(?:-[A-Z0-9]+)*\b")
 _LITERAL_RE = re.compile(r"'([^']{1,80})'")
@@ -468,7 +622,19 @@ def crosscheck(accepted: list[dict], bank: list[dict]) -> list[Flag]:
                     continue
                 yield i, j, side_b
 
+    # An adversarial question is a deliberate perturbation of its parent, so
+    # the two RESEMBLING each other is the design, not a collision. Minimal
+    # edit distance is what makes the pair a control; flagging it would train
+    # drafters to move further from the parent, which is backwards.
+    twins = [str(r.get("twin_id") or "") for _, r in labelled]
+
+    def is_twin_pair(i, j):
+        return (twins[i] and twins[i] == qid[j]) or (
+            twins[j] and twins[j] == qid[i])
+
     for i, j, side in pairs():
+        if is_twin_pair(i, j):
+            continue
         tok = _jaccard(words[i], words[j])
         tri = _jaccard(trigrams[i], trigrams[j])
         if tok >= TOKEN_JACCARD_FLAG or tri >= TRIGRAM_JACCARD_FLAG:
@@ -488,15 +654,34 @@ def crosscheck(accepted: list[dict], bank: list[dict]) -> list[Flag]:
                 f"{qid[i]} and {qid[j]} ({side}) share gold project(s) "
                 f"{shared}"))
 
-    seen_entities: dict[str, list[str]] = {}
-    for i, (side, record) in enumerate(labelled):
+    # Two adversarial questions sharing a parent share a control, which halves
+    # what the pair measures. pick-parents prevents it across runs; only a
+    # cross-slot view catches it inside one batch.
+    for i, j, side in pairs():
+        if twins[i] and twins[i] == twins[j]:
+            flags.append(Flag(
+                "TWIN-COLLISION", "FLAG",
+                f"{qid[i]} and {qid[j]} ({side}) are both derived from "
+                f"{twins[i]} - one answerable control between two refusals"))
+
+    seen_entities: dict[str, list[int]] = {}
+    for i, (_, record) in enumerate(labelled):
         for entity in _entities(record):
-            seen_entities.setdefault(entity, []).append(f"{qid[i]}({side})")
-    for entity, users in sorted(seen_entities.items()):
-        batch_users = [u for u in users if u.endswith("(batch)")]
-        if batch_users and len(users) > 1:
-            flags.append(Flag("ENTITY-COLLISION", "FLAG",
-                              f"{entity} appears in {', '.join(users)}"))
+            seen_entities.setdefault(entity, []).append(i)
+    for entity, found in sorted(seen_entities.items()):
+        # An adversarial question inherits its parent's entities by design - it
+        # IS the parent with one thing changed, so "both mention AQUAEXCEL3.0"
+        # says nothing. Drop the sharers whose only company is their own twin;
+        # a THIRD question using the entity still reports, with the pair shown
+        # for context. Measured on batchK: 17 flags, 15 of them a twin meeting
+        # its parent, which buries the two that meant something.
+        real = [i for i in found
+                if not all(j == i or is_twin_pair(i, j) for j in found)]
+        if any(labelled[i][0] == "batch" for i in real) and len(real) > 1:
+            flags.append(Flag(
+                "ENTITY-COLLISION", "FLAG",
+                f"{entity} appears in "
+                + ", ".join(f"{qid[i]}({labelled[i][0]})" for i in real)))
 
     axes = Counter()
     for side, record in labelled:
@@ -725,6 +910,12 @@ def _table_cell(text: str) -> str:
 
 
 def _candidate_label(slot: dict) -> str:
+    # An adversarial slot's subject is its parent, not a corpus-profile topic,
+    # and the parent is exactly what a human approving the pair needs to see.
+    record = slot.get("record")
+    if isinstance(record, dict) and record.get("twin_id"):
+        return _table_cell(f"twin of {record['twin_id']}")
+
     candidates = slot.get("candidates") or []
     index = slot.get("candidate_index", 0)
     if not isinstance(index, int) or isinstance(index, bool):

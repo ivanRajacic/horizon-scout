@@ -40,8 +40,9 @@ move the bank toward its targets within the user's order: which levels are short
 subtypes are thin, and the term_style balance (reported per route). Legal subtypes per
 level are `VECTOR_SUBTYPE_LEVELS`, `HYBRID_SUBTYPE_LEVELS`, `SQL_SUBTYPE_LEVELS` in
 `src/eval/bank.py` and are not negotiable - vector L3 is survey and nothing else. Never
-exceed a cell's target without the user saying so in words. `ambiguous`, ADV and
-`compositional` cells are interactive-only and are never planned here.
+exceed a cell's target without the user saying so in words. `ambiguous` and `compositional`
+cells are interactive-only and are never planned here. **Adversarial cells (level ADV) ARE
+planned here** - their subject comes from step 3b, not from the corpus profile.
 
 ### 3. Find topics, and check there are enough
 
@@ -63,10 +64,28 @@ which buckets are exhausted. Do not draft fewer than asked without saying so, an
 reuse a topic to fill the count. (Running `/explore-corpus` to refill is the user's call,
 not yours.)
 
+### 3b. Find parents for the adversarial slots
+
+An ADV question is a perturbation of a question already in the bank, so its subject is a
+parent record, not a corpus-profile topic.
+
+```
+./.venv/Scripts/python.exe -m src.cli pick-parents --n <3 x ADV slots>
+```
+
+Deterministic: it drops questions already used as another ADV question's twin, and orders
+the rest as a round robin over route, then subtype, then level. Hand each ADV slot three
+parents in the order returned, and put each parent's **complete record** in the packet -
+the drafter needs the gold to know what to negate. Parents are pairwise distinct across the
+whole run for the same reason topics are: two tabs must not reach for the same one.
+
+**If there are not enough untwinned parents, STOP and say so**, naming how many are left.
+`unanswerable` slots take no parent and do not consume one.
+
 ### 4. Assign the ids - centrally, here, once
 
 ```
-./.venv/Scripts/python.exe -m src.cli next-ids --sql N --vector N --hybrid N
+./.venv/Scripts/python.exe -m src.cli next-ids --sql N --vector N --hybrid N --adversarial N
 ```
 
 `next-ids` counts the bank and the staged files it can see, but it does not recurse into
@@ -93,8 +112,10 @@ returns an error, or a server you started dies again, or it hangs long past ~5 m
 ### 6. Show the plan and WAIT
 
 A plain list, grouped by tab: each slot with its id, cell (route/level/subtype/term_style)
-and chosen topic, plus the two backups. Then ask, in plain text - never the multiple-choice
-window. **Nothing launches before the user approves.**
+and chosen topic, plus the two backups. For an ADV slot the "topic" is its parent - show
+`twin_id` and the parent's question text, so the user can see what each adversarial question
+is a perturbation of before anything launches. Then ask, in plain text - never the
+multiple-choice window. **Nothing launches before the user approves.**
 
 ### 7. Write the packets and launch the tabs
 
@@ -108,7 +129,9 @@ Split the slots into groups of at most three. Per group:
   `siblings` saying what the other groups are working on, the resolved `versions` block
   (asset versions and hashes from `get_corpus_profile`/`get_schema_docs` metadata plus the
   index fingerprint - the same block a batch header carries), and the `slots` with their
-  pre-assigned ids, cells, and three candidate blocks each with bucket-map lines.
+  pre-assigned ids, cells, and three candidate blocks each with bucket-map lines. An ADV
+  slot carries `parents` instead of `candidates`: three `{twin_id, record}` entries, each
+  record complete.
 - One launch script `eval/drafts/<group>/run.sh`.
 
 **Launch mechanics - every one of these cost real time on 2026-07-28; follow them exactly:**
@@ -125,10 +148,19 @@ Split the slots into groups of at most three. Per group:
   unset CLAUDE_CODE_CHILD_SESSION     # else the session is a nested child: transcript
                                       # never saved, --resume and agent-trace broken
   export TERM=xterm-256color
+  export MSYS2_ARG_CONV_EXCL='*'      # see below - without it the slash command is
+  export MSYS_NO_PATHCONV=1           # rewritten into a Windows path and the run dies
   cd /c/horizon-scout
   claude --model claude-opus-5 --effort medium "/question-orchestrator eval/drafts/<group>/packet.json"
   ```
 
+- **Export `MSYS2_ARG_CONV_EXCL='*'` before the `claude` line.** `claude.exe` is a native
+  Windows binary, so MSYS rewrites any argument that looks like a POSIX path - and a slash
+  command starts with `/`. Measured 2026-08-04: the prompt reached the tab as
+  `"C:/Program Files/Git/question-orchestrator eval/drafts/batchK/packet.json"`, so the
+  session started on a prompt naming a file that does not exist. The tab is alive and the
+  model is right, which is exactly why the process check below must read the WHOLE command
+  line and not just confirm something is running.
 - **Always pass `--model` and `--effort`; both are launch-time only.** Omit `--model` and
   the tab silently inherits the launcher's model (2026-07-28: two orchestrators meant for
   Opus 5 started as Fable 5). Medium effort is deliberate: the orchestrator routes and
@@ -139,8 +171,9 @@ Split the slots into groups of at most three. Per group:
   `wt new-tab -d C:/horizon-scout <path-to-bash> -i -l <group>/run.sh` per group.
   `~/bin/gwt-fan.ps1` is the working reference for the array/splat shape (it does not pass
   the flags; do not copy that part).
-- **Verify by process, not by exit code.** Each tab must have a live `claude.exe` - NOT
-  `node.exe` - whose command line contains its group's packet path:
+- **Verify by process, not by exit code, and read the whole command line.** Each tab must
+  have a live `claude.exe` - NOT `node.exe` - whose command line contains its group's
+  packet path AND an intact leading `/` on the slash command:
 
   ```powershell
   Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'claude.exe' } |

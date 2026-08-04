@@ -14,7 +14,9 @@ import pytest
 from src.config import ROOT
 from src.eval.batch import (BatchError, archived_ids, crosscheck, gap_report,
                             journal_append, load_journal, next_ids,
-                            parse_allocation, write_batch)
+                            packet_claims, parse_allocation, pick_parents,
+                            twinned_ids,
+                            write_batch)
 from src.eval.promote import promote
 
 PLAN = """
@@ -65,6 +67,18 @@ HYB_A = {
         "k": 10, "pooled_candidate_count": 2, "accepted": [733297],
         "rejected_count": 1, "index_fingerprint": "be84cbad9182"},
     "reference_answer": "GRAPHENE-AMR uses graphene oxide coatings.",
+}
+
+VEC_A = {
+    "question_id": "vec-01", "text": "Which project assembled structures "
+                                     "with a robot swarm?",
+    "expected_route": "vector", "level": "L1", "subtype": "identify",
+    "term_style": "paraphrase", "gold_project_ids": [101],
+    "pooling_evidence": {
+        "conditions_run": ["lexical", "dense", "hybrid", "hybrid_rerank"],
+        "k": 10, "pooled_candidate_count": 3, "accepted": [101],
+        "rejected_count": 2, "index_fingerprint": "be84cbad9182"},
+    "reference_answer": "SWARMBUILD.",
 }
 
 
@@ -154,10 +168,112 @@ def test_next_ids_starts_at_01_on_an_empty_bank(tmp_path):
                      tmp_path / "archive")["sql"] == ["sql-01"]
 
 
-def test_next_ids_rejects_a_route_it_cannot_name(tmp_path):
+def test_next_ids_rejects_a_cell_it_cannot_name(tmp_path):
     bank = write_jsonl(tmp_path / "bank.jsonl", [])
     with pytest.raises(BatchError, match="ambiguous"):
         next_ids({"ambiguous": 1}, bank, tmp_path, tmp_path / "archive")
+
+
+def test_next_ids_assigns_adversarial_ids(tmp_path):
+    # ADV is a level, not a route, so it is a cell key of its own - an ADV
+    # record's expected_route is a costume and must not drive its id.
+    bank = write_jsonl(tmp_path / "bank.jsonl",
+                       [SQL_A, {**SQL_A, "question_id": "adv-03",
+                                "level": "ADV", "subtype": "zero-match"}])
+    assigned = next_ids({"adversarial": 2, "sql": 1}, bank,
+                        tmp_path / "none", tmp_path / "archive")
+    assert assigned["adversarial"] == ["adv-04", "adv-05"]
+    assert assigned["sql"] == ["sql-02"]
+
+
+def _packet(path, slots):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"kind": "packet", "slots": slots}),
+                    encoding="utf-8")
+    return path
+
+
+def test_next_ids_respects_a_packet_that_has_not_closed_out_yet(tmp_path):
+    # A tab writes its draft file only at close-out, so between launch and
+    # close-out the packet is the only record that its ids are spoken for.
+    # Without this, a second run launched in that window reissues them.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    drafts = tmp_path / "drafts"
+    _packet(drafts / "batchK" / "packet.json",
+            [{"question_id": "adv-01"}, {"question_id": "adv-02"},
+             {"question_id": "adv-03"}])
+    assert next_ids({"adversarial": 2}, bank, drafts,
+                    tmp_path / "archive")["adversarial"] == ["adv-04", "adv-05"]
+
+
+def test_packet_claims_frees_unused_parents_once_the_group_closes_out(tmp_path):
+    drafts = tmp_path / "drafts"
+    slots = [{"question_id": "adv-01",
+              "parents": [{"twin_id": "sql-01"}, {"twin_id": "sql-02"},
+                          {"twin_id": "sql-03"}]}]
+    packet = _packet(drafts / "batchK" / "packet.json", slots)
+
+    # In flight: all three are held, because the tab may fall back to any.
+    assert packet_claims(drafts)[1] == {"sql-01", "sql-02", "sql-03"}
+
+    # Closed out: only the one actually used stays claimed, and it is claimed
+    # by the draft file rather than the packet.
+    write_jsonl(packet.parent / "draft-bank-2026-08-04.jsonl",
+                [{"question_id": "adv-01", "twin_id": "sql-02"}])
+    assert packet_claims(drafts)[1] == set()
+    assert packet_claims(drafts)[0] == {"adv-01"}
+    bank = write_jsonl(tmp_path / "bank.jsonl", [])
+    assert twinned_ids(bank, drafts) == {"sql-02"}
+
+
+def test_packet_claims_survives_a_broken_packet(tmp_path):
+    drafts = tmp_path / "drafts"
+    (drafts / "bad").mkdir(parents=True)
+    (drafts / "bad" / "packet.json").write_text("{not json", encoding="utf-8")
+    _packet(drafts / "good" / "packet.json", [{"question_id": "adv-09"}])
+    assert packet_claims(drafts)[0] == {"adv-09"}
+
+
+# --- adversarial parents ---------------------------------------------------
+
+def test_pick_parents_spreads_across_route_and_subtype(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [
+        {**SQL_A, "question_id": "sql-01"},
+        {**SQL_A, "question_id": "sql-02"},
+        {**SQL_A, "question_id": "sql-03"},
+        {**HYB_A, "question_id": "hyb-01"},
+        {**VEC_A, "question_id": "vec-01"},
+    ])
+    picked = pick_parents(3, bank, tmp_path / "none")
+    assert {r["expected_route"] for r in picked} == {"sql", "vector", "hybrid"}
+
+
+def test_pick_parents_skips_the_already_twinned_and_the_excluded(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [
+        {**SQL_A, "question_id": "sql-01"},
+        {**SQL_A, "question_id": "sql-02"},
+        {**SQL_A, "question_id": "sql-03"},
+        # An ADV entry already claims sql-01 as its control.
+        {**SQL_A, "question_id": "adv-01", "level": "ADV",
+         "subtype": "zero-match", "twin_id": "sql-01"},
+    ])
+    drafts = tmp_path / "drafts"
+    # A staged draft claims its twin the moment it is written, not at promotion.
+    write_jsonl(drafts / "draft-bank-2026-08-04.jsonl",
+                [{"question_id": "adv-02", "twin_id": "sql-02"}])
+    ids = [r["question_id"] for r in pick_parents(5, bank, drafts)]
+    assert ids == ["sql-03"]
+    assert pick_parents(5, bank, drafts, exclude=("sql-03",)) == []
+
+
+def test_pick_parents_never_proposes_an_adv_question(tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [
+        {**SQL_A, "question_id": "adv-01", "level": "ADV",
+         "subtype": "zero-match"},
+        {**SQL_A, "question_id": "sql-01"},
+    ])
+    ids = [r["question_id"] for r in pick_parents(5, bank, tmp_path / "none")]
+    assert ids == ["sql-01"]
 
 
 # --- gap report ------------------------------------------------------------
@@ -174,7 +290,24 @@ def test_gap_report_counts_filled_staged_and_target(tmp_path):
     assert "0+0/24" in text           # vector route total, nothing authored
     assert "compositional  0+0/3" in text
     assert "term_style hybrid  exact-term=1+0 paraphrase=0+0" in text
-    assert "next free id per route: sql=sql-03" in text
+    assert "next free id per cell: sql=sql-03" in text
+    assert "adversarial=adv-01" in text
+    # Adversarial has moved out of the interactive-only block.
+    assert "adversarial (level ADV, any costume route)   0+0/14" in text
+    assert "adversarial parents available" in text
+
+
+def test_gap_report_keeps_adv_subtypes_out_of_the_route_lines(tmp_path):
+    # An ADV entry wears a costume route, so counting its subtype under that
+    # route would report zero-match as a vector subtype.
+    bank = write_jsonl(tmp_path / "bank.jsonl", [
+        VEC_A,
+        {**VEC_A, "question_id": "adv-01", "level": "ADV",
+         "subtype": "zero-match", "gold_project_ids": []}])
+    text = gap_report(bank, tmp_path / "none", plan_file(tmp_path),
+                      tmp_path / "archive")
+    assert "subtypes vector  identify=1+0" in text
+    assert "subtypes ADV     zero-match=1+0" in text
 
 
 def test_gap_report_ignores_already_promoted_staged_records(tmp_path):
@@ -335,6 +468,61 @@ def test_crosscheck_flags_shared_gold_and_entities_and_axes():
                if f.kind == "ENTITY-COLLISION")
     assert any("country" in f.detail for f in flags
                if f.kind == "AXIS-COLLISION")
+
+
+def test_crosscheck_does_not_flag_an_adv_question_against_its_own_parent():
+    # Resembling the parent is the design: minimal edit distance is what makes
+    # the pair a control. Flagging it would push drafters away from the parent.
+    adv = {"question_id": "adv-01", "level": "ADV", "subtype": "zero-match",
+           "expected_route": "sql", "twin_id": "sql-01",
+           "text": "How many projects were suspended?",
+           "gold_project_ids": [], "reference_answer": "None were."}
+    assert [f for f in crosscheck([adv], [SQL_A])
+            if f.kind == "NEAR-DUPLICATE"] == []
+    # ...but it is still checked against everything else.
+    other = {**SQL_A, "question_id": "sql-09",
+             "text": "How many projects were suspended?"}
+    assert any("sql-09" in f.detail for f in crosscheck([adv], [SQL_A, other])
+               if f.kind == "NEAR-DUPLICATE")
+
+
+def test_crosscheck_does_not_flag_entities_an_adv_question_inherits():
+    # adv-01 mentions GRAPHENE-AMR only because its parent does. Two questions
+    # sharing an entity because one is a copy of the other says nothing.
+    adv = {"question_id": "adv-01", "level": "ADV", "subtype": "zero-match",
+           "expected_route": "hybrid", "twin_id": "hyb-04",
+           "text": "Which Finnish project applied GRAPHENE-AMR coatings?",
+           "gold_project_ids": [], "reference_answer": "None did."}
+    assert [f for f in crosscheck([adv], [HYB_A])
+            if f.kind == "ENTITY-COLLISION"] == []
+
+    # A THIRD user of the entity is a real collision, and the pair is shown.
+    third = {**HYB_A, "question_id": "hyb-08",
+             "text": "How does GRAPHENE-AMR coat its surfaces?",
+             "reference_answer": "With graphene oxide."}
+    detail = [f.detail for f in crosscheck([adv], [HYB_A, third])
+              if f.kind == "ENTITY-COLLISION" and "GRAPHENE-AMR" in f.detail]
+    assert detail and "hyb-08" in detail[0] and "hyb-04" in detail[0]
+
+
+def test_crosscheck_ignores_the_currency():
+    a = {**SQL_A, "question_id": "sql-20",
+         "reference_answer": "It received EUR 1.2 million."}
+    b = {**SQL_A, "question_id": "sql-21", "text": "What did BETA cost?",
+         "reference_answer": "EUR 3.4 million."}
+    assert not [f for f in crosscheck([a], [b])
+                if f.kind == "ENTITY-COLLISION" and "EUR" in f.detail]
+
+
+def test_crosscheck_flags_two_adv_questions_sharing_one_parent():
+    a = {"question_id": "adv-01", "level": "ADV", "subtype": "zero-match",
+         "expected_route": "sql", "twin_id": "sql-01",
+         "text": "How many projects were suspended?", "gold_project_ids": []}
+    b = {**a, "question_id": "adv-02",
+         "text": "What was the total funding for withdrawn grants?"}
+    flags = crosscheck([a, b], [])
+    assert any("both derived from sql-01" in f.detail for f in flags
+               if f.kind == "TWIN-COLLISION")
 
 
 def test_crosscheck_is_quiet_on_a_well_spread_batch():
@@ -525,6 +713,33 @@ def test_write_batch_stages_accepted_records_and_accounts_for_every_slot(
     assert report.count("Decision: [ ] APPROVE  [ ] REJECT") == 1
     assert "MISSED-GOLD" in report and "UPHELD" in report
     assert "cross-candidate stop rule" in report
+
+
+def test_write_batch_stages_an_adversarial_record_and_names_its_parent(
+        tmp_path):
+    adv = {"question_id": "adv-01", "text": "How many projects were suspended?",
+           "expected_route": "sql", "level": "ADV", "subtype": "zero-match",
+           "twin_id": "sql-01", "gold_project_ids": [],
+           "absence_evidence": [
+               {"sql": "SELECT id FROM project WHERE status = 'SUSPENDED'",
+                "expect": "zero", "key_result": "no suspended projects"}],
+           "reference_answer": "No project carries a suspended status."}
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    path = journal_file(tmp_path, [
+        HEADER,
+        slot("adv-01", "ACCEPTED", record=adv,
+             cell={"route": "sql", "level": "ADV", "subtype": "zero-match"},
+             candidates=[])])
+    res = write_batch(path, bank_path=bank)
+
+    assert res.accepted == ["adv-01"]
+    staged = [json.loads(l) for l in
+              res.draft_file.read_text(encoding="utf-8").splitlines()]
+    assert staged == [adv]                         # twin_id and proof survive
+    report = res.report_file.read_text(encoding="utf-8")
+    # The parent is what a human approving the pair needs to see.
+    assert "twin of sql-01" in report
+    assert "sql/ADV/zero-match" in report
 
 
 def test_write_batch_refuses_to_overwrite_and_honours_a_suffix(tmp_path):

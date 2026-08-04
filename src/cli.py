@@ -558,9 +558,10 @@ def cmd_gap_report(args):
 def cmd_next_ids(args):
     from src.eval.batch import BatchError, next_ids
 
-    counts = {"sql": args.sql, "vector": args.vector, "hybrid": args.hybrid}
+    counts = {"sql": args.sql, "vector": args.vector, "hybrid": args.hybrid,
+              "adversarial": args.adversarial}
     if not any(counts.values()):
-        counts = {route: 1 for route in counts}
+        counts = {cell: 1 for cell in counts}
         preview = True
     else:
         preview = False
@@ -569,10 +570,29 @@ def cmd_next_ids(args):
     except BatchError as e:
         print(f"ID ASSIGNMENT FAILED:\n  {e}")
         sys.exit(1)
-    for route, ids in assigned.items():
+    for cell, ids in assigned.items():
         if ids:
             label = "next free" if preview else f"{len(ids)} assigned"
-            print(f"{route:7s} {label}: {', '.join(ids)}")
+            print(f"{cell:11s} {label}: {', '.join(ids)}")
+
+
+def cmd_pick_parents(args):
+    import json
+
+    from src.eval.batch import BatchError, pick_parents
+
+    exclude = tuple(i.strip() for i in (args.exclude or "").split(",")
+                    if i.strip())
+    try:
+        parents = pick_parents(args.n, Path(args.bank), Path(args.drafts_dir),
+                               exclude=exclude)
+    except BatchError as e:
+        print(f"PARENT SELECTION FAILED:\n  {e}")
+        sys.exit(1)
+    if len(parents) < args.n:
+        print(f"# only {len(parents)} of {args.n} requested parents are "
+              "available (untwinned and not excluded)", file=sys.stderr)
+    print(json.dumps(parents, indent=2))
 
 
 def _crosscheck_records(path: Path):
@@ -1083,9 +1103,22 @@ def main():
     ni.add_argument("--sql", type=int, default=0)
     ni.add_argument("--vector", type=int, default=0)
     ni.add_argument("--hybrid", type=int, default=0)
+    ni.add_argument("--adversarial", type=int, default=0,
+                    help="level ADV, any costume route (adv-NN)")
     ni.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
     ni.add_argument("--drafts-dir", default=str(ROOT / "eval" / "drafts"))
     ni.set_defaults(fn=cmd_next_ids)
+
+    pp = sub.add_parser("pick-parents",
+                        help="the answerable bank questions an adversarial "
+                             "batch derives from - untwinned, spread across "
+                             "route and subtype, as JSON records")
+    pp.add_argument("--n", type=int, default=3)
+    pp.add_argument("--exclude", default="",
+                    help="comma-separated ids another tab has claimed")
+    pp.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    pp.add_argument("--drafts-dir", default=str(ROOT / "eval" / "drafts"))
+    pp.set_defaults(fn=cmd_pick_parents)
 
     bc = sub.add_parser("batch-crosscheck",
                         help="near-duplicate / entity / axis collisions "

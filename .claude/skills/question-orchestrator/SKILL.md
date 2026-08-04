@@ -175,6 +175,15 @@ The packet is one JSON file:
          "bucket_map": "good for: ... / thin for: ... / texture: ..."}
         // x3
       ]
+    },
+    {
+      "question_id": "adv-01",               // an ADVERSARIAL slot
+      "cell": {"route": "sql", "level": "ADV", "subtype": "zero-match"},
+      "parents": [                           // three, in the order to try them;
+        {"twin_id": "sql-08",                // `parents` replaces `candidates`
+         "record": { /* the parent's COMPLETE bank entry, from pick-parents */ }}
+        // x3
+      ]
     }
     // one per slot, up to three
   ]
@@ -184,7 +193,7 @@ The packet is one JSON file:
 In packet mode:
 
 - Read the packet, write the batch header (line 0) into `<output_dir>/draft-batch-journal-<date>.jsonl` using the packet's `versions` verbatim and `date +%Y-%m-%dT%H:%M:%S` for `started`, then go straight to step 5, dispatching every slot's first drafter at once.
-- The candidate blocks and bucket-map lines in the packet are what you pass to drafters - do not re-pull them from the corpus profile.
+- The candidate blocks and bucket-map lines in the packet are what you pass to drafters - do not re-pull them from the corpus profile. For an ADV slot, the parent record plays exactly that role: pass it verbatim, and never substitute a parent of your own choosing.
 - Everything from step 5 on is identical to a normal run: the per-slot loop, the stop rules, `write-batch`, the trace, the final message. The final message is your report; the launching session collects it, so make the two output paths and the tally unmissable.
 - The two decisions that stay yours: when a candidate is abandoned, move to the next candidate **in the packet's order**, and relay the distilled lesson (the trap, never the verdict or content) to the next drafter, exactly as step 5 says. Never invent a candidate not in the packet - if all three die, the slot fails, same as always.
 - No user is watching by default. Never stop to ask; journal, decide within the budget, and report at the end. (A user CAN interject in the tab mid-run - honour what they say - but do not wait for them.)
@@ -197,9 +206,9 @@ In packet mode:
 ./.venv/Scripts/python.exe -m src.cli gap-report
 ```
 
-It reads the allocation table LIVE from `horizon-scout.md` and prints filled + staged / target per route x level, the subtype spread, the term_style balance for vector and hybrid, and the next free id per route. Print it as-is; do not recompute anything from it.
+It reads the allocation table LIVE from `horizon-scout.md` and prints filled + staged / target per route x level, the adversarial line, the subtype spread, the term_style balance for vector and hybrid, the next free id per cell, and which bank questions are still available as adversarial parents. Print it as-is; do not recompute anything from it.
 
-Then ask the user, **in plain text (never the multiple-choice window)**, which cells and how many questions each. Wait. Their picks become the batch order. Never exceed a cell's target without the user saying so explicitly. `ambiguous`, ADV-subtype, and `compositional` cells are interactive-only and stay out of this batch - their skills exist, but they are not draftable here until the user explicitly flips them in (compositional never - it is interactive-only by design).
+Then ask the user, **in plain text (never the multiple-choice window)**, which cells and how many questions each. Wait. Their picks become the batch order. Never exceed a cell's target without the user saying so explicitly. `ambiguous` and `compositional` cells stay out of this batch - their skills exist, but they are interactive-only (compositional permanently so, by design). **Adversarial cells ARE draftable here**; see step 2b for how their subject is chosen.
 
 ### 2. Candidates - three per slot
 
@@ -209,10 +218,22 @@ Then ask the user, **in plain text (never the multiple-choice window)**, which c
 
 Three, not one plus a spare: the stop rules below can kill a candidate for a reason that has nothing to do with the drafter, and a slot with only one fallback fails on the second unlucky pick.
 
+### 2b. Parents - three per ADVERSARIAL slot
+
+An ADV slot's subject is not a corpus-profile topic, it is a bank question. Each adversarial question is a perturbation of an answerable one, which is both the control the refusal cells need and the proof that the emptiness sits next to something real.
+
+```
+./.venv/Scripts/python.exe -m src.cli pick-parents --n 9
+```
+
+The node is deterministic and owns everything with a right answer: it excludes questions already used as some other ADV question's twin (in the bank or in any staged draft), excludes ids named by `--exclude` (what sibling tabs have claimed), and orders what remains as a round robin over route, then subtype, then level, so parents off the top of the list are different kinds of question rather than three of a kind. Ask for `3 x <number of ADV slots>` and hand each slot three, in the order returned. Do not re-rank them and do not substitute one you like better.
+
+`unanswerable` is the exception: it derives from nothing and takes no parent. If the order names that subtype, the slot's "candidates" are the subtype alone and the drafter authors from scratch.
+
 ### 3. Assign ids
 
 ```
-./.venv/Scripts/python.exe -m src.cli next-ids --sql N --vector N --hybrid N
+./.venv/Scripts/python.exe -m src.cli next-ids --sql N --vector N --hybrid N --adversarial N
 ```
 
 Counts the bank AND every staged draft file, so a staged id is taken even before promotion. Assign one id per slot up front so parallel drafters never collide. Failed slots leave id gaps - harmless.
@@ -233,7 +254,7 @@ If the batch contains any topical slot (vector, hybrid, or topical ADV - the rou
 
 Per slot, per candidate:
 
-1. **DRAFTER.** Spawn a `question-drafter`. Prompt: the pre-assigned `question_id`, the cell (route/level/subtype, term_style if topical), the candidate block verbatim plus its bucket map lines, and the instruction to follow the route's drafting skill in orchestrated mode. Journal `DRAFTING`.
+1. **DRAFTER.** Spawn a `question-drafter`. Prompt: the pre-assigned `question_id`, the cell (route/level/subtype, term_style if topical), the candidate block verbatim plus its bucket map lines, and the instruction to follow the route's drafting skill in orchestrated mode. **For an ADV slot** the subject is the parent instead of a candidate block: give the `twin_id` and the parent's complete record verbatim, and point the drafter at `/draft-adversarial-question` in orchestrated mode - the costume route decides how the question is phrased, not which skill runs. Journal `DRAFTING`.
    - `DRAFT-FAILED - retrieval servers down` -> the outage path (below). Do NOT consume a candidate.
    - Any other `DRAFT-FAILED` -> journal it into `history`, advance `candidate_index`, go to the next candidate.
 2. **validate-record.** Pipe the returned RECORD straight in on stdin - no temp file, and a quoted heredoc means a record containing quotes or `$` cannot break the shell:
