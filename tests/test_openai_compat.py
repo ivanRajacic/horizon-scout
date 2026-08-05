@@ -275,6 +275,81 @@ def test_gated_respects_the_seat_semaphore():
     assert len(results) == 16 and peak <= cap
 
 
+# --- the gated wrapper: empty completions ---
+# call_api keeps returning "" for empty content (tested above); the GATE
+# owns the retry policy, because only there is the envelope both recorded
+# and retryable.
+
+def _empty_envelope(finish_reason="stop"):
+    return {"result": "", "usage": {}, "total_cost_usd": 0.0,
+            "finish_reason": finish_reason}
+
+
+def test_gated_retries_empty_content_then_succeeds(monkeypatch):
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def transport(messages, s, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return _empty_envelope()
+        return {"result": "ok", "usage": {}, "total_cost_usd": 0.0}
+
+    env = call_api_gated(MSGS, seat(), transport=transport)
+    assert env["result"] == "ok" and calls["n"] == 3
+
+
+def test_gated_empty_content_exhausts_backoff(monkeypatch):
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def transport(messages, s, **kw):
+        calls["n"] += 1
+        return _empty_envelope()
+
+    with pytest.raises(ApiError, match="persisted"):
+        call_api_gated(MSGS, seat(), transport=transport)
+    assert calls["n"] == 1 + len(openai_compat._BACKOFF_S)
+
+
+def test_gated_empty_with_length_cap_is_loud(monkeypatch):
+    # Empty at the token cap is deterministic misconfiguration - one loud
+    # failure naming the cap parameter, not four wasted attempts.
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def transport(messages, s, **kw):
+        calls["n"] += 1
+        return _empty_envelope(finish_reason="length")
+
+    with pytest.raises(ApiError, match="max_tokens") as err:
+        call_api_gated(MSGS, seat(), transport=transport)
+    assert not err.value.transient and calls["n"] == 1
+
+
+def test_gated_records_usage_for_retried_empty_completions(monkeypatch):
+    # The empty attempt was billed, so its tokens belong in usage even
+    # though the call is retried.
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    usage.reset()
+    calls = {"n": 0}
+
+    def transport(messages, s, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"result": "", "finish_reason": "stop",
+                    "total_cost_usd": 0.001,
+                    "usage": {"input_tokens": 100, "output_tokens": 0}}
+        return {"result": "ok", "total_cost_usd": 0.002,
+                "usage": {"input_tokens": 100, "output_tokens": 50}}
+
+    env = call_api_gated(MSGS, seat(), transport=transport)
+    assert env["result"] == "ok"
+    recs = usage.collect()
+    assert len(recs) == 2
+    assert [r.output for r in recs] == [0, 50]
+
+
 # --- ApiClient ---
 
 def test_api_client_chat_contract():

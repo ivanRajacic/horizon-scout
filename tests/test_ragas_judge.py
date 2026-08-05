@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from src import claude_cli
+from src import claude_cli, openai_compat
 from src.claude_cli import ClaudeCliError
 from src.config import (CLAUDE_MAX_CONCURRENCY, JUDGE_PASS_FACTUAL,
                         JUDGE_PASS_FAITHFULNESS)
@@ -239,14 +239,27 @@ def test_openai_backend_returns_llmresult_text():
     assert out.generations[0][0].text == '{"verdict": 1}'
 
 
+def api_seq_transport(*results):
+    """A fake with call_api's signature that serves each result in turn
+    (the last one repeats). Results must be non-empty text - empty content
+    is now retried at the gate, which these tests are not about."""
+    state = {"n": 0}
+
+    def transport(messages, seat, **kw):
+        i = min(state["n"], len(results) - 1)
+        state["n"] += 1
+        return api_envelope(results[i])
+    return transport
+
+
 def test_openai_backend_counts_unparseable_json():
     """DeepSeek's loose JSON mode is the instrumented risk: a completion
     with no parseable JSON is where ragas's silent 0.0 starts, so it is
-    counted at the source rather than inferred from scores."""
+    counted at the source rather than inferred from scores. The counters
+    see every completion, retries included."""
     llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
                           transport=api_transport("I think the answer is"))
-    llm._call("p")
-    llm._call("p")
+    llm._call("p")   # junk twice: the first completion plus its one re-ask
     assert llm.stats()["completions"] == 2
     assert llm.stats()["unparseable_json"] == 2
 
@@ -255,6 +268,58 @@ def test_openai_backend_counts_unparseable_json():
                              'Sure! ```json\n{"claims": []}\n```'))
     ok._call("p")
     assert ok.stats()["unparseable_json"] == 0
+
+
+def test_openai_backend_retries_unparseable_json_once():
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=api_seq_transport(
+                              "I think the answer is", '{"claims": []}'))
+    assert llm._call("p") == '{"claims": []}'
+    assert llm.stats() == {"model": JUDGE_SEAT.model,
+                           "completions": 2, "unparseable_json": 1,
+                           "parse_retries": 1, "parse_retry_recovered": 1}
+
+
+def test_openai_backend_parse_retry_exhausted_returns_text():
+    # After the one re-ask the text goes to ragas either way - its
+    # fix-format fallback stays the last line of defence, never a raise.
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=api_seq_transport(
+                              "still not json", "nope, prose again"))
+    assert llm._call("p") == "nope, prose again"
+    assert llm.stats() == {"model": JUDGE_SEAT.model,
+                           "completions": 2, "unparseable_json": 2,
+                           "parse_retries": 1, "parse_retry_recovered": 0}
+
+
+def test_openai_backend_no_retry_when_json_parses():
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=api_transport('{"verdict": 1}'))
+    llm._call("p")
+    assert llm.stats() == {"model": JUDGE_SEAT.model,
+                           "completions": 1, "unparseable_json": 0,
+                           "parse_retries": 0, "parse_retry_recovered": 0}
+
+
+def test_openai_backend_retries_transient_then_succeeds(monkeypatch):
+    # The api-path analogue of the claude-path test above: transient
+    # failures back off inside call_api_gated; only the eventual success
+    # is a completion the counters see.
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def transport(messages, seat, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise openai_compat.ApiError("HTTP 429: throttled",
+                                         transient=True)
+        return api_envelope('{"ok": 1}')
+
+    llm = OpenAICompatLLM(JUDGE_SEAT, threading.Semaphore(1),
+                          transport=transport)
+    assert llm._call("p") == '{"ok": 1}'
+    assert calls["n"] == 3
+    assert llm.stats()["completions"] == 1
 
 
 def mk_api_pool(tmp_path, result=RUBRIC_OK, concurrency=4):

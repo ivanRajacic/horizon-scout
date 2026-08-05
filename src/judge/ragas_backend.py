@@ -12,7 +12,9 @@ the legacy interface's deprecation horizon is ragas v1.0.
   DeepSeek's loose JSON mode fails SILENTLY: ragas's parser retries with a
   fix-format call, and when the fix parses to an empty claims list the
   metric scores 0.0 - not NaN, not an exception - so without a counter a
-  parse failure is indistinguishable from a wrong answer.
+  parse failure is indistinguishable from a wrong answer. One bounded
+  same-prompt re-ask now precedes that silent path; the counters stay the
+  instrument that says whether it earns its keep.
 - ClaudeCliLLM (retired v4 seat): completions over the shared `claude -p`
   transport (src/claude_cli.py); gating and transient-failure backoff live
   there, shared with the legacy generation client.
@@ -118,8 +120,15 @@ class OpenAICompatLLM(BaseRagasLLM):
 
     Counts every completion and every completion without parseable JSON
     (see module docstring for why that is the silent failure mode worth
-    counting). Counters are cumulative for the life of the instance and
-    read via stats().
+    counting). A completion without parseable JSON gets ONE same-prompt
+    re-ask before being handed to ragas: temperature 0 on this backend is
+    not determinism (served batching, MoE routing), so the loose-JSON
+    wobble has real odds of parsing on a second try, and the retry costs
+    one extra call only when a parse already failed. parse_retry_recovered
+    is the evidence for keeping or deleting it - if it stays 0 through the
+    smoke and round one, the retry goes. Counters are cumulative for the
+    life of the instance and read via stats(); retries count in
+    completions/unparseable_json like any other completion.
     """
 
     def __init__(self, seat, semaphore: threading.Semaphore | None = None,
@@ -132,8 +141,10 @@ class OpenAICompatLLM(BaseRagasLLM):
         self._lock = threading.Lock()
         self._calls = 0
         self._unparseable = 0
+        self._parse_retries = 0
+        self._parse_retry_recovered = 0
 
-    def _call(self, prompt: str) -> str:
+    def _completion(self, prompt: str) -> str:
         from src.openai_compat import call_api_gated
         kwargs = {}
         if self.transport is not None:
@@ -148,10 +159,27 @@ class OpenAICompatLLM(BaseRagasLLM):
                 self._unparseable += 1
         return text
 
+    def _call(self, prompt: str) -> str:
+        text = self._completion(prompt)
+        if _has_parseable_json(text):
+            return text
+        with self._lock:
+            self._parse_retries += 1
+        # Never raises on unparseable: after the one re-ask, the second
+        # text goes to ragas either way and its fix-format fallback stays
+        # the last line of defence, exactly as before.
+        text = self._completion(prompt)
+        if _has_parseable_json(text):
+            with self._lock:
+                self._parse_retry_recovered += 1
+        return text
+
     def stats(self) -> dict:
         with self._lock:
             return {"model": self.model, "completions": self._calls,
-                    "unparseable_json": self._unparseable}
+                    "unparseable_json": self._unparseable,
+                    "parse_retries": self._parse_retries,
+                    "parse_retry_recovered": self._parse_retry_recovered}
 
     def generate_text(self, prompt, n=1, temperature=0.01, stop=None,
                       callbacks=None) -> LLMResult:

@@ -971,10 +971,17 @@ def render_report(records: list[dict], meta: dict) -> str:
         out += ["## Judge health", ""]
         health = meta.get("judge_health") or {}
         if health:
-            out.append(f"- judge completions: {health.get('completions')}, "
-                       f"without parseable JSON: "
-                       f"{health.get('unparseable_json')} "
-                       f"(`{health.get('model')}`)")
+            line = (f"- judge completions: {health.get('completions')}, "
+                    f"without parseable JSON: "
+                    f"{health.get('unparseable_json')} "
+                    f"(`{health.get('model')}`)")
+            # Older runs' meta predates the parse-retry counters; render
+            # the fragment only when the backend reported them.
+            if "parse_retries" in health:
+                line += (f", parse retries: {health.get('parse_retries')} "
+                         f"(recovered "
+                         f"{health.get('parse_retry_recovered')})")
+            out.append(line)
         out += [f"- factual_correctness undefined (NaN): {len(nan_factual)} "
                 f"of {len(ragas_judged)} ragas-judged",
                 f"- faithfulness undefined (NaN): {len(nan_faith)}",

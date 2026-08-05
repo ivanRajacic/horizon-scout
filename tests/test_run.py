@@ -797,7 +797,8 @@ def test_judge_parse_health_lands_in_meta_and_report(tmp_path):
     class StatsPool(FakePool):
         def stats(self):
             return {"model": "deepseek-v4-flash", "completions": 4,
-                    "unparseable_json": 1}
+                    "unparseable_json": 1, "parse_retries": 1,
+                    "parse_retry_recovered": 1}
 
     bank = bank_of(tmp_path, VEC_Q)
     ask = FakeAsk({"vec-01": {"text": VEC_Q["text"],
@@ -810,3 +811,15 @@ def test_judge_parse_health_lands_in_meta_and_report(tmp_path):
         encoding="utf-8")
     assert "## Judge health" in report
     assert "without parseable JSON: 1" in report
+    assert "parse retries: 1 (recovered 1)" in report
+
+
+def test_judge_health_renders_meta_without_retry_counters():
+    """Meta from a run before the parse-retry counters existed still
+    renders - the fragment is conditional, not assumed."""
+    report = render_report([], {
+        "run_id": "old", "conditions": [], "judged": True,
+        "judge_health": {"model": "deepseek-v4-flash", "completions": 4,
+                         "unparseable_json": 1}})
+    assert "without parseable JSON: 1" in report
+    assert "parse retries" not in report

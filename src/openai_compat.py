@@ -207,8 +207,8 @@ def call_api_gated(messages: list[dict], seat: ApiSeat, *,
     seat-side twin of call_claude_gated, and like it the ONE place every
     successful call's cost and tokens are recorded (src/eval/usage.py,
     attributed to whatever stage() block is in effect). Transient failures
-    back off and retry outside the semaphore; anything else raises
-    immediately - loud failure stays loud."""
+    and empty completions back off and retry outside the semaphore;
+    anything else raises immediately - loud failure stays loud."""
     from src.eval.usage import record_envelope   # local: keeps the lowest-level
     #                                              transport free of package deps
 
@@ -221,7 +221,28 @@ def call_api_gated(messages: list[dict], seat: ApiSeat, *,
             try:
                 envelope = transport(messages, seat, max_tokens=max_tokens,
                                      timeout_s=timeout_s)
+                # Recorded BEFORE the emptiness check: an empty completion
+                # that gets retried was still billed, so its tokens belong
+                # in usage.
                 record_envelope(envelope, seat.model)
+                # An empty completion is a success to the transport but
+                # poison downstream - ragas scores it 0.0 silently and the
+                # rubric judge burns one of its two parse attempts on it.
+                # Empty at the token cap is deterministic misconfiguration
+                # (gpt-5-nano's reasoning tokens count against
+                # max_completion_tokens), so that one fails loud instead of
+                # burning the whole backoff ladder on it.
+                if not str(envelope.get("result") or "").strip():
+                    reason = envelope.get("finish_reason")
+                    if reason == "length":
+                        raise ApiError(
+                            f"{seat.name} seat ({seat.model}) spent its "
+                            f"whole {seat.max_tokens_param} budget without "
+                            f"emitting content (finish_reason=length) - "
+                            f"raise the cap, retrying cannot fix this")
+                    raise ApiError(
+                        f"{seat.name} seat ({seat.model}) returned empty "
+                        f"content (finish_reason={reason})", transient=True)
                 return envelope
             except ApiError as e:
                 if not getattr(e, "transient", False):
