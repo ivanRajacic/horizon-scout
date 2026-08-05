@@ -1,12 +1,15 @@
 """M4 unit tests: router fallback, synthesis citation post-check + context
 assertion, scoped edge policies. No servers needed - LLM and searcher faked."""
 
+import json
+
 import pytest
 
 from src.retrieval.scoped import (WEAK_FILTER, ScopedRetriever, filter_note,
                                   uses_subject_filter)
 from src.retrieval.vector_search import SearchResult
-from src.router.router import Router
+from src.router import router as router_mod
+from src.router.router import Router, derive_mode
 from src.synthesis.synthesizer import Synthesizer, fit_to_budget
 from src.synthesis import synthesizer as synth_mod
 
@@ -31,19 +34,41 @@ def mk_chunk(pid, acr, score=0.5, text="some project content here", section="sum
 
 # --- router ---
 
-def test_router_parses_valid_json():
-    r = Router(llm=FakeLlm(['{"mode": "sql", "reason": "count"}']))
-    d = r.route("how many projects?")
+def fields(needs_text, constraints, reason="r"):
+    """One r3-fields reply: the two facts the model reports."""
+    return json.dumps({"needs_project_text": needs_text,
+                       "structured_constraints": list(constraints),
+                       "reason": reason})
+
+
+# derive_mode is the routing rule itself. All four combinations, in code,
+# because this is what stopped being the model's decision in r3-fields.
+
+@pytest.mark.parametrize("needs_text,constraints,want", [
+    (False, [],                          "sql"),     # nothing but columns
+    (False, ["status terminated"],       "sql"),     # a count with a filter
+    (True,  [],                          "vector"),  # pure topic
+    (True,  ["funding scheme ERC-STG"],  "scoped"),  # filter plus project text
+])
+def test_derive_mode_covers_every_combination(needs_text, constraints, want):
+    assert derive_mode(needs_text, constraints) == want
+
+
+def test_router_parses_the_two_facts():
+    r = Router(llm=FakeLlm([fields(False, ["status terminated"], "count")]))
+    d = r.route("how many projects were terminated?")
     assert d.mode == "sql" and not d.router_fallback
+    assert d.needs_project_text is False
+    assert d.structured_constraints == ["status terminated"]
 
 
 def test_router_extracts_json_from_noise():
-    r = Router(llm=FakeLlm(['Sure! {"mode": "vector", "reason": "topic"} ok']))
+    r = Router(llm=FakeLlm([f"Sure! {fields(True, [])} ok"]))
     assert r.route("q").mode == "vector"
 
 
 def test_router_retries_then_succeeds():
-    llm = FakeLlm(["not json at all", '{"mode": "scoped", "reason": "x"}'])
+    llm = FakeLlm(["not json at all", fields(True, ["country DE"])])
     d = Router(llm=llm).route("q")
     assert d.mode == "scoped" and not d.router_fallback and llm.calls == 2
 
@@ -52,12 +77,51 @@ def test_router_fallback_is_visible():
     llm = FakeLlm(["garbage", "still garbage"])
     d = Router(llm=llm).route("q")
     assert d.mode == "scoped" and d.router_fallback and llm.calls == 2
+    # No facts were ever reported, so the decision must not claim any.
+    assert d.needs_project_text is None and d.structured_constraints == []
 
 
-def test_router_rejects_invalid_mode():
+def test_router_rejects_a_missing_or_non_boolean_fact():
+    llm = FakeLlm(['{"structured_constraints": [], "reason": "x"}', "junk"])
+    assert Router(llm=llm).route("q").router_fallback
+
+    llm = FakeLlm(['{"needs_project_text": "yes", '
+                   '"structured_constraints": [], "reason": "x"}', "junk"])
+    assert Router(llm=llm).route("q").router_fallback
+
+
+def test_router_rejects_constraints_that_are_not_a_list_of_strings():
+    llm = FakeLlm(['{"needs_project_text": true, '
+                   '"structured_constraints": "country DE", "reason": "x"}',
+                   "junk"])
+    assert Router(llm=llm).route("q").router_fallback
+
+
+def test_router_drops_none_written_as_a_constraint():
+    """A stray "none" entry would silently turn vector into scoped."""
+    d = Router(llm=FakeLlm([fields(True, ["none"])])).route("q")
+    assert d.mode == "vector" and d.structured_constraints == []
+
+
+def test_router_still_reads_an_archived_prompts_reply():
+    """The archive is only switchable if the parser still accepts its shape."""
+    d = Router(llm=FakeLlm(['{"mode": "sql", "reason": "count"}'])).route("q")
+    assert d.mode == "sql" and not d.router_fallback
+    # r1-pilot / r2-columns report no facts, so none are invented here.
+    assert d.needs_project_text is None and d.structured_constraints == []
+
+
+def test_router_rejects_invalid_mode_from_an_archived_prompt():
     llm = FakeLlm(['{"mode": "banana", "reason": "x"}', "junk"])
-    d = Router(llm=llm).route("q")
-    assert d.router_fallback
+    assert Router(llm=llm).route("q").router_fallback
+
+
+def test_every_archived_prompt_has_a_correction_hint():
+    """The retry quotes the ACTIVE contract back at the model, so a prompt
+    without a hint would correct it into the wrong shape."""
+    assert set(router_mod.ROUTER_PROMPTS) == set(router_mod._CONTRACT_HINTS)
+    assert router_mod.SYSTEM_PROMPT is \
+        router_mod.ROUTER_PROMPTS[router_mod.ROUTER_PROMPT_VERSION]
 
 
 # --- synthesizer citation post-check ---
