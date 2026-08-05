@@ -178,13 +178,19 @@ class FakeSqlPath:
 
 
 class FakeVerdict:
-    def __init__(self, passed, factual=0.9, faith=0.95, path="ragas"):
+    def __init__(self, passed, factual=0.9, faith=0.95, path="ragas",
+                 refusal=None, invented=(), coverage=None):
         self.passed = passed
         self.path = path
         self.model = "claude-sonnet-x"
         self.factual_correctness = factual
         self.faithfulness = faith
         self.detail = ""
+        # Overlay-only fields, mirroring PoolVerdict: the ADV grade is the
+        # refusal level, and coverage rides along as a recorded bonus.
+        self.refusal = refusal or ("explicit" if path == "overlay" else None)
+        self.invented_results = list(invented)
+        self.coverage = coverage
 
 
 class FakePool:

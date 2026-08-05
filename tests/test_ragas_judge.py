@@ -28,8 +28,9 @@ def envelope(result: str) -> dict:
     return {"type": "result", "result": result, "is_error": False}
 
 
-RUBRIC_OK = json.dumps({"coverage": "full", "missing_facts": [],
-                        "unsupported_claims": [], "reasoning": "refusal ok"})
+RUBRIC_OK = json.dumps({"refusal": "explicit", "invented_results": [],
+                        "coverage": "none", "missing_facts": [],
+                        "reasoning": "refused outright, invented nothing"})
 
 
 class StubMetric:

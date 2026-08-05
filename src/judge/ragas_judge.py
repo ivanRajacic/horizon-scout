@@ -25,7 +25,7 @@ import json
 import math
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.claude_cli import call_claude, shared_semaphore
@@ -69,6 +69,12 @@ class PoolVerdict:
     faithfulness: float | None = None        # None: not measurable / overlay
     factual_correctness: float | None = None
     detail: str = ""                         # overlay reasoning; ragas notes
+    # Overlay only. refusal is what the ADV grade IS ("explicit" passes);
+    # coverage rides along as the bonus it became in j0.3, so a run can show
+    # how much forensic detail correct refusals happened to carry.
+    refusal: str | None = None
+    invented_results: list[str] = field(default_factory=list)
+    coverage: str | None = None
 
 
 def _score(value) -> float | None:
@@ -178,7 +184,9 @@ class JudgePool:
                 v = await asyncio.to_thread(self.rubric.judge, q, ref, ans, qid)
                 return PoolVerdict(question_id=qid, path="overlay",
                                    passed=v.passed, model=self.model,
-                                   detail=v.reasoning)
+                                   detail=v.reasoning, refusal=v.refusal,
+                                   invented_results=v.invented_results,
+                                   coverage=v.coverage)
 
             contexts = case.get("contexts") or []
             sample = SingleTurnSample(user_input=q, response=ans, reference=ref,
@@ -254,6 +262,8 @@ class JudgePool:
             "thresholds": {"factual": JUDGE_PASS_FACTUAL,
                            "faithfulness": JUDGE_PASS_FAITHFULNESS},
             "passed": v.passed, "detail": v.detail,
+            **({"refusal": v.refusal, "invented_results": v.invented_results,
+                "coverage": v.coverage} if v.path == "overlay" else {}),
         }
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.log_path, "a", encoding="utf-8") as f:

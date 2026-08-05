@@ -336,6 +336,14 @@ def apply_verdict(record: dict, verdict) -> None:
         "thresholds": {"factual": JUDGE_PASS_FACTUAL,
                        "faithfulness": JUDGE_PASS_FAITHFULNESS},
     }
+    if verdict.path == "overlay":
+        # The ADV grade IS refusal (j0.3); coverage rides along as the bonus
+        # it became, so a run can report how much detail correct refusals
+        # carried without that ever having decided pass or fail.
+        record["score"].update({
+            "refusal": verdict.refusal,
+            "invented_results": verdict.invented_results,
+            "bonus_coverage": verdict.coverage})
 
 
 def judge_pending(records: list[dict], pool, *, records_path: Path,
@@ -913,6 +921,22 @@ def render_report(records: list[dict], meta: dict) -> str:
                      f"{sum(1 for r in adv if r['score']['passed'])}"
                      f"/{len(adv)} refused correctly")
         out.append(line)
+        if adv:
+            # WHY the adversarial ones failed, not just how many. A hedge and
+            # an invented answer are different defects and the pass count
+            # cannot tell them apart.
+            levels = [r["score"].get("refusal") for r in adv]
+            invented = sum(1 for r in adv if r["score"].get("invented_results"))
+            bonus = sum(1 for r in adv
+                        if r["score"].get("bonus_coverage") == "full")
+            out.append(
+                f"  adversarial refusals: "
+                f"{levels.count('explicit')} explicit, "
+                f"{levels.count('hedged')} hedged, "
+                f"{levels.count('none')} answered anyway; "
+                f"{invented} supplied the missing thing; "
+                f"{bonus}/{len(adv)} also carried the reference's detail "
+                f"(bonus, never required)")
     if broken:
         out.append(f"**{len(broken)} errored.**")
     out.append("")
