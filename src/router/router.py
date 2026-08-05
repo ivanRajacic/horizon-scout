@@ -270,6 +270,25 @@ class RouteDecision:
     structured_constraints: list[str] = field(default_factory=list)
 
 
+@dataclass
+class RouteFacts:
+    """What one extraction call produced, before any mode is chosen.
+
+    The scoped path consumes this directly (its narrowing step translates
+    structured_constraints instead of re-reading the raw question), so the
+    facts exist independently of routing. needs_project_text is None when no
+    facts were reported - an archived mode-only prompt or a parse fallback -
+    and a consumer must then treat the constraint list as UNKNOWN, never as
+    empty: [] is a positive claim that the question has no constraints.
+    """
+    needs_project_text: bool | None = None
+    structured_constraints: list[str] = field(default_factory=list)
+    reason: str = ""
+    fallback: bool = False
+    mode: str | None = None      # set on every non-fallback parse; archived
+                                 # prompts report ONLY this
+
+
 def derive_mode(needs_project_text: bool,
                 structured_constraints: list[str]) -> str:
     """The routing rule, in code (r3-fields onwards).
@@ -329,7 +348,13 @@ class Router:
     def __init__(self, llm=None):
         self.llm = llm or make_llm()
 
-    def route(self, question: str) -> RouteDecision:
+    def extract(self, question: str) -> RouteFacts:
+        """One extraction call: the model reads, the facts come back raw.
+
+        route() derives a mode from these; the scoped path feeds the
+        constraint list to its narrowing step. Splitting the call from the
+        rule is what lets always-hybrid - which never routes - still extract.
+        """
         messages = [{"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": question}]
         for attempt in (0, 1):
@@ -340,10 +365,10 @@ class Router:
             raw = self.llm.chat(messages, max_tokens=384)
             try:
                 mode, reason, needs, constraints = _parse(raw)
-                return RouteDecision(
-                    mode=mode, reason=reason,
+                return RouteFacts(
                     needs_project_text=needs,
-                    structured_constraints=constraints)
+                    structured_constraints=constraints,
+                    reason=reason, mode=mode)
             except (ValueError, json.JSONDecodeError) as e:
                 if attempt == 0:
                     messages = messages + [
@@ -353,7 +378,13 @@ class Router:
                             f"JSON object {CONTRACT_HINT} and nothing else."},
                     ]
         # Both attempts failed: fall back to the widest strategy, visibly.
-        return RouteDecision(
-            mode="scoped",
+        return RouteFacts(
             reason="router failed to produce valid JSON; defaulted to scoped",
-            router_fallback=True)
+            fallback=True, mode="scoped")
+
+    def route(self, question: str) -> RouteDecision:
+        f = self.extract(question)
+        return RouteDecision(
+            mode=f.mode, reason=f.reason, router_fallback=f.fallback,
+            needs_project_text=f.needs_project_text,
+            structured_constraints=f.structured_constraints)

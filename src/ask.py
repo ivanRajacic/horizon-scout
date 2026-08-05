@@ -74,7 +74,10 @@ class Ask:
         # the trace - what it actually is, is the caller's business.
         self.retriever_name = retriever_name
         self.retriever = retriever or build_retriever(retriever_name)
-        self.scoped = ScopedRetriever(self.retriever)
+        # The router doubles as the scoped path's constraint extractor: when a
+        # forced mode (always-hybrid) skips route(), ScopedRetriever calls
+        # extract() itself, so both study arms feed narrowing identical input.
+        self.scoped = ScopedRetriever(self.retriever, extractor=self.router)
         self.synth = Synthesizer(llm=self.llm)
         self.log_path = log_path
         # Everything that could change an answer, pinned per trace (M5).
@@ -101,6 +104,7 @@ class Ask:
         timings: dict[str, float] = {}
         t0 = time.perf_counter()
 
+        decision = None
         if mode is None:
             decision = self.router.route(question)
             timings["route"] = time.perf_counter() - t0
@@ -114,7 +118,19 @@ class Ask:
         elif mode == "vector":
             res = self._ask_vector(question, k)
         else:
-            res = self._ask_scoped(question, k)
+            # The router condition reuses its decision's constraint list - one
+            # extraction per question, not two. No decision (forced mode) ->
+            # ScopedRetriever extracts. A decision without facts (fallback or
+            # an archived mode-only prompt) means the list is UNKNOWN, so the
+            # narrowing step reads the raw question as before.
+            constraints, source = None, None
+            if decision is not None:
+                if decision.needs_project_text is not None:
+                    constraints = decision.structured_constraints
+                    source = "router"
+                else:
+                    source = "fallback-raw"
+            res = self._ask_scoped(question, k, constraints, source)
 
         res.mode = mode
         res.router_reason = reason
@@ -164,9 +180,12 @@ class Ask:
                    "rows_passed_to_gen": 0,
                    "chunks_passed_to_gen": len(s.used_chunks)})
 
-    def _ask_scoped(self, question: str, k: int) -> AskResult:
+    def _ask_scoped(self, question: str, k: int,
+                    constraints: list[str] | None = None,
+                    constraints_source: str | None = None) -> AskResult:
         t = time.perf_counter()
-        h = self.scoped.retrieve(question, k=k)
+        h = self.scoped.retrieve(question, k=k, constraints=constraints,
+                                 constraints_source=constraints_source)
         t_retrieve = time.perf_counter() - t
 
         if h.status == "zero_match":
@@ -188,6 +207,11 @@ class Ask:
             answer = ("[Note: the structured filter could not be applied - the "
                       "SQL step failed - so this answer is from an unfiltered "
                       "search over all projects.]\n\n" + answer)
+        elif h.degraded == "value_not_found":
+            answer = ("[Note: the structured filter was dropped - a filter "
+                      "value does not exist in the database - so this answer "
+                      "is from an unfiltered search over all projects.]\n\n"
+                      + answer)
         return AskResult(
             question=question, mode="scoped", router_reason="", answer=answer,
             sql=h.sql, chunks=s.used_chunks, degraded=h.degraded,
@@ -220,6 +244,11 @@ class Ask:
             "chunk_ids": [c.chunk_id for c in res.chunks],
             "degraded": res.degraded, "weak_filter": res.weak_filter,
             "citation_violations": res.citation_violations,
+            # What the narrowing step was GIVEN, not what it wrote - absent
+            # from every row before 2026-08-05, which is why the filter
+            # analysis had to reconstruct extraction output from prose.
+            "structured_constraints": res.trace.get("constraints"),
+            "constraints_source": res.trace.get("constraints_source"),
             # RQ1's covariate, first-class beside the trace (M5 §RQ1).
             "rows_passed_to_gen": res.trace.get("rows_passed_to_gen", 0),
             "chunks_passed_to_gen": res.trace.get("chunks_passed_to_gen", 0),
