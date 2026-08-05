@@ -6,9 +6,30 @@ analysis/gpu_validation/REPORT.md): --pooling cls and --cache-ram 0 are
 correctness/throughput requirements, not tuning niceties.
 """
 
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load_dotenv(path: Path) -> None:
+    """Load KEY=VALUE lines from .env into os.environ - stdlib only, since
+    requirements are deliberately pinned. Never overrides variables already
+    set, so a real environment always wins over the file. Blank lines and
+    `#` comments are skipped; values may be single- or double-quoted."""
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip().strip("'\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv(ROOT / ".env")
 DB_PATH = ROOT / "data" / "processed" / "horizon.duckdb"
 GGUF_PATH = ROOT / "data" / "models" / "bge-base-en-v1.5-f16.gguf"
 TOKENIZER_PATH = ROOT / "data" / "models" / "bge-base-en-v1.5.tokenizer.json"
@@ -29,9 +50,12 @@ SERVER_LAUNCH_CMD = (
 
 # --- Generation backend switch ---
 # GEN_BACKEND selects the generation client behind src.llm.make_llm():
-#   "api" (v5 default) - Gemini 2.5 Flash-Lite over Google's OpenAI-compatible
-#                        endpoint (src/openai_compat.py); the run-time seat
-#                        decided 2026-08-04, frozen for the study.
+#   "api" (v5 default) - gpt-5-nano over OpenAI's chat-completions endpoint
+#                        (src/openai_compat.py); the run-time seat re-decided
+#                        2026-08-05 (was Gemini 2.5 Flash-Lite, dropped before
+#                        any run). Known tradeoff: the GPT-5 nano/mini tier is
+#                        being retired (gpt-5-mini shutdown 2026-12-11), but
+#                        the seat only has to outlive the study.
 #   "claude"           - the retired v4 seat: Haiku via `claude -p`, gated by
 #                        the shared semaphore below.
 #   "local"            - the legacy llama-server Qwen3-8B path (kept for a
@@ -50,11 +74,16 @@ GEN_MODEL = "claude-haiku-4-5-20251001"
 # reliable JSON emitter.
 #
 # The *_EXTRA dicts are the thinking/reasoning OFF pin, merged verbatim into
-# every request body: Gemini 2.5 models take reasoning_effort "none" on the
-# OpenAI-compatible surface; DeepSeek V4 Flash turns thinking ON by default
-# and takes {"thinking": {"type": "disabled"}} to turn it off (thinking mode
-# also ignores temperature, so the judge's temperature 0 only means anything
-# with thinking disabled).
+# every request body: GPT-5.6 takes reasoning_effort "none" to switch
+# reasoning off; DeepSeek V4 Flash turns thinking ON by default and takes
+# {"thinking": {"type": "disabled"}} to turn it off (thinking mode also
+# ignores temperature, so the judge's temperature 0 only means anything with
+# thinking disabled).
+#
+# Two GPT-5-family quirks the gen seat pins around: temperature is locked to
+# 1 (any other value is rejected), and the token cap parameter is
+# max_completion_tokens, not max_tokens - *_MAX_TOKENS_PARAM names the right
+# one per seat.
 #
 # Prices are pinned per MILLION tokens because these APIs return token
 # counts, not dollars - src/openai_compat.py computes each call's cost from
@@ -63,13 +92,15 @@ GEN_MODEL = "claude-haiku-4-5-20251001"
 # Unlike the Max-subscription figures, these dollars are BILLED, not priced.
 API_TIMEOUT_S = 240.0
 
-GEN_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-GEN_API_MODEL = "gemini-2.5-flash-lite"
-GEN_API_KEY_ENV = "GEMINI_API_KEY"
-GEN_API_TEMPERATURE = 0.0
-GEN_API_EXTRA = {"reasoning_effort": "none"}
+GEN_API_BASE_URL = "https://api.openai.com/v1"
+GEN_API_MODEL = "gpt-5-nano"
+GEN_API_KEY_ENV = "OPENAI_API_KEY"
+GEN_API_TEMPERATURE = 1.0     # GPT-5 family: locked, other values rejected
+# GPT-5 (unlike 5.6) has no "none" level - "minimal" is its floor.
+GEN_API_EXTRA = {"reasoning_effort": "minimal"}
+GEN_API_MAX_TOKENS_PARAM = "max_completion_tokens"
 GEN_API_CONCURRENCY = 8
-GEN_API_PRICES_PER_MTOK = {"input": 0.10, "cache_read": 0.025,
+GEN_API_PRICES_PER_MTOK = {"input": 0.05, "cache_read": 0.005,
                            "output": 0.40}
 
 JUDGE_API_BASE_URL = "https://api.deepseek.com"
@@ -77,6 +108,7 @@ JUDGE_API_MODEL = "deepseek-v4-flash"
 JUDGE_API_KEY_ENV = "DEEPSEEK_API_KEY"
 JUDGE_API_TEMPERATURE = 0.0
 JUDGE_API_EXTRA = {"thinking": {"type": "disabled"}}
+JUDGE_API_MAX_TOKENS_PARAM = "max_tokens"
 JUDGE_API_CONCURRENCY = 8
 JUDGE_API_PRICES_PER_MTOK = {"input": 0.14, "cache_read": 0.0028,
                              "output": 0.28}

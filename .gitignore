@@ -2,6 +2,9 @@
 .venv/
 .venv-rocm/
 
+# API keys (loaded by src/config.py)
+.env
+
 # python caches
 __pycache__/
 *.pyc

@@ -61,7 +61,7 @@ MSGS = [{"role": "system", "content": "S"}, {"role": "user", "content": "U"}]
 # --- payload pinning ---
 
 def test_call_api_pins_the_frozen_seat(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "k-gen")
+    monkeypatch.setenv("OPENAI_API_KEY", "k-gen")
     seen = {}
 
     def post(url, json=None, headers=None, timeout=None):
@@ -72,10 +72,25 @@ def test_call_api_pins_the_frozen_seat(monkeypatch):
     call_api(MSGS, GEN_SEAT)
     assert seen["url"] == f"{GEN_SEAT.base_url}/chat/completions"
     assert seen["headers"]["Authorization"] == "Bearer k-gen"
-    assert seen["payload"]["model"] == "gemini-2.5-flash-lite"
-    assert seen["payload"]["temperature"] == 0.0
-    assert seen["payload"]["reasoning_effort"] == "none"   # thinking OFF pin
+    assert seen["payload"]["model"] == "gpt-5-nano"
+    assert seen["payload"]["temperature"] == 1.0   # GPT-5 family: locked at 1
+    assert seen["payload"]["reasoning_effort"] == "minimal"  # GPT-5's floor
     assert seen["payload"]["messages"] == MSGS             # roles unflattened
+    assert "max_tokens" not in seen["payload"]
+    assert "max_completion_tokens" not in seen["payload"]
+
+
+def test_gen_seat_uses_max_completion_tokens(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "k-gen")
+    seen = {}
+
+    def post(url, json=None, headers=None, timeout=None):
+        seen.update(payload=json)
+        return FakeResponse(payload=api_response())
+
+    monkeypatch.setattr(openai_compat.requests, "post", post)
+    call_api(MSGS, GEN_SEAT, max_tokens=64)
+    assert seen["payload"]["max_completion_tokens"] == 64
     assert "max_tokens" not in seen["payload"]
 
 

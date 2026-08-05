@@ -2,8 +2,8 @@
 
 Sibling of src/claude_cli.py, same shape on purpose: ONE transport function
 (call_api), one gated wrapper with backoff (call_api_gated), and usage
-recording at the single gate every call passes through. Generation (Gemini
-2.5 Flash-Lite) and judging (DeepSeek V4 Flash) each get an ApiSeat - the
+recording at the single gate every call passes through. Generation
+(gpt-5-nano) and judging (DeepSeek V4 Flash) each get an ApiSeat - the
 frozen bundle of endpoint, model, temperature, thinking-off pin, prices and
 concurrency from src/config.py - and each seat has its OWN semaphore. The
 `claude -p` semaphore in src/claude_cli.py governs `claude -p` subprocesses
@@ -26,10 +26,12 @@ from dataclasses import dataclass, field
 import requests
 
 from src.config import (API_TIMEOUT_S, GEN_API_BASE_URL, GEN_API_CONCURRENCY,
-                        GEN_API_EXTRA, GEN_API_KEY_ENV, GEN_API_MODEL,
+                        GEN_API_EXTRA, GEN_API_KEY_ENV,
+                        GEN_API_MAX_TOKENS_PARAM, GEN_API_MODEL,
                         GEN_API_PRICES_PER_MTOK, GEN_API_TEMPERATURE,
                         JUDGE_API_BASE_URL, JUDGE_API_CONCURRENCY,
-                        JUDGE_API_EXTRA, JUDGE_API_KEY_ENV, JUDGE_API_MODEL,
+                        JUDGE_API_EXTRA, JUDGE_API_KEY_ENV,
+                        JUDGE_API_MAX_TOKENS_PARAM, JUDGE_API_MODEL,
                         JUDGE_API_PRICES_PER_MTOK, JUDGE_API_TEMPERATURE)
 
 
@@ -55,6 +57,9 @@ class ApiSeat:
     prices: dict                 # USD per MILLION tokens: input/cache_read/output
     concurrency: int
     timeout_s: float = API_TIMEOUT_S
+    # OpenAI's GPT-5 family rejects "max_tokens" and wants
+    # "max_completion_tokens"; DeepSeek keeps the classic name.
+    max_tokens_param: str = "max_tokens"
     _sem: threading.Semaphore = field(init=False, repr=False, compare=False)
 
     def __post_init__(self):
@@ -70,13 +75,15 @@ GEN_SEAT = ApiSeat(
     name="gen", base_url=GEN_API_BASE_URL, model=GEN_API_MODEL,
     api_key_env=GEN_API_KEY_ENV, temperature=GEN_API_TEMPERATURE,
     extra=GEN_API_EXTRA, prices=GEN_API_PRICES_PER_MTOK,
-    concurrency=GEN_API_CONCURRENCY)
+    concurrency=GEN_API_CONCURRENCY,
+    max_tokens_param=GEN_API_MAX_TOKENS_PARAM)
 
 JUDGE_SEAT = ApiSeat(
     name="judge", base_url=JUDGE_API_BASE_URL, model=JUDGE_API_MODEL,
     api_key_env=JUDGE_API_KEY_ENV, temperature=JUDGE_API_TEMPERATURE,
     extra=JUDGE_API_EXTRA, prices=JUDGE_API_PRICES_PER_MTOK,
-    concurrency=JUDGE_API_CONCURRENCY)
+    concurrency=JUDGE_API_CONCURRENCY,
+    max_tokens_param=JUDGE_API_MAX_TOKENS_PARAM)
 
 
 # HTTP statuses worth retrying: throttling, overload, gateway wobble.
@@ -134,7 +141,7 @@ def call_api(messages: list[dict], seat: ApiSeat, *,
     payload = {"model": seat.model, "messages": messages,
                "temperature": seat.temperature, **seat.extra}
     if max_tokens:
-        payload["max_tokens"] = int(max_tokens)
+        payload[seat.max_tokens_param] = int(max_tokens)
 
     started = time.perf_counter()
     try:
