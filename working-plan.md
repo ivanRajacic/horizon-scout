@@ -55,6 +55,86 @@ are in `docs/archive/`, unedited. One of the contradictions was load-bearing:
 `gap-report` parses the allocation table live out of the plan doc, so the
 retired ~113 target had been driving drafting the whole time.
 
+**The seats ran on 2026-08-05, and the pilot found four defects.**
+`run-bank --run-id round1-router` put all 58 questions through the router
+condition, executed then judged, for $0.09. Judge health came back clean - 198
+completions, 0 without parseable JSON, 0 parse retries, 0 NaN - so the DeepSeek
+loose-JSON instrument is negative and the re-ask can be deleted if round one
+repeats it. Retrieval is not the bottleneck either: hit@k 0.939, recall@k 0.761.
+What the run found instead:
+
+1. **The scoped route cannot express the bank's structured side.** 9 of the 11
+   hybrid gold filters narrow on `euroscivoc`; the other 2 use `objective
+   ILIKE`. `build_id_narrowing_prompt` omits `euroscivoc` from its allowed
+   dimensions and orders the model to drop the research area, and
+   `uses_subject_filter` strips the `objective` route. Exactly 1 of the 12
+   narrowing queries in the run was correct. hyb-03 returned 219 projects
+   against a gold of 4, from an unbracketed `A OR B AND C`; hyb-07 returned
+   7,899; hyb-06 invented a coordinator role where the question says
+   participant; adv-06 invented a bare `LIMIT 100`; sql-11 returned
+   `organisationID` where the contract says `p.id`, which nothing checks.
+   **This is the next fix and it blocks the baseline.**
+2. **The 512-token answer cap is dead code.** `Ask.__init__` passes its shared
+   client into `Synthesizer`, so `make_llm(max_tokens=ANSWER_TOKENS)` never
+   runs and `ApiClient` sends no cap at all. Answers average 2,082 characters
+   against references of 1,149. RAGAS `FactualCorrectness` runs `mode='f1'`,
+   so the extra length costs precision: the shorter half of the judged
+   questions scored 0.497 mean factual, the longer half 0.282.
+3. **The adversarial rule cannot pass a correct refusal.** `derive_pass`
+   requires `coverage == "full"`, but an ADV reference carries near-miss
+   forensics no correct refusal would reproduce. adv-06 refused correctly and
+   failed for not naming the 62 volcanology projects. `ragas_judge.py`'s own
+   docstring states the intended rule as "nothing matches and invents
+   nothing", and since rubric v0.2 the second half is not checked at all.
+4. **Two SQL failures are scorer artifacts.** sql-02 returns the right five
+   projects in the right order and fails `columns_unmatched` for carrying two
+   extra columns and aliasing one pinned column;
+   `project_to_answer_columns` accepts all-names-present or an exact count
+   match and nothing between. sql-15 is the same. Changing it moves a recorded
+   metric, so it needs a decision first.
+
+**The router was rebuilt the same day, and misroutes fell 21% -> 3%.**
+`r1-pilot` defined "structured" by arithmetic ("Counts, sums, averages,
+rankings"), so the router read a subject classification, a funding scheme or a
+project name as topic text: 12 of 58 misrouted, 7 hybrid questions to `vector`
+and 5 sql questions to `scoped`. In 5 of those 7 the model NAMED the scheme or
+country in its own reason and then denied a constraint existed.
+
+Two prompts followed, both kept in `ROUTER_PROMPTS` and switchable by changing
+`ROUTER_PROMPT_VERSION` alone; `_parse` accepts both contracts so an archived
+prompt still runs.
+
+- `r2-columns` defines structured as "the value sits in a column", names
+  euroSciVoc beside country / date / money / scheme / role / status, and splits
+  on whether the project's own words are needed rather than on whether anything
+  is counted. 3 of 57 misrouted. All 3 stated the right facts and then chose a
+  mode contradicting them.
+- `r3-fields` (active) stops asking for the conclusion. The model reports
+  `needs_project_text` and `structured_constraints`, and `derive_mode` picks
+  the mode in code - the same split `judge.py:derive_pass` already uses. **2 of
+  58 misrouted, no errors, sql exact 12/16.** `derive_mode` was right on all
+  58 given the facts it received; both residual misroutes are reading failures,
+  and one of the two routes correctly when re-asked (the seat runs at
+  temperature 1.0, so neither the router nor the SQL path is deterministic -
+  read the routing count, never a single question flipping).
+
+Also fixed: the router's `max_tokens` was 128, which on the gen seat covers
+reasoning tokens too. Under `r2-columns` the longest bank question (sql-16)
+spent the whole budget and returned no content, failing loud through the
+`finish_reason=length` path. It is 384 now.
+
+Runs: `data/runs/round1-router` (r1-pilot, judged),
+`data/runs/r2-columns-phaseA`, `data/runs/r3-fields-phaseA` (both `--no-judge`).
+`data/runs/` is gitignored.
+
+**Open from the router work:** `RouteDecision` carries the two facts, but
+`ask.py` logs only `router_reason` and `router_fallback`, so neither
+`ask.jsonl` nor `records.jsonl` records them. A future misroute therefore
+cannot be told apart - reading failure or `derive_mode` failure - without
+re-asking the router by hand, which is how the paragraph above was written.
+About three lines in `ask.py` plus two fields on `AskResult`; it changes the
+trace schema, so it is not done yet.
+
 ## Next
 
 The order is `horizon-scout.md` §8. Immediately:
@@ -81,15 +161,14 @@ The order is `horizon-scout.md` §8. Immediately:
    record through `src/eval/usage.py` at their one gate. The report moved
    from pass rates to continuous scores: judged routes show mean factual
    with min/median/max, sql stays exact execution, ADV stays the refusal
-   rubric. **Remaining, and the immediate next step:** set
-   `OPENAI_API_KEY` and `DEEPSEEK_API_KEY` in the environment (or `.env` at
-   the repo root, loaded by `src/config.py`), then smoke
-   both seats with a small judged run per route, e.g.
-   `run-bank --routes sql --limit 3`, then `--routes vector --limit 3`
-   (add an adversarial id to exercise the rubric overlay). Read the
-   answers, the verdicts and the report's Judge health section - the point
-   is to see both seats behave before anything depends on them. The seats
-   freeze on that smoke; after it, never change either again.
+   rubric. **The smoke ran 2026-08-05** and went straight to full scale:
+   `round1-router`, all 58 questions judged, $0.09. Both seats behaved. The
+   judge behaved perfectly (0 unparseable completions of 198). The generator
+   did not: its answer-length cap turned out to be dead code, and the
+   verbosity that follows is costing most of the factual score (defect 2
+   above). **So the seats do NOT freeze yet.** The pin waits until that is
+   fixed and one more run shows the answer shape settled. Nothing else about
+   either seat is in question.
 3. ~~**Three pre-baseline fixes**~~ - **DONE 2026-08-05**, all from
    `docs/pilot-router-findings.md` Part 2, each with regression tests. Two had
    already landed on 2026-08-04 without this item being updated: the scoped
@@ -115,7 +194,30 @@ The order is `horizon-scout.md` §8. Immediately:
    with typed `absence_evidence` and `twin_id`) and 9 landed via batches K-M,
    overshooting the original 5. Ambiguous and compositional dropped for good
    (`horizon-scout.md` §6). Bank complete at 58.
-5. **Build the agentic condition.** Nothing exists yet - there is no `src/agent/`
+5. ~~**Fix the router**~~ - **DONE 2026-08-05**, misroutes 12/58 -> 2/58. See
+   above. `r3-fields` is active, `r1-pilot` and `r2-columns` are archived in
+   `ROUTER_PROMPTS` and still switchable. Disclosed in the write-up under §6's
+   relaxed freeze: the router now returns two facts and `derive_mode` picks the
+   mode in code, so "one call returning one mode" is no longer an accurate
+   description of it. What it is compared against, `always-hybrid`, is
+   untouched.
+6. **The four pilot defects, in this order.** 1 first - it is the only one that
+   blocks a baseline:
+   1. **The euroSciVoc filter.** Add the classification to
+      `build_id_narrowing_prompt`'s allowed dimensions with the path-prefix
+      idiom the schema docs already document, draw the line at "classified
+      under X" rather than at "research area", and check in code that the
+      narrowing query returns one column of project ids. Keep the ban on
+      `objective` / `title` / `keywords`, which leaves hyb-13 and hyb-16
+      unreachable by design - decide whether to accept that.
+   2. **The dead answer cap**, plus a decision on whether prompt tightening
+      is pre-baseline wiring or a round-two improvement. The cap itself is a
+      bug either way.
+   3. **The adversarial pass rule** - grade the refusal, record the near-miss
+      facts without requiring them.
+   4. **The SQL column projection** - needs your call, it moves a recorded
+      metric. One line in `schema_docs.md` about acronym casing goes with it.
+7. **Build the agentic condition.** Nothing exists yet - there is no `src/agent/`
    and `run.py:CONDITIONS` has only router / force-sql / force-vector /
    always-hybrid. It loops over capabilities that already exist
    (`retrieval/sql_path.py`, the runtime retriever from `retrieval/registry.py`,
@@ -124,11 +226,17 @@ The order is `horizon-scout.md` §8. Immediately:
    (planning error / execution drift / non-termination / recovery win). Traced
    like everything else - versioned prompt, content hash, cost through
    `src/eval/usage.py`. Freeze the scaffold after its pilot.
-6. **The three rounds** (`horizon-scout.md` §2). Round one: 58 questions x
+8. **The three rounds** (`horizon-scout.md` §2). Round one: 58 questions x
    {router, always-hybrid}, `--no-judge` first, read the answers, then
    `--resume` for verdicts. Round two from what round one shows plus the
    candidates in `docs/improvement-research-2026-07-27.md`. Round three is the
    agentic condition against the improved system. Then the write-up.
+   **No baseline before item 6.1 lands.** Correct routing sends all 11 hybrid
+   questions into the broken filter, so the hybrid route gets WORSE first -
+   the 7 that reached `vector` by mistake scored 0.370 mean factual against
+   0.247 for the 4 that reached `scoped` correctly, and under `r3-fields`
+   hyb-06 and hyb-08 now narrow to zero projects and refuse outright. That
+   drop is expected and is not a regression to chase.
 
 ## Committed 2026-08-04
 

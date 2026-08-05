@@ -288,6 +288,14 @@ Dropped, with the reason, so none of it is re-litigated:
 | **Ambiguous-route cell (n=3)** | dropped 2026-08-04 with the bank otherwise complete: underspecified questions are imprecise by construction, and the router-stress signal was judged not worth 3 hand-authored interactive-only questions | this table; §3 Allocation |
 | **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round; the agentic round now shows itself on the 58 (its cost/latency columns and failure buckets carry the story) | this table; §3 Allocation |
 
+Disclosed under the relaxed freeze so far: the scoped route's `filter_note`
+(2026-08-04, `7891908`), and the router rebuild (2026-08-05) that took
+misroutes from 12/58 to 2/58. The router change is more than a prompt edit -
+the model now reports two facts and `src/router/router.py:derive_mode` picks
+the mode in code - so "one LLM call returning one mode" no longer describes it.
+`always-hybrid`, the thing it is compared against, is untouched. Every router
+prompt ever run stays in `ROUTER_PROMPTS`, switchable by one string.
+
 Freeze discipline is relaxed: prompts and thresholds can move if the change is
 disclosed in the write-up. Four things stay genuinely frozen because every
 recorded number depends on them - the chunking and index config, the retrieval
@@ -346,8 +354,11 @@ adversarial twins.
 Live state and what is next: `working-plan.md`.
 
 1. ~~**Trim the bank to 49** via `archive-questions`~~ - **DONE 2026-08-03** (§3.3).
-2. **Swap both seats to external APIs, first** - **BUILT 2026-08-04; the seat
-   smoke is still owed and is the immediate next step.** An OpenAI-compatible
+2. **Swap both seats to external APIs, first** - **BUILT 2026-08-04; smoked
+   2026-08-05 at full scale (`round1-router`, 58 questions judged, $0.09).
+   The judge froze on it; the generator did not** - its answer-length cap is
+   dead code and the verbosity that follows costs most of the factual score,
+   so the generator pin waits for that fix. An OpenAI-compatible
    generation backend in `src/llm.py` beside `ClaudeCliLLM` pointed at
    gpt-5-nano, and the judge backend in `src/judge/ragas_backend.py` pointed
    at DeepSeek V4 Flash (§5). Pin both in `src/config.py`; the new backends
