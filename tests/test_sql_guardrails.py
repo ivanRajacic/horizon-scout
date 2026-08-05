@@ -9,7 +9,7 @@ from src.retrieval.sql_path import (SqlGuardrailError, SqlPath, ensure_limit,
                                     columns_match, results_match,
                                     project_to_answer_columns,
                                     results_match_ordered, rows_match,
-                                    strip_fences, validate_sql)
+                                    strip_comments, strip_fences, validate_sql)
 
 
 class FakeLlm:
@@ -76,6 +76,72 @@ def test_limit_injected_only_when_missing():
         "SELECT id FROM project LIMIT 5"
 
 
+def test_ensure_limit_replace_swaps_a_trailing_model_limit():
+    """The narrowing path: hyb-13 and hyb-15 ended in LIMIT 1 and collapsed the
+    filter set to one project. replace=True swaps it for the bound."""
+    assert ensure_limit("SELECT id FROM project LIMIT 1", 50000, replace=True) \
+        == "SELECT id FROM project LIMIT 50000"
+    assert ensure_limit("SELECT id FROM project", 50000, replace=True) == \
+        "SELECT id FROM project LIMIT 50000"
+
+
+def test_ensure_limit_replace_never_touches_a_subquery_limit():
+    sql = "SELECT id FROM (SELECT id FROM project LIMIT 5) t"
+    assert ensure_limit(sql, 50000, replace=True) == sql
+
+
+# --- comment stripping (the r3-fields-phaseA false-positive class: 14 of 25
+# narrowing calls rejected over semicolons or keywords inside comments) ---
+
+def test_comment_with_semicolon_is_not_two_statements():
+    # Verbatim shape from the narrowing log.
+    sql = ("SELECT DISTINCT p.id FROM project p JOIN organization o "
+           "ON o.projectID = p.id\nWHERE o.country = 'SE'\n"
+           "-- Topic constraint is handled semantically; no topic filter here")
+    out = validate_sql(sql)
+    assert out.rstrip().endswith("o.country = 'SE'")
+    assert "Topic constraint" not in out    # the stripped text is what runs
+
+
+def test_comment_with_forbidden_keyword_is_not_a_write():
+    assert validate_sql("SELECT 1\n-- do not SET anything here") == "SELECT 1"
+
+
+def test_block_comment_stripped_without_fusing_tokens():
+    out = validate_sql("SELECT/* count; DROP */COUNT(*) FROM project")
+    assert "DROP" not in out and "COUNT(*)" in out
+    assert "SELECTCOUNT" not in out
+
+
+def test_semicolon_inside_a_string_literal_is_data():
+    sql = "SELECT id FROM project WHERE title = 'a;b'"
+    assert validate_sql(sql) == sql
+
+
+def test_forbidden_keyword_inside_a_string_literal_is_data():
+    sql = "SELECT id FROM project WHERE title = 'DROP-IN centre'"
+    assert validate_sql(sql) == sql
+
+
+def test_double_dash_inside_a_string_literal_survives():
+    sql = "SELECT id FROM project WHERE acronym = 'a--b'"
+    assert validate_sql(sql) == sql
+
+
+def test_escaped_quote_inside_a_string_literal():
+    sql = "SELECT id FROM project WHERE title = 'it''s; fine'"
+    assert validate_sql(sql) == sql
+
+
+def test_genuine_second_statement_still_rejected_behind_a_comment():
+    with pytest.raises(SqlGuardrailError, match="multiple"):
+        validate_sql("SELECT 1 -- note\n; SELECT 2")
+
+
+def test_strip_comments_keeps_the_newline_of_a_line_comment():
+    assert strip_comments("SELECT 1 -- x\nFROM t") == "SELECT 1 \nFROM t"
+
+
 # --- execution guardrails ---
 
 def test_connection_is_read_only(tmp_path):
@@ -128,6 +194,22 @@ def test_log_written(tmp_path):
     path = make_path(tmp_path, ["SELECT 1"])
     path.ask("q")
     assert (tmp_path / "log.jsonl").read_text(encoding="utf-8").count("\n") == 1
+
+
+def test_replace_limit_overrides_a_model_limit_end_to_end(tmp_path):
+    path = SqlPath(llm=FakeLlm(["SELECT id FROM project LIMIT 1"]),
+                   log_path=tmp_path / "log.jsonl",
+                   row_limit=50000, replace_limit=True)
+    r = path.ask("q")
+    assert r.sql.endswith("LIMIT 50000")
+    assert len(r.rows) == 35389        # the whole set, not one project
+
+
+def test_prompt_label_names_the_callers_prompt(tmp_path):
+    path = SqlPath(llm=FakeLlm([]), log_path=tmp_path / "log.jsonl",
+                   system_prompt="narrowing instruction",
+                   prompt_label="narrow-v2")
+    assert path.prompt_version.startswith("narrow-v2:")
 
 
 # --- results_match ---

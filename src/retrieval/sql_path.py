@@ -48,6 +48,7 @@ class SqlResult:
 
 _FENCE_RE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 _LIMIT_RE = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
+_TRAILING_LIMIT_RE = re.compile(r"\bLIMIT\s+\d+\s*$", re.IGNORECASE)
 _FORBIDDEN_RE = re.compile(
     r"\b(INSERT|UPDATE|DELETE|MERGE|DROP|CREATE|ALTER|TRUNCATE|ATTACH|DETACH"
     r"|COPY|EXPORT|IMPORT|PRAGMA|INSTALL|LOAD|CALL|SET|RESET|BEGIN|COMMIT"
@@ -60,23 +61,104 @@ def strip_fences(text: str) -> str:
     return (m.group(1) if m else text).strip()
 
 
+def _string_end(sql: str, i: int) -> int:
+    """i points at an opening single quote; return the index just past the
+    literal, honouring '' escapes. Unterminated literal -> len(sql), and the
+    statement then fails in DuckDB with its own parse error, not here."""
+    i += 1
+    n = len(sql)
+    while i < n:
+        if sql[i] == "'":
+            if i + 1 < n and sql[i + 1] == "'":
+                i += 2
+                continue
+            return i + 1
+        i += 1
+    return n
+
+
+def strip_comments(sql: str) -> str:
+    """Remove -- line and /* */ block comments, leaving string literals intact.
+
+    The guardrails must judge only what DuckDB would execute. Before this
+    existed, a model explaining itself in a trailing comment was rejected
+    whenever the comment held a ';' (read as a second statement) or a word like
+    SET (read as a write) - in the r3-fields-phaseA narrowing log that was 14 of
+    25 calls, every one a false positive.
+    """
+    out = []
+    i, n = 0, len(sql)
+    while i < n:
+        if sql[i] == "'":
+            j = _string_end(sql, i)
+            out.append(sql[i:j])
+            i = j
+        elif sql.startswith("--", i):
+            j = sql.find("\n", i)
+            i = n if j == -1 else j        # keep the newline itself
+        elif sql.startswith("/*", i):
+            j = sql.find("*/", i + 2)
+            i = n if j == -1 else j + 2
+            out.append(" ")                # never fuse the surrounding tokens
+        else:
+            out.append(sql[i])
+            i += 1
+    return "".join(out)
+
+
+def blank_strings(sql: str) -> str:
+    """Every string literal replaced by '', for structural checks only - a ';'
+    or a keyword INSIDE a value ('a;b', 'DROP-IN centre') is data, not SQL.
+
+    Public because structural checks outside this module need the same view
+    of a statement: only what DuckDB would read as syntax, never a value.
+    """
+    out = []
+    i, n = 0, len(sql)
+    while i < n:
+        if sql[i] == "'":
+            i = _string_end(sql, i)
+            out.append("''")
+        else:
+            out.append(sql[i])
+            i += 1
+    return "".join(out)
+
+
 def validate_sql(sql: str) -> str:
-    """Return the normalized statement or raise SqlGuardrailError."""
-    sql = sql.strip().rstrip(";").strip()
+    """Return the normalized statement or raise SqlGuardrailError.
+
+    Comments are stripped BEFORE validation and the stripped text is what gets
+    returned, so the trace records exactly what ran. Structural checks (second
+    statement, forbidden keyword) run with string literals blanked out.
+    """
+    sql = strip_comments(sql).strip().rstrip(";").strip()
     if not sql:
         raise SqlGuardrailError("empty statement")
-    if ";" in sql:
+    structural = blank_strings(sql)
+    if ";" in structural:
         raise SqlGuardrailError("multiple statements are not allowed")
     first = re.split(r"\s+", sql, maxsplit=1)[0].upper()
     if first not in ("SELECT", "WITH"):
         raise SqlGuardrailError(f"only SELECT is allowed, got '{first}'")
-    m = _FORBIDDEN_RE.search(sql)
+    m = _FORBIDDEN_RE.search(structural)
     if m:
         raise SqlGuardrailError(f"forbidden keyword '{m.group(1).upper()}'")
     return sql
 
 
-def ensure_limit(sql: str, row_limit: int = SQL_ROW_LIMIT) -> str:
+def ensure_limit(sql: str, row_limit: int = SQL_ROW_LIMIT,
+                 replace: bool = False) -> str:
+    """Append a LIMIT when none is present; with replace=True, also swap a
+    trailing model-written LIMIT for row_limit.
+
+    replace is for the id-narrowing path, where a filter set is a set and a
+    model's `LIMIT 1` silently truncates it to one project. The SQL route keeps
+    replace=False: there a model LIMIT is often the answer ("top 5"). A LIMIT
+    inside a subquery is never touched by either mode.
+    """
+    if replace and _TRAILING_LIMIT_RE.search(sql):
+        return _TRAILING_LIMIT_RE.sub(f"LIMIT {row_limit}", sql)
     return sql if _LIMIT_RE.search(sql) else f"{sql} LIMIT {row_limit}"
 
 
@@ -100,16 +182,20 @@ class SqlPath:
     def __init__(self, llm=None, db_path=DB_PATH,
                  log_path=SQL_LOG_PATH, timeout_s: float = SQL_TIMEOUT_S,
                  row_limit: int = SQL_ROW_LIMIT,
-                 system_prompt: str | None = None):
+                 system_prompt: str | None = None,
+                 replace_limit: bool = False,
+                 prompt_label: str = SQL_PROMPT_VERSION):
         self.llm = llm or make_llm()
         self.db_path = db_path
         self.log_path = log_path
         self.timeout_s = timeout_s
         self.row_limit = row_limit
+        self.replace_limit = replace_limit
         # Injectable so M4 hybrid reuses all guardrails/retry with a different
-        # instruction (id-narrowing) instead of copying this class.
+        # instruction (id-narrowing) instead of copying this class. prompt_label
+        # lets that caller version its own prompt instead of wearing this one's.
         self.system_prompt = system_prompt or build_system_prompt()
-        self.prompt_version = f"{SQL_PROMPT_VERSION}:{fingerprint(self.system_prompt)}"
+        self.prompt_version = f"{prompt_label}:{fingerprint(self.system_prompt)}"
 
     def build_messages(self, question: str) -> list[dict]:
         return [{"role": "system", "content": self.system_prompt},
@@ -124,7 +210,8 @@ class SqlPath:
             error = None
             try:
                 sql = ensure_limit(validate_sql(strip_fences(raw)),
-                                   self.row_limit)
+                                   self.row_limit,
+                                   replace=self.replace_limit)
                 result.sql = sql
             except SqlGuardrailError as e:
                 sql = raw.strip()
