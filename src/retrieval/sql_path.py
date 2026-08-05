@@ -25,7 +25,15 @@ from src.llm import fingerprint, make_llm
 # corrected to sd2 (euroSciVocPath leading-slash bug), which changes this
 # prompt's content and therefore its fingerprint. Study 0.5's baseline is
 # q2-pilot/sd2; the study has not run, so nothing is contaminated.
-SQL_PROMPT_VERSION = "q2-pilot"
+# q3-sd3 (2026-08-05): same situation again - schema_docs.md went to sd3 (all
+# 56 fundingScheme codes instead of 11 examples). The label moves with the
+# doc because the label is what a person reads in a report: two runs both
+# reading "q2-pilot" would look like the same prompt when one holds 11
+# schemes and the other 56. The hash always told the truth; the name now
+# does too. Run hyb-valuegate-20260805 executed the sd3 text under the OLD
+# labels (q2-pilot:390895368e0c, narrow-v3:22863c1ea173) - the hashes there
+# are this content, the names are not.
+SQL_PROMPT_VERSION = "q3-sd3"
 
 
 class SqlGuardrailError(ValueError):

@@ -11,7 +11,7 @@ Join key everywhere: `<table>.projectID = project.id`. `rcn` and `contentUpdateD
 - ecSignatureDate DATE - EC grant signature date. Never null.
 - ecMaxContribution - committed EU funding for the project. USE THIS for "EU funding" questions. Per project it ~equals SUM(organization.ecContribution) (differs >1% in 109 projects). Never SUM it across a join to organization (it repeats per org row).
 - totalCost - total project cost = EU funding + participants' own resources. NOT "EU funding".
-- fundingScheme VARCHAR - type of action. 56 values; top: MSCA-IF, RIA, SME-1, MSCA-IF-EF-ST, CSA, ERC-STG, ERC-COG, IA, ERC-ADG, SME-2, ERC-POC.
+- fundingScheme VARCHAR - type of action. All 56 values, frequency order (1 row is NULL): MSCA-IF, RIA, SME-1, MSCA-IF-EF-ST, CSA, ERC-STG, ERC-COG, IA, ERC-ADG, SME-2, ERC-POC, MSCA-ITN, MSCA-RISE, MSCA-IF-GF, MSCA-IF-EF-RI, MSCA-ITN-ETN, MSCA-COFUND, CS2-IA, ERC-POC-LS, MSCA-IF-EF-CAR, MSCA-IF-EF-SE, CS2-RIA, ERC-SyG, SME, ERA-NET-Cofund, MSCA-ITN-EID, SESAR-RIA, FCH2-RIA, CSA-LSP, Shift2Rail-RIA, PCP, SME-2b, BBI-RIA, MSCA-ITN-EJD, ECSEL-RIA, IMI2-RIA, SESAR-IA, BBI-IA-DEMO, ECSEL-IA, COFUND-EJP, BBI-CSA, ERC-LVG, CS2-CSA, FCH2-IA, FCH2-CSA, PPI, MSCA-COFUND-DP, BBI-IA-FLAG, Shift2Rail-CSA, Shift2Rail-RIA-LS, COFUND, SESAR-CSA, IA-LS, COFUND-PCP, IMI2-CSA, Shift2Rail-IA. Use these codes exactly - never a scheme's descriptive name.
 - frameworkProgramme VARCHAR - always 'H2020'.
 - legalBasis VARCHAR - main specific programme code (e.g. 'H2020-EU.1.3.'); names in legal_basis table.
 - topics VARCHAR - call topic code; equals topics.topic for the same project.

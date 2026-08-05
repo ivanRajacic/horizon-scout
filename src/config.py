@@ -218,7 +218,11 @@ JUDGE_PASS_FAITHFULNESS = 0.80
 # pre-registered value-description intervention; see working-plan.md Step 4.
 # Bank entries authored before this carry the sd1-pilot hash as provenance -
 # that is honest history, not staleness (bank.py never re-checks the hash).
-SCHEMA_DOCS_VERSION = "sd2"
+# sd3 (2026-08-05): all 56 fundingScheme values listed instead of the top 11,
+# after hyb-09's narrowing wrote a scheme's descriptive name where the column
+# stores the code. Better odds only - the value gate in scoped.py is the
+# floor (hyb-06 proved a complete list in the prompt still leaks).
+SCHEMA_DOCS_VERSION = "sd3"
 # The skill-authored bank (schema v2). The pre-skill smoke set is archived
 # under eval/archive/ in the old schema and is not validated anymore.
 BANK_PATH = ROOT / "eval" / "bank.jsonl"

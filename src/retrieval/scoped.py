@@ -72,7 +72,13 @@ NARROW_ROW_LIMIT = 50000
 # re-reading the question; euroSciVoc joins the allowed dimensions (9 of 11
 # hybrid gold filters narrow on it); ORs must be parenthesized (hyb-03 wrote
 # `A OR B AND C` and DuckDB's precedence silently dropped the threshold).
-NARROW_PROMPT_VERSION = "narrow-v3"
+# narrow-v4 (2026-08-05): no text changed HERE - schema_docs.md went to sd3
+# (all 56 fundingScheme codes), and this prompt pastes the doc in whole, so
+# its content moved. Same rule as SQL_PROMPT_VERSION q3-sd3: the label
+# follows the doc, because the label is the part a person reads. The value
+# gate itself did NOT move it - the gate is code and its correction hints
+# ride in the user message.
+NARROW_PROMPT_VERSION = "narrow-v4"
 
 # Subject-matter columns must never appear as a narrowing filter - they encode
 # what a project is ABOUT, which is semantic search's job, not the metadata

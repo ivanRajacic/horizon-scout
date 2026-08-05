@@ -349,7 +349,7 @@ def test_the_pre_filter_rule_is_in_the_frozen_system_prompt():
 def test_narrowing_prompt_names_the_call_code_trap_and_owns_its_version():
     from src.retrieval.scoped import (NARROW_PROMPT_VERSION,
                                       build_id_narrowing_prompt)
-    assert NARROW_PROMPT_VERSION == "narrow-v3"
+    assert NARROW_PROMPT_VERSION == "narrow-v4"
     prompt = build_id_narrowing_prompt()
     assert "CALL CODES" in prompt
     assert "euroSciVocPath" in prompt          # the classification is allowed
