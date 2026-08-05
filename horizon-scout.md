@@ -218,17 +218,26 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   $0.48 per answer on Sonnet against $0.028 to generate - about 10x - and the
   blocker was never money but the 5-hour Max window. On a cheap API the whole
   bank costs single-digit euros.
-- **The seats are decided (2026-08-04), no calibration run: judge = DeepSeek
-  V4 Flash, generator = Gemini 2.5 Flash-Lite.** The planned agreement
+- **The seats are decided (2026-08-04; generator re-decided 2026-08-05 before
+  any run): judge = DeepSeek V4 Flash, generator = gpt-5-nano.** The planned
+  agreement
   calibration against the 40 Sonnet-judged pilot answers is dropped for budget
   and simplicity. Reasoning on record: the judge seat gets the most capable
   cheap model because a weak judge corrupts every number while a mediocre
   generator only makes all conditions equally harder, which the comparison
   survives; the generator seat gets the most boring reliable JSON emitter.
-  Different vendors, temperature 0 on the judge, thinking/reasoning pinned off
-  on both, no expiry date on either (gpt-5-mini lost the judge seat to its
-  2026-12-11 shutdown plus 4x the cost; its stronger published judge evidence
-  is the disclosed tradeoff). Known risk, instrumented rather than ignored:
+  The 2026-08-05 generator swap (Gemini 2.5 Flash-Lite -> gpt-5-nano) followed
+  from a vendor-preference call against Google plus a fresh API sweep: nano is
+  cheaper ($0.05/$0.40 vs $0.10/$0.40), strict-json_schema, and OpenAI's
+  data-sharing free-token tier makes gen runs effectively free. Different
+  vendors, temperature 0 on the judge (the GPT-5 family locks the generator's
+  at 1), thinking/reasoning pinned to the floor on both ("minimal" is GPT-5's
+  off-switch), no expiry date on the judge (gpt-5-mini lost the judge seat to
+  its 2026-12-11 shutdown plus 4x the cost; its stronger published judge
+  evidence is the disclosed tradeoff). The generator DOES sit in that retiring
+  nano/mini tier - accepted because the seat only has to outlive the study,
+  and a weak-or-retired generator never corrupts the comparison the way a
+  judge would. Known risk, instrumented rather than ignored:
   DeepSeek has only loose JSON mode, and RAGAS returns None on parse failure
   which then scores 0.0 - so parse failures are counted and reported, never
   silent. Budget: the study is planned to run TWICE; on this stack two full
@@ -249,7 +258,7 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   on Max). Run-side cost is noise next to judging: ~18k in / ~1k out per
   question, so a full 58-question run prices at ~$0.20 on DeepSeek V4 Flash or
   ~$0.45 on gpt-5-mini (prices re-verified 2026-08-04). No model grades its own
-  output: Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges. Both
+  output: gpt-5-nano generates, DeepSeek V4 Flash judges. Both
   pinned in `src/config.py` and frozen before round one, identical across all
   three rounds.
 - **References** are written from gold evidence only, never from system
@@ -283,7 +292,7 @@ Freeze discipline is relaxed: prompts and thresholds can move if the change is
 disclosed in the write-up. Four things stay genuinely frozen because every
 recorded number depends on them - the chunking and index config, the retrieval
 stack (`config.RUNTIME_RETRIEVER`), and the judge (DeepSeek V4 Flash) and
-generator (Gemini 2.5 Flash-Lite) decided in §5. The agentic scaffold freezes
+generator (gpt-5-nano) decided in §5. The agentic scaffold freezes
 after its pilot so later runs stay comparable.
 
 ## 7. What ships
@@ -325,9 +334,9 @@ arc - built it, benchmarked it, improved it, showed the numbers.
 retrieval stack chosen on a 10-question pilot; bank at the size it froze at, with
 the vector trim and its selection rule stated; RAGAS 0.4.3 with a one-paragraph
 NLI amendment, not stock; generator, judge and reference author separated by
-role AND by vendor (Google / DeepSeek / Anthropic) - no model grades its own
-work and no vendor holds two seats; scoped-provenance and SQL-scorer
-fixes landed before the baseline as wiring, not as improvements; no formal coverage argument for the bank's
+role AND by vendor (OpenAI / DeepSeek / Anthropic) - no model grades its own
+work and no vendor holds two seats; scoped-provenance, SQL-scorer and
+judge-retry fixes landed before the baseline as wiring, not as improvements; no formal coverage argument for the bank's
 question distribution; no ambiguous or compositional cells (dropped 2026-08-04,
 §6) - but over-refusal on answerable questions IS controlled, by the nine
 adversarial twins.
@@ -337,20 +346,21 @@ adversarial twins.
 Live state and what is next: `working-plan.md`.
 
 1. ~~**Trim the bank to 49** via `archive-questions`~~ - **DONE 2026-08-03** (§3.3).
-2. **Swap both seats to external APIs, first** - an OpenAI-compatible generation
-   backend in `src/llm.py` beside `ClaudeCliLLM` pointed at Gemini 2.5
-   Flash-Lite, and the judge backend in `src/judge/ragas_backend.py` pointed at
-   DeepSeek V4 Flash (§5). Pin both in `src/config.py`; the new backends log
-   cost and prompt versions the same way `claude -p` did; smoke each on a
-   handful of questions. This comes before the fixes so nothing is built or
-   verified against a transport that is about to be replaced.
-3. **Fix the three things that would corrupt a baseline** - scoped mode passes
-   zero rows to the generator so it hedges on its own filter; the SQL scorer
-   compares whole rows instead of `answer_columns`; judge calls have no retry
-   (the pilot's ~20% `stop_reason:"tool_use"` failure class was `claude -p`
-   -specific and dies with the swap - the retry is written against the new
-   backend's actual failure modes). All three are in
-   `docs/pilot-router-findings.md` Part 2.
+2. **Swap both seats to external APIs, first** - **BUILT 2026-08-04; the seat
+   smoke is still owed and is the immediate next step.** An OpenAI-compatible
+   generation backend in `src/llm.py` beside `ClaudeCliLLM` pointed at
+   gpt-5-nano, and the judge backend in `src/judge/ragas_backend.py` pointed
+   at DeepSeek V4 Flash (§5). Pin both in `src/config.py`; the new backends
+   log cost and prompt versions the same way `claude -p` did; smoke each on a
+   handful of questions. This came before the fixes so nothing was built or
+   verified against a transport that was about to be replaced.
+3. ~~**Fix the three things that would corrupt a baseline**~~ - **DONE
+   2026-08-05**: scoped provenance and the SQL scorer landed 2026-08-04
+   (`7891908`, `9dc61c6`); the judge retry became empty-completion retry at
+   the transport gate (loud, unretried failure when `finish_reason=length` -
+   a token-cap misconfiguration) plus one bounded same-prompt re-ask on a
+   judge completion without parseable JSON, both counted in the report's
+   Judge health. All three are in `docs/pilot-router-findings.md` Part 2.
 4. ~~**Author the last questions**~~ - **DONE 2026-08-04**: 9 adversarial
    authored through `/question-orchestrator` (batches K-M), ambiguous and
    compositional dropped (§6). Bank complete at 58.

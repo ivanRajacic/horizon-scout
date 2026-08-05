@@ -61,10 +61,13 @@ The order is `horizon-scout.md` §8. Immediately:
 
 1. ~~Trim the bank to 49.~~ **Done 2026-08-03** - see above.
 2. **Both seats swap to external APIs, FIRST** - **BUILT 2026-08-04, smoke
-   still owed.** Everything the item specified is in and tested (552
-   passing): `src/openai_compat.py` is the one OpenAI-compatible transport -
-   two frozen `ApiSeat`s (generator = `gemini-2.5-flash-lite` with
-   `reasoning_effort "none"`, judge = `deepseek-v4-flash` with thinking
+   still owed.** Everything the item specified is in and tested (562
+   passing, including the item-3 retry tests):
+   `src/openai_compat.py` is the one OpenAI-compatible transport -
+   two frozen `ApiSeat`s (generator = `gpt-5-nano` with
+   `reasoning_effort "minimal"`, temperature locked at 1 and
+   `max_completion_tokens` as its cap parameter - re-decided 2026-08-05 from
+   `gemini-2.5-flash-lite`, before any run; judge = `deepseek-v4-flash` with thinking
    disabled and temperature 0), each with its own semaphore, backoff on
    transient HTTP failures, and cost computed from per-Mtok prices pinned in
    `src/config.py` (these dollars are billed, unlike the priced `claude -p`
@@ -78,22 +81,34 @@ The order is `horizon-scout.md` §8. Immediately:
    record through `src/eval/usage.py` at their one gate. The report moved
    from pass rates to continuous scores: judged routes show mean factual
    with min/median/max, sql stays exact execution, ADV stays the refusal
-   rubric. **Remaining before item 3, the immediate next step:** set
-   `GEMINI_API_KEY` and `DEEPSEEK_API_KEY` in the environment, then smoke
+   rubric. **Remaining, and the immediate next step:** set
+   `OPENAI_API_KEY` and `DEEPSEEK_API_KEY` in the environment (or `.env` at
+   the repo root, loaded by `src/config.py`), then smoke
    both seats with a small judged run per route, e.g.
    `run-bank --routes sql --limit 3`, then `--routes vector --limit 3`
    (add an adversarial id to exercise the rubric overlay). Read the
    answers, the verdicts and the report's Judge health section - the point
    is to see both seats behave before anything depends on them. The seats
    freeze on that smoke; after it, never change either again.
-3. **Three pre-baseline fixes**, all from `docs/pilot-router-findings.md` Part 2:
-   scoped mode passes `rows_passed_to_gen = 0` so the generator hedges on its own
-   filter (§1); the SQL scorer compares whole rows instead of `answer_columns`,
-   and `columns_ok` is computed and never used (§3); judge calls have no retry -
-   the pilot's `stop_reason:"tool_use"` class that killed 2 of 9 calls was
-   `claude -p`-specific and dies with the swap, so the retry is written against
-   the new backend's actual failure modes (§4). Each needs a test. The scoped
-   fix changes what the system answers, so it is disclosed in the write-up as
+3. ~~**Three pre-baseline fixes**~~ - **DONE 2026-08-05**, all from
+   `docs/pilot-router-findings.md` Part 2, each with regression tests. Two had
+   already landed on 2026-08-04 without this item being updated: the scoped
+   provenance fix (§1) in `7891908` - synthesis gets a `filter_note` naming
+   the survivor count and quoting the narrowing SQL, prompt at
+   `s2-provenance`, and `rows_passed_to_gen` stays 0 on purpose because the
+   covariate means DB rows in an LLM prompt and a note is not rows - and the
+   SQL scorer (§3) in `9dc61c6` - both gold and generated results project to
+   `answer_columns`, with `projection` and `columns_ok` recorded on the
+   score. The judge retry (§4) landed 2026-08-05 as two changes against the
+   new backend's actual failure modes: `call_api_gated` retries empty
+   completions through the existing backoff ladder (the envelope is recorded
+   in usage first, because those tokens were billed; empty at
+   `finish_reason=length` is a token-cap misconfiguration and fails loud with
+   no retry), and `OpenAICompatLLM` re-asks once, same prompt, when a judge
+   completion has no parseable JSON - `parse_retries` and
+   `parse_retry_recovered` join Judge health, and if recovered stays 0
+   through the smoke and round one the re-ask gets deleted. The scoped fix
+   changes what the system answers, so it is disclosed in the write-up as
    pre-baseline wiring, not as an improvement.
 4. ~~**Author the last questions**~~ - **DONE 2026-08-04.** Adversarial was
    flipped into `/question-orchestrator` (bank schema v2.3: born-verified ADV
@@ -133,13 +148,15 @@ A backlog spanning four days of work went in as five commits, one per unit:
   report format still expects verdicts and severities that no longer exist. A
   note sits at the top of that file. Not blocking anything.
 - **`## Distributions` in `corpus_profile.md` is unfilled.** It would make the
-  explorer's orientation block free thereafter. Low priority now that the bank is
-  nearly closed.
-- **`tests/test_lexical.py` needs exclusive DB access.** Its session fixture
-  calls `build_fts_index()`, which needs a read-write DuckDB handle, and any
+  explorer's orientation block free thereafter. Low priority now that the bank
+  is complete.
+- **`tests/test_lexical.py` can still hit a DB lock, but only on a stale
+  index.** Since `17a554c` the session fixture reuses the production FTS index
+  read-only whenever `fts_index_is_fresh()` proves it matches the chunk table
+  and config (sidecar `data/processed/horizon.fts-meta.json`). Only a genuinely
+  stale index triggers the read-write rebuild, which errors while a
   `horizon-draft` MCP server from another session holds the file open. A lock
-  conflict, not a regression - the tests pass in a session that has not used the
-  MCP tools.
+  conflict, not a regression.
 
 ## Known notes carried on promoted bank records
 

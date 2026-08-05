@@ -14,10 +14,12 @@ Two things must be up:
 - the **embedder** (bge-base on :8080) - any question that retrieves needs it.
   A SQL-only selection (`--routes sql`) does not, and the runner skips the check
   in that case.
-- the **API keys** (v5, 2026-08-04) - generation and judging both run on
-  external APIs now: `GEMINI_API_KEY` for the generator (Gemini 2.5
-  Flash-Lite) and `DEEPSEEK_API_KEY` for the judge (DeepSeek V4 Flash), both
-  checked before anything is spent. No local generation server and no Claude
+- the **API keys** (v5, 2026-08-04; generator re-decided 2026-08-05) -
+  generation and judging both run on external APIs now: `OPENAI_API_KEY` for
+  the generator (gpt-5-nano) and `DEEPSEEK_API_KEY` for the judge (DeepSeek
+  V4 Flash), both checked before anything is spent. Either set them in the
+  environment or put them in `.env` at the repo root - `src/config.py` loads
+  it on import and never overrides variables already set. No local generation server and no Claude
   CLI are needed; `GEN_BACKEND` defaults to `"api"`.
 
 The reranker on :8082 is only used by the rerank retrieval condition, which the
@@ -141,10 +143,13 @@ why they broke.
   question's state rather than patching it. Read it with
   `src.eval.run.read_records(path)` for current state, or `raw=True` for the
   history.
-- **`report.md`** - GENERATED from those records, never written by hand. Pass
-  rates per route and level, misroutes with the router's own reason, retrieval
-  metrics, time and spend, then the failures with each answer beside its
-  reference, then one line per question.
+- **`report.md`** - GENERATED from those records, never written by hand.
+  Continuous scores per route and level (mean factual with min/median/max on
+  the judged routes; sql stays exact execution; ADV stays the refusal
+  rubric), judge health (completions without parseable JSON, parse retries),
+  misroutes with the router's own reason, retrieval metrics, time and spend,
+  then the failures with each answer beside its reference, then one line per
+  question.
 - **`progress.log`** - what you saw while it ran.
 
 Every record also carries the full trace: the mode it ran in, the generated SQL,
@@ -195,7 +200,7 @@ rerank - generates an answer per condition, and scores each condition's ranking.
 - the **embedder** (:8080) for dense, hybrid and hybrid_rerank. A
   `--conditions lexical` run does not need it and does not check for it.
 - the **reranker** (:8082) for hybrid_rerank only.
-- the **API keys** always: `GEMINI_API_KEY` (generation) and
+- the **API keys** always: `OPENAI_API_KEY` (generation) and
   `DEEPSEEK_API_KEY` (judging).
 - the **FTS index** must be built, for anything with a lexical side. If it is
   missing, `LexicalRetriever` says so with the fix; the fix is

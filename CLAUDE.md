@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation (M5) measuring the system against a hand-authored, execution-verified question bank (`eval/bank.jsonl`, 49 questions, target 60).
+Horizon Scout: a hybrid retrieval + SQL question-answering system over the EU CORDIS/Horizon research-project corpus (35,389 projects in DuckDB, 190,248-vector FAISS index), plus an evaluation (M5) measuring the system against a hand-authored, execution-verified question bank (`eval/bank.jsonl`, complete at 58 questions since 2026-08-04: 49 on the sql/vector/hybrid ladder plus 9 adversarial).
 
 **What is measured: three rounds - baseline, improved, agentic.** Rounds one and two each run two conditions, `router` and `always-hybrid`, which is the one comparison the architecture poses. Retrieval is NOT measured: one stack runs everywhere (`config.RUNTIME_RETRIEVER = "hybrid_rerank"`), chosen on the 2026-07-29 pilot ladder.
 
@@ -22,7 +22,7 @@ Read the first two before any M5/eval work. Decisions recorded there are locked 
 
 Always use the venv interpreter: `./.venv/Scripts/python.exe` (Git Bash syntax).
 
-- Tests: `./.venv/Scripts/python.exe -m pytest` (475 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
+- Tests: `./.venv/Scripts/python.exe -m pytest` (562 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
 - Bank: `validate-bank`, `validate-record <record.json|->`, `promote-drafts <report.md>`, `archive-questions --ids ... --reason "<why>"` (the only way a question leaves the bank; `--dry-run` first), `judge-file <cases.jsonl>`
 - Runtime: `ask "<q>"`, `ask-sql`, `search`, `explore` (verbose REPL), `build-index`, `build-fts`, `smoke`, `smoke-sql`, `smoke-router`, `bench-retrievers`
 - `/question-orchestrator` nodes: `gap-report`, `next-ids` (`--sql/--vector/--hybrid/--adversarial`), `pick-parents` (the answerable bank questions an adversarial batch derives from), `journal-append`, `batch-crosscheck`, `write-batch`
@@ -36,7 +36,7 @@ Local model servers (llama-server; launch commands pinned in `src/config.py`, fl
 - Reranker (bge-reranker-v2-m3, :8082) - the rerank condition
 - Qwen3-8B (:8081) - legacy generation only (`GEN_BACKEND="local"`); not needed by default
 
-Generation and judging run through external APIs (v5, 2026-08-04): Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges, both via `src/openai_compat.py`. Keys come from the environment: `GEMINI_API_KEY` and `DEEPSEEK_API_KEY`.
+Generation and judging run through external APIs (v5, 2026-08-04; generator re-decided 2026-08-05): gpt-5-nano generates, DeepSeek V4 Flash judges, both via `src/openai_compat.py`. Keys come from the environment: `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`.
 
 ## Architecture
 
@@ -46,7 +46,7 @@ Generation and judging run through external APIs (v5, 2026-08-04): Gemini 2.5 Fl
 - `retrieval/` - four conditions behind one interface (`base.py`, `registry.py`): `lexical.py` (DuckDB FTS/BM25), `vector_search.py` (FAISS), `hybrid.py` (RRF), `rerank.py` (cross-encoder); plus `scoped.py` (SQL-filtered vector search) and `sql_path.py` (guardrailed text-to-SQL - `validate_sql` enforces a single read-only SELECT)
 - `router/` -> sql / vector / scoped; `synthesis/` -> answer from evidence; `ask.py` -> end-to-end, logging every run to `data/logs/ask.jsonl`
 
-**Transport and roles (v5, fixed 2026-08-04).** Two transports, one per kind, never more: `src/openai_compat.py` is the ONE OpenAI-compatible HTTP transport - both external seats (generation and judging) go through its `call_api_gated`, each seat with its OWN semaphore - and `src/claude_cli.py` is the ONE `claude -p` transport (process-wide semaphore, cap 16), now serving only the retired legacy backends. Do not widen the `claude -p` semaphore to cover API calls or vice versa. `src/llm.py:make_llm()` picks the generation client by `GEN_BACKEND` ("api" = Gemini 2.5 Flash-Lite, default); `config.JUDGE_BACKENDS` maps judge model keys to transports ("deepseek" = default). Roles: Gemini 2.5 Flash-Lite generates, DeepSeek V4 Flash judges (`src/judge/`, RAGAS + a rubric refusal-overlay for adversarial questions), Opus authored questions and references (done). No model wears two hats, no vendor holds two seats. Both seats are frozen for the study; the judge backend counts completions without parseable JSON (DeepSeek's loose-JSON risk) and every run report carries the counts.
+**Transport and roles (v5, fixed 2026-08-04).** Two transports, one per kind, never more: `src/openai_compat.py` is the ONE OpenAI-compatible HTTP transport - both external seats (generation and judging) go through its `call_api_gated`, each seat with its OWN semaphore - and `src/claude_cli.py` is the ONE `claude -p` transport (process-wide semaphore, cap 16), now serving only the retired legacy backends. Do not widen the `claude -p` semaphore to cover API calls or vice versa. `src/llm.py:make_llm()` picks the generation client by `GEN_BACKEND` ("api" = gpt-5-nano, default); `config.JUDGE_BACKENDS` maps judge model keys to transports ("deepseek" = default). Roles: gpt-5-nano generates (swapped in for Gemini 2.5 Flash-Lite on 2026-08-05, before any run), DeepSeek V4 Flash judges (`src/judge/`, RAGAS + a rubric refusal-overlay for adversarial questions), Opus authored questions and references (done). No model wears two hats, no vendor holds two seats. Both seats are frozen for the study; the judge backend counts completions without parseable JSON (DeepSeek's loose-JSON risk) and every run report carries the counts.
 
 ### The bank (M5, `src/eval/`, `eval/`)
 
@@ -70,6 +70,9 @@ Everything is authored by skills (`.claude/skills/`) driving read-only subagents
 - **Deterministic-first.** Anything with a right answer is code, not a model. When a check is possible by re-execution, do it exhaustively rather than sampling it with an expensive node - that is why `verify-evidence` re-runs every exploration claim instead of two per section. Model nodes are for authorship and judgement; adding one to do arithmetic is the anti-pattern.
 
 ## Conventions that matter here
+
+- **Run anything long-lived or worth watching in a new terminal tab**, never inside a tool call the user cannot see into - bank runs, smokes, resumes, server launches, batches. Write the command into a small `.sh` script and launch it with `wt new-tab -d C:\horizon-scout --title <name> "C:\Program Files\Git\bin\bash.exe" -i -l <script>` (the pattern is in the user's global CLAUDE.md), verify by process, then read the run's own files (`progress.log`, `report.md`) for analysis. Quick one-shot checks (a single API probe, a grep, pytest) can stay inline.
+- **Never open, read, print, or echo `.env`** - it holds the live API keys. `src/config.py` loads it on import; nothing ever needs to look inside it. To check whether a key is set, test for the variable's presence (e.g. `python -c "import os, src.config; print(bool(os.environ.get('OPENAI_API_KEY')))"`), never by reading the file.
 
 - **Trace everything.** Every prompt asset carries a version label AND a content hash (`src/llm.py:fingerprint`); bump the version on any meaningful edit. Runs log model + prompt versions to `data/logs/*.jsonl`. New prompts or judged paths must follow this.
 - `src/config.py` is the single source of truth for paths, models, thresholds and server launch commands. Its comments record WHY values are load-bearing - read them before changing anything.

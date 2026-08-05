@@ -1,11 +1,18 @@
 # Pilot findings - the `pilot-router` run
 
-**Status (2026-08-03): the findings stand; the "Suggested order" section at the
-bottom is superseded by `horizon-scout.md` §8.** Two things it left open are now
-decided there: the threshold contradiction is settled in favour of reporting
-continuous scores with no pass gate (§5), and Part 2 fixes 1, 3 and 4 are
-scheduled before the baseline run rather than after it, because a baseline
-measured through them would not mean anything.
+**Status (2026-08-03, updated 2026-08-05): the findings stand; the "Suggested
+order" section at the bottom is superseded by `horizon-scout.md` §8.** Two
+things it left open are now decided there: the threshold contradiction is
+settled in favour of reporting continuous scores with no pass gate (§5), and
+Part 2 fixes 1, 3 and 4 were scheduled before the baseline run rather than
+after it, because a baseline measured through them would not mean anything.
+**All three have since landed**: fix 1 (scoped filter provenance) in `7891908`
+and fix 3 (SQL scorer projects to `answer_columns`) in `9dc61c6`, both
+2026-08-04; fix 4 on 2026-08-05, written against the API seats that replaced
+`claude -p` - empty completions retry at the transport gate, an unparseable
+judge completion gets one re-ask, both counted in the report's Judge health.
+Fixes 2 (retrieval budget by project) and 5 (topic-classification routing)
+remain unadopted candidates for round two.
 
 What the first end-to-end bank run showed, and what to do about it.
 
