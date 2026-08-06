@@ -45,10 +45,14 @@ authoring pipelines) carries over unchanged; the ceremony is dropped.
 3. **Agentic.** Runtime orchestration against the improved system - does
    deciding *during* execution buy anything over deciding once, upfront?
 
-**Inside rounds one and two, two conditions run: `router` and `always-hybrid`.**
-That is the one comparison the system architecture actually poses - a router
-picks a capability per question, always-hybrid refuses to choose and composes
-both every time. `force-sql` and `force-vector` stay in the runner as floors and
+**A round IS the `router` condition over all 58 questions.** That is the system
+as it ships, so that is what a round's number means.
+
+`always-hybrid` is an EXTRA arm, run on top of a round when the contrast is
+wanted: a router picks a capability per question, always-hybrid refuses to
+choose and composes both every time, and that contrast is the one the
+architecture poses. The agentic loop is an extra arm in the same sense (round
+three). `force-sql` and `force-vector` stay in the runner as floors and
 diagnostics; they are not part of the story.
 
 **Retrieval is not measured.** One stack runs everywhere:
@@ -186,8 +190,11 @@ making plots.
 - 35,389 CORDIS projects in DuckDB; 190,248 vectors in FAISS
   (`data/processed/index_meta.json`, built 2026-07-22, config frozen there).
 - Four retrieval conditions behind one interface; `hybrid_rerank` is what runs.
-- Guardrailed text-to-SQL (`validate_sql` enforces a single read-only SELECT).
-- Router -> sql / vector / scoped; synthesis; `ask.py` end to end.
+- Guardrailed text-to-SQL (`validate_sql` enforces a single read-only SELECT,
+  judged on the statement with comments stripped and string literals blanked).
+- Router -> sql / vector / scoped; synthesis; `ask.py` end to end. The scoped
+  route's narrowing step translates the router's extracted constraint list and
+  checks every value it writes against its own column before filtering (§6).
 - Every prompt carries a version label **and** a content hash; every run logs
   model and prompt versions; every LLM call is priced at its transport gate.
   `claude -p` has one (`src/claude_cli.py`, one process-wide semaphore, cap 16,
@@ -244,12 +251,33 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   studies price at ~8-9 EUR (~13 ceiling). Never change either seat mid-study.
 - **Metrics.** RAGAS 0.4.3 (pinned) `factual_correctness` + `faithfulness`, with
   the one-paragraph NLI amendment `n1-pilot` - disclosed as "RAGAS with an
-  amendment", not stock.
+  amendment", not stock. **`factual_correctness` runs `mode="precision"`
+  (2026-08-06), not the ragas default `f1`.** ragas' mode names are inverted
+  relative to what they measure: it decomposes both texts and checks each
+  direction, `tp` = reference claims the answer supports, `fp` = reference
+  claims it omits, `fn` = answer claims the reference does not contain. So
+  `precision` = tp/(tp+fp) is **coverage of the reference**, with extra content
+  absent from the formula; `recall` = tp/(tp+fn) is the extra-content penalty
+  alone; `f1` is the harmonic mean and sits between them. Coverage is the
+  question this bank asks, and under f1 answer length was moving the number -
+  on `full-2026-08-06` the shorter half of the answers scored 0.497 mean
+  factual against 0.282 for the longer half. Measured on the same 33 answers,
+  judged three times: **f1 0.374, recall 0.341, precision 0.438** (medians
+  0.39 / 0.35 / 0.44). The tradeoff, one line in the write-up: coverage does
+  not charge for invented content, so invention is caught elsewhere -
+  `faithfulness` against the retrieved context, and `invented_results` in the
+  adversarial rubric. Every number recorded before 2026-08-06 used f1 and is
+  not comparable; the mode is logged with every verdict.
 - **Route-aware dispatch, pre-registered by the bank's own flags, not decided at
   grading time.** SQL-route questions never reach the judge: they are scored by
   executing the generated query against the gold query, which is free and exact.
   Adversarial questions bypass RAGAS for a one-call refusal rubric, because
-  claim-decomposition metrics are structurally blind to a correct refusal.
+  claim-decomposition metrics are structurally blind to a correct refusal. The
+  rubric (`j0.3`, 2026-08-05) passes iff the refusal is explicit and nothing is
+  invented. A hedge - "the excerpts do not mention X" - fails on purpose: it
+  reports an empty search, not an absence, and only the second is the capability
+  under test. Coverage of the reference's near-miss forensics is recorded as a
+  bonus and never gates.
 - **Role separation, both seats external (changed 2026-08-04).** Opus authored
   the questions and references (done, on Max - authoring is over). At run time
   nothing runs on the subscription: generation - the router call, text-to-SQL,
@@ -288,20 +316,50 @@ Dropped, with the reason, so none of it is re-litigated:
 | **Ambiguous-route cell (n=3)** | dropped 2026-08-04 with the bank otherwise complete: underspecified questions are imprecise by construction, and the router-stress signal was judged not worth 3 hand-authored interactive-only questions | this table; §3 Allocation |
 | **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round; the agentic round now shows itself on the 58 (its cost/latency columns and failure buckets carry the story) | this table; §3 Allocation |
 
-Disclosed under the relaxed freeze so far: the scoped route's `filter_note`
-(2026-08-04, `7891908`), and the router rebuild (2026-08-05) that took
-misroutes from 12/58 to 2/58. The router change is more than a prompt edit -
-the model now reports two facts and `src/router/router.py:derive_mode` picks
-the mode in code - so "one LLM call returning one mode" no longer describes it.
-`always-hybrid`, the thing it is compared against, is untouched. Every router
-prompt ever run stays in `ROUTER_PROMPTS`, switchable by one string.
+Disclosed under the relaxed freeze so far, all before any baseline number was
+recorded:
+
+- The scoped route's `filter_note` (2026-08-04, `7891908`).
+- The router rebuild (2026-08-05, `33b2b24`) that took misroutes from 12/58 to
+  2/58. More than a prompt edit - the model now reports two facts and
+  `src/router/router.py:derive_mode` picks the mode in code - so "one LLM call
+  returning one mode" no longer describes it. `always-hybrid`, the thing it is
+  compared against, is untouched. Every router prompt ever run stays in
+  `ROUTER_PROMPTS`, switchable by one string.
+- The SQL guardrail judging only what DuckDB would execute (2026-08-05,
+  `5a7320d`): comments stripped, string literals blanked, and a model-written
+  `LIMIT` replaced by the caller's bound on the narrowing path.
+- The scoped route's narrowing rebuild (2026-08-05, `6d9345d`): it translates
+  the router's extracted constraint list instead of re-reading the question,
+  euroSciVoc joins the allowed dimensions, and a value gate checks every literal
+  against its own column before the filter runs. Measured over the 11 hybrid
+  questions plus their 3 adversarials: false `zero_match` 2 -> 0, hit@10 9/11 ->
+  10/11. This is the fix the 2026-08-05 pilot named as blocking the baseline.
+- `schema_docs.md` to `sd3` (2026-08-05, `6e421b2`): all 56 `fundingScheme`
+  codes instead of 11 examples. Both the SQL prompt and the narrowing prompt
+  paste the doc whole, so their labels moved with it - `q2-pilot` -> `q3-sd3`,
+  `narrow-v3` -> `narrow-v4`.
+- The adversarial refusal rubric to `j0.3` (2026-08-05, `82177f7`): pass is an
+  explicit refusal with nothing invented; coverage became a bonus (§5). This
+  moves a grading rule, so it is one of the two disclosures that touch the
+  judge - it landed before round one and the pilot numbers graded under `v0.2`
+  are not comparable to it.
+- `factual_correctness` from `f1` to `mode="precision"` (2026-08-06, §5). The
+  other judge-side change, and the larger one: it changes the scale every
+  judged number sits on. Everything measured up to and including
+  `full-2026-08-06` used f1. The mode is recorded on every verdict, so no
+  reading of an old log has to guess which instrument produced it. Worth
+  stating in the write-up rather than hiding: the same 33 answers were judged
+  under all three modes before the choice was made.
 
 Freeze discipline is relaxed: prompts and thresholds can move if the change is
 disclosed in the write-up. Four things stay genuinely frozen because every
 recorded number depends on them - the chunking and index config, the retrieval
 stack (`config.RUNTIME_RETRIEVER`), and the judge (DeepSeek V4 Flash) and
-generator (gpt-5-nano) decided in §5. The agentic scaffold freezes
-after its pilot so later runs stay comparable.
+generator (gpt-5-nano) decided in §5. The judge is pinned as of the 2026-08-05
+smoke; the generator pin waits for the dead answer cap (§8.5) plus one run
+showing the answer shape settled. The agentic scaffold freezes after its pilot
+so later runs stay comparable.
 
 ## 7. What ships
 
@@ -341,10 +399,14 @@ arc - built it, benchmarked it, improved it, showed the numbers.
 **Disclosures, one line each:** judge unvalidated against human labels;
 retrieval stack chosen on a 10-question pilot; bank at the size it froze at, with
 the vector trim and its selection rule stated; RAGAS 0.4.3 with a one-paragraph
-NLI amendment, not stock; generator, judge and reference author separated by
+NLI amendment and `factual_correctness` on `mode="precision"`, not stock - so
+the factual number is coverage of the reference, and invention is caught by
+faithfulness and by the adversarial rubric rather than by it; generator, judge and reference author separated by
 role AND by vendor (OpenAI / DeepSeek / Anthropic) - no model grades its own
-work and no vendor holds two seats; scoped-provenance, SQL-scorer and
-judge-retry fixes landed before the baseline as wiring, not as improvements; no formal coverage argument for the bank's
+work and no vendor holds two seats; the pre-baseline fixes landed as wiring, not
+as improvements (scoped provenance, the SQL scorer, the judge retry, the router
+rebuild, the narrowing value gate and the `j0.3` refusal rubric - §6 lists each
+with its commit); no formal coverage argument for the bank's
 question distribution; no ambiguous or compositional cells (dropped 2026-08-04,
 §6) - but over-refusal on answerable questions IS controlled, by the nine
 adversarial twins.
@@ -375,17 +437,25 @@ Live state and what is next: `working-plan.md`.
 4. ~~**Author the last questions**~~ - **DONE 2026-08-04**: 9 adversarial
    authored through `/question-orchestrator` (batches K-M), ambiguous and
    compositional dropped (§6). Bank complete at 58.
-5. **Build the agentic condition.** Edge policies fixed before implementation:
+5. **The four defects the 2026-08-05 seat smoke found** (`working-plan.md` has
+   each one in full). Two are done: the scoped route could not express the
+   bank's structured side, which blocked the baseline, and the adversarial pass
+   rule could not pass a correct refusal. One was decided and left alone: the
+   SQL scorer stays strict, so its number means "returned the right answer in
+   the pinned shape" and that is what the write-up will say (2026-08-06,
+   provisional - revisit after round one). One is open and is the next thing to
+   do: the answer-length cap is dead code, and it holds the generator pin.
+6. **Build the agentic condition.** Edge policies fixed before implementation:
    max steps, stop conditions, and the four failure buckets - planning error,
    execution drift, non-termination, recovery win. Bucket counts are the
    evidence; trace anecdotes are appendix illustrations. Latency and call count
    are first-class result columns, reported as a multiplier rather than an
    apology.
-6. **Run round one**, `--no-judge` first, read the answers, then `--resume` for
+7. **Run round one**, `--no-judge` first, read the answers, then `--resume` for
    verdicts.
-7. **Round two** from what round one shows, plus the candidates already on the
+8. **Round two** from what round one shows, plus the candidates already on the
    shelf in `docs/improvement-research-2026-07-27.md`.
-8. **Round three**, then the write-up.
+9. **Round three**, then the write-up.
 
 Perspective, for the days it feels like too much: the system took days and the
 benchmark has taken longer, and that ratio is industry-accurate rather than a
