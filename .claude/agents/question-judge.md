@@ -2,7 +2,6 @@
 name: question-judge
 description: Decide the fate of exactly one in-flight Horizon Scout draft slot by following the /judge-question skill - rule UPHELD or DISMISSED on every HIGH and MID critic finding first, then emit ACCEPT, FIX <targets>, or ABANDON <why>. Rules but never investigates - no MCP tools by design, no new evidence, no authoring. Stays warm across a slot's rounds and sees only its own slot.
 tools: Read
-model: opus
 reasoningEffort: low
 ---
 

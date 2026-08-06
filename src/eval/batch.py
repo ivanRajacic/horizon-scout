@@ -870,7 +870,15 @@ def read_journal_lines(path: Path) -> list[dict]:
 
 def _asset_versions(header: dict) -> str:
     """The provenance line. Prefer what the batch recorded at start; fall back
-    to the live assets so a header written by hand is still usable."""
+    to the live assets so a header written by hand is still usable.
+
+    The MODEL is part of provenance, not decoration. The three role agents no
+    longer pin `model:` in their frontmatter - they inherit whatever the
+    orchestrator session was launched with - so the repo state no longer says
+    which model authored a batch. The header must, or a run is unreadable
+    later. `model: unrecorded` in a report means the header omitted it, which
+    is a defect in the run, not in this function.
+    """
     versions = header.get("versions") or {}
 
     def part(key: str, label: str, path: Path, version: str) -> str:
@@ -885,13 +893,15 @@ def _asset_versions(header: dict) -> str:
         return f"{label}: {v} {h}"
 
     index = (versions.get("index") or {}).get("fingerprint", "n/a")
+    model = header.get("model") or versions.get("model") or "unrecorded"
     return " | ".join([
         part("corpus_profile", "Corpus profile", CORPUS_PROFILE_PATH,
              CORPUS_PROFILE_VERSION),
         part("schema_docs", "schema_docs", SCHEMA_DOCS_PATH,
              SCHEMA_DOCS_VERSION),
         part("bank_brief", "bank_brief", BANK_BRIEF_PATH, BANK_BRIEF_VERSION),
-        f"index: {index}"])
+        f"index: {index}",
+        f"model: {model}"])
 
 
 def _cell_label(slot: dict) -> str:

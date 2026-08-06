@@ -2,7 +2,6 @@
 name: question-reviewer
 description: Adversarially attack exactly one Horizon Scout question - a bank entry by question_id (bank mode) or an in-flight draft passed inline (draft mode) - by following the /review-question skill. Reports typed findings (defect class, HIGH|MID|LOW severity, executed evidence, advisory fix direction) and a channel STATUS. The critic reports and never rules - no verdict, no kill power, and a separate question-judge weighs the findings. Read-only by construction - no write or edit tools.
 tools: Read, Grep, ToolSearch, mcp__horizon-draft__run_sql, mcp__horizon-draft__get_schema_docs, mcp__horizon-draft__get_bank_questions, mcp__horizon-draft__search_corpus, mcp__horizon-draft__get_project_text
-model: opus
 reasoningEffort: low
 ---
 

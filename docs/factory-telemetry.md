@@ -10,24 +10,24 @@ Every number below is computed by `src/eval/telemetry.py` from the batch journal
 
 Adjudication rounds per slot (judge decisions until the slot closed): 1: 22, 2: 18, 3: 1, 4: 1, 5: 1
 
-## Per batch
+## Per run
 
-| batch | date | slots | accepted | FIX rounds | abandons |
-|---|---|---|---|---|---|
-| batchA | 2026-07-28 | 3 | 3 | 0 | 0 |
-| batchB | 2026-07-28 | 3 | 3 | 2 | 0 |
-| batchC | 2026-07-28 | 3 | 3 | 4 | 1 |
-| batchD | 2026-07-28 | 3 | 3 | 2 | 1 |
-| batchE | 2026-07-28 | 3 | 3 | 0 | 0 |
-| batchF | 2026-07-28 | 3 | 3 | 3 | 0 |
-| batchG | 2026-07-29 | 3 | 3 | 1 | 1 |
-| batchH | 2026-07-29 | 3 | 3 | 2 | 0 |
-| batchI | 2026-08-01 | 3 | 3 | 4 | 2 |
-| batchJ | 2026-08-01 | 3 | 2 | 0 | 1 |
-| batchK | 2026-08-04 | 3 | 3 | 1 | 0 |
-| batchL | 2026-08-04 | 3 | 3 | 1 | 0 |
-| batchM | 2026-08-04 | 3 | 3 | 2 | 0 |
-| batch-2026-07-27-3 | 2026-07-27 | 4 | 4 | 0 | 0 |
+| run | date | model | slots | accepted | FIX rounds | abandons |
+|---|---|---|---|---|---|---|
+| batchA | 2026-07-28 | unrecorded | 3 | 3 | 0 | 0 |
+| batchB | 2026-07-28 | unrecorded | 3 | 3 | 2 | 0 |
+| batchC | 2026-07-28 | unrecorded | 3 | 3 | 4 | 1 |
+| batchD | 2026-07-28 | unrecorded | 3 | 3 | 2 | 1 |
+| batchE | 2026-07-28 | unrecorded | 3 | 3 | 0 | 0 |
+| batchF | 2026-07-28 | unrecorded | 3 | 3 | 3 | 0 |
+| batchG | 2026-07-29 | unrecorded | 3 | 3 | 1 | 1 |
+| batchH | 2026-07-29 | unrecorded | 3 | 3 | 2 | 0 |
+| batchI | 2026-08-01 | unrecorded | 3 | 3 | 4 | 2 |
+| batchJ | 2026-08-01 | unrecorded | 3 | 2 | 0 | 1 |
+| batchK | 2026-08-04 | unrecorded | 3 | 3 | 1 | 0 |
+| batchL | 2026-08-04 | unrecorded | 3 | 3 | 1 | 0 |
+| batchM | 2026-08-04 | unrecorded | 3 | 3 | 2 | 0 |
+| batch-2026-07-27-3 | 2026-07-27 | unrecorded | 4 | 4 | 0 | 0 |
 
 ## The critic's findings (terminal, deduplicated)
 
@@ -99,22 +99,4 @@ MCP activity: 3898 calls over 10 days (2026-07-22 to 2026-08-04), 165 errored.
 
 ## Authoring spend (Claude-side, from transcripts)
 
-| agent | spawned | turns | input (total) | of which cache | output | tools | active |
-|---|---|---|---|---|---|---|---|
-| question-drafter | 103 | 4063 | 249.9M | 205.5M | 3.1M | 2132 (1716 MCP) | 794.8m |
-| question-reviewer | 95 | 3380 | 182.4M | 147.2M | 1.7M | 1802 (1391 MCP) | 494.5m |
-| question-judge | 73 | 553 | 11.9M | 4.1M | 314k | 185 (0 MCP) | 84.5m |
-| (orchestrator) | 22 | 3137 | 598.3M | 577.6M | 7.8M | 1789 (43 MCP) | 1682.1m |
-
-Slots traceable to a question id: 70; median output tokens per slot: 58792.
-
-### Cost in dollars, by model
-
-| model | fresh input | cache read | cache write | output | cost |
-|---|---|---|---|---|---|
-| claude-opus-5 | 86k | 852.0M | 98.0M | 11.5M | $1327.58 |
-| claude-opus-4-8 | 1k | 46.8M | 8.3M | 873k | $97.06 |
-| claude-fable-5 | 300 | 35.5M | 1.7M | 523k | $82.38 |
-
-**Total factory cost: $1507.01** (drafter + critic + judge subagents plus their orchestrator sessions, priced at 2026-08-06 API rates; cache reads at 0.1x input, cache writes at the 1.25x 5-minute rate - with the 1-hour cache TTL writes bill 2x, which would raise the write component by 60%).
-
+No factory-agent transcripts found.

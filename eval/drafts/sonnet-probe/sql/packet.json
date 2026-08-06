@@ -1,0 +1,120 @@
+{
+  "kind": "packet",
+  "order": "sonnet probe, sql x3 - re-draft the most recent batch-authored sql cells with every role on Sonnet",
+  "output_dir": "eval/drafts/sonnet-probe/sql",
+  "model": "claude-sonnet-5",
+  "siblings": [
+    "eval/drafts/sonnet-probe/vec",
+    "eval/drafts/sonnet-probe/hyb"
+  ],
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd3",
+      "content_hash": "5e35917e899d"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "sql-s14",
+      "cell": {
+        "route": "sql",
+        "level": "L2",
+        "subtype": "value-grounded"
+      },
+      "candidates": [
+        {
+          "topic": "Bare `MSCA-IF` versus the whole MSCA-IF* variant family (EF-ST, GF, EF-RI, EF-CAR ...)",
+          "seed_id": "sql-14",
+          "block": "- id: sql-14\n  topic: Bare `MSCA-IF` versus the whole MSCA-IF* variant family (EF-ST, GF, EF-RI, EF-CAR ...)\n  recommend: route=sql subtype=aggregation\n  counts: 5,037 exact-match vs 9,845 family-wide\n  bucket: -\n  evidence: `SELECT COUNT(*) FROM project WHERE fundingScheme='MSCA-IF'` -> 5037 ; `SELECT COUNT(*) FROM project WHERE fundingScheme LIKE 'MSCA-IF%'` -> 9845\n  axes: column=fundingScheme family=MSCA-IF\n  why: \"How many Marie Curie Individual Fellowships\" has two defensible SQL readings differing by 4,808 projects - a precise trap the drafter must pin down in the question wording."
+        },
+        {
+          "topic": "The `nature` column - crisis-tagged projects and their timing",
+          "seed_id": "sql-18",
+          "block": "- id: sql-18\n  topic: The `nature` column - crisis-tagged projects and their timing\n  recommend: route=sql subtype=aggregation\n  counts: 575 non-null of 35,389 (crisisPreparedness 344, crisisRecovery 141, crisisResponse 90)\n  bucket: -\n  evidence: `SELECT COALESCE(nature,'(null)') v, COUNT(*) n FROM project GROUP BY 1 ORDER BY n DESC` -> (null) 34814; crisisPreparedness 344; crisisRecovery 141; crisisResponse 90 ; `SELECT COUNT(*) FROM project WHERE nature='crisisResponse' AND startDate>=DATE '2020-01-01'` -> 90 ; `SELECT COUNT(*) FROM project WHERE nature IS NOT NULL AND status='TERMINATED'` -> 4\n  axes: column=nature values=crisisPreparedness,crisisRecovery,crisisResponse dates=2020+\n  why: A rarely-touched, almost-entirely-null column with an exact-100% temporal fact (all 90 crisisResponse projects started in 2020 or later) that no retrieval route could establish."
+        },
+        {
+          "topic": "How often the net EU contribution to an organisation differs from its gross EU contribution",
+          "seed_id": "sql-05",
+          "block": "- id: sql-05\n  topic: How often the net EU contribution to an organisation differs from its gross EU contribution\n  recommend: route=sql subtype=filter-count\n  counts: 26,085 of 178,932 organisation rows differ; 10,678 have net > gross\n  bucket: -\n  evidence: `SELECT COUNT(*) FROM organization WHERE netEcContribution IS DISTINCT FROM ecContribution` -> 26085 ; `SELECT COUNT(*) FROM organization WHERE netEcContribution > ecContribution` -> 10678 ; `SELECT SUM(netEcContribution) FROM organization` -> 68132441259.15 ; `SELECT SUM(ecContribution) FROM organization` -> 68177186800.02\n  axes: column=netEcContribution,ecContribution grain=organization\n  why: The net column is not merely a subtraction - 10,678 rows have net ABOVE gross, which defeats the intuitive reading and makes the 44,745,540.87 EUR gap a real checkable fact."
+        }
+      ],
+      "origin": {
+        "question_id": "sql-14",
+        "batch": "batchH",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "sql-s15",
+      "cell": {
+        "route": "sql",
+        "level": "L2",
+        "subtype": "grouped-aggregate"
+      },
+      "candidates": [
+        {
+          "topic": "Average project duration in months by funding scheme, from startDate/endDate arithmetic",
+          "seed_id": "sql-15",
+          "block": "- id: sql-15\n  topic: Average project duration in months by funding scheme, from startDate/endDate arithmetic\n  recommend: route=sql subtype=aggregation\n  counts: 14 schemes compared; SME-1 4.14 months to ERC-COG 68.02 months\n  bucket: -\n  evidence: `SELECT fundingScheme, COUNT(*) n, ROUND(AVG(DATEDIFF('month', startDate, endDate)),2) avg_months, MIN(DATEDIFF('month',startDate,endDate)) minm, MAX(DATEDIFF('month',startDate,endDate)) maxm FROM project WHERE fundingScheme IN ('MSCA-IF','RIA','SME-1','MSCA-IF-EF-ST','CSA','ERC-STG','ERC-COG','IA','ERC-ADG','SME-2','ERC-POC','MSCA-ITN','MSCA-RISE','MSCA-COFUND') GROUP BY 1 ORDER BY avg_months DESC` -> ERC-COG 2254/68.02/30/105; ERC-STG 2771/67.48/23/103; ERC-ADG 1584/67.46/14/95; MSCA-COFUND 214/65.29/52/83; MSCA-RISE 586/56.02/23/85; MSCA-ITN 640/51.42/47/69; RIA 4465/45.17/8/119; IA 2079/42.39/11/111; SME-2 1389/28.65/8/77; CSA 2902/28.2/2/101; MSCA-IF 5037/27.56/11/86; MSCA-IF-EF-ST 3792/24.04/11/61; ERC-POC 967/17.96/10/41; SME-1 4228/4.14/0/20\n  axes: column=startDate,endDate metric=duration scheme=SME-1,ERC-COG\n  why: Requires real date arithmetic plus a group-by, and the SME-1 vs ERC family spread (4 vs 68 months) makes the answer memorable and checkable."
+        },
+        {
+          "topic": "Which projects does Germany coordinate versus merely participate in - role-scoped country counting",
+          "seed_id": "sql-08",
+          "block": "- id: sql-08\n  topic: Which projects does Germany coordinate versus merely participate in - role-scoped country counting\n  recommend: route=sql subtype=aggregation\n  counts: 3844 corpus-wide (DE-coordinated projects)\n  bucket: -\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE' AND role='coordinator'` -> 3844 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='DE'` -> 9955 ; `SELECT COUNT(*) FROM organization WHERE country='DE'` -> 20854\n  axes: table=organization grain=project role=coordinator column=country\n  why: Three defensible readings of \"German projects\" (20,854 / 9,955 / 3,844) make the role predicate load-bearing rather than decorative."
+        },
+        {
+          "topic": "Projects recorded with a total cost of zero despite receiving EU funding",
+          "seed_id": "sql-04",
+          "block": "- id: sql-04\n  topic: Projects recorded with a total cost of zero despite receiving EU funding\n  recommend: route=sql subtype=filter-count\n  counts: 520 projects with totalCost = 0; ERC-POC (207) and ERC-POC-LS (153) dominate\n  bucket: -\n  evidence: `SELECT COUNT(*) FROM project WHERE totalCost = 0` -> 520 ; `SELECT COUNT(*) FROM project WHERE totalCost < ecMaxContribution` -> 520 ; `SELECT COUNT(*) FROM project WHERE ecMaxContribution = 0` -> 0 ; `SELECT fundingScheme, COUNT(*) FROM project WHERE totalCost=0 GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 6` -> ERC-POC 207; ERC-POC-LS 153; CSA 83; CSA-LSP 35; RIA 21; IA 19\n  axes: column=totalCost grain=project anomaly=zero-value\n  why: A clean data-quality question with an exact answer, and the two 520s are the same rows, so any ratio computed over the full table silently divides by zero."
+        }
+      ],
+      "origin": {
+        "question_id": "sql-15",
+        "batch": "batchH",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "sql-s16",
+      "cell": {
+        "route": "sql",
+        "level": "L3",
+        "subtype": "trap"
+      },
+      "candidates": [
+        {
+          "topic": "How many projects involve at least one Italian organization - the classic double-count trap (join rows vs distinct projects)",
+          "seed_id": "sql-07",
+          "block": "- id: sql-07\n  topic: How many projects involve at least one Italian organization - the classic double-count trap (join rows vs distinct projects)\n  recommend: route=sql subtype=aggregation\n  counts: 7899 corpus-wide (distinct projects); 17,243 organization rows\n  bucket: -\n  evidence: `SELECT COUNT(*) FROM organization WHERE country='IT'` -> 17243 ; `SELECT COUNT(DISTINCT projectID) FROM organization WHERE country='IT'` -> 7899\n  axes: table=organization grain=organization-vs-project column=country trap=double-count\n  why: A naive COUNT(*) over the join answers 17,243 where the true project count is 7,899 - a 2.2x divergence a drafter can build a precise gold answer on."
+        },
+        {
+          "topic": "Projects whose EC grant signature came AFTER the action had already started (retroactive signature), and the largest lag",
+          "seed_id": "sql-16",
+          "block": "- id: sql-16\n  topic: Projects whose EC grant signature came AFTER the action had already started (retroactive signature), and the largest lag\n  recommend: route=sql subtype=filter-count\n  counts: 2,898 projects signed after their start date; max lag 437 days\n  bucket: -\n  evidence: `SELECT COUNT(*) FILTER (WHERE ecSignatureDate > startDate) sig_after_start, COUNT(*) FILTER (WHERE ecSignatureDate > endDate) sig_after_end, MAX(DATEDIFF('day',startDate,ecSignatureDate)) maxlag FROM project` -> 2898 | 2 | 437 ; `SELECT id, acronym, fundingScheme, startDate, endDate, ecSignatureDate FROM project WHERE ecSignatureDate>endDate OR DATEDIFF('day',startDate,ecSignatureDate)=437 ORDER BY id` -> 116068 VSV-EBOPLUS RIA 2016-04-01/2023-03-31/2017-06-12; 699649 ZEP15 CSA 2015-07-20/2015-12-19/2016-03-07; 728895 RVCR SME-1 2016-06-01/2016-09-30/2016-10-04\n  axes: column=ecSignatureDate,startDate,endDate anomaly=retroactive-signature\n  why: A three-date comparison the vector route cannot do at all, with a tiny named extreme (2 projects signed after they had already ended) as a natural follow-up."
+        },
+        {
+          "topic": "The 12 projects with no start or end date - what they all have in common",
+          "seed_id": "sql-17",
+          "block": "- id: sql-17\n  topic: The 12 projects with no start or end date - what they all have in common\n  recommend: route=sql subtype=filter-list\n  counts: 12 corpus-wide, all TERMINATED MSCA-IF\n  bucket: -\n  evidence: `SELECT status, fundingScheme, COUNT(*) n FROM project WHERE startDate IS NULL GROUP BY 1,2` -> TERMINATED | MSCA-IF | 12 ; `SELECT COUNT(*) FILTER (WHERE startDate IS NULL) null_start, COUNT(*) FILTER (WHERE endDate IS NULL) null_end, COUNT(*) FILTER (WHERE endDate < startDate) end_before_start FROM project` -> 12 | 12 | 0 ; `SELECT id, acronym FROM project WHERE startDate IS NULL ORDER BY id` -> 653040 CONFAM; 661496 QSIPP; 699995 MULTIZONAL SCAFFOLD; 701561 ASUNDER; 743637 NanoOsmDiode; 753215 APPS; 846299 APApore4RNA; 891212 FLARe; 101024440 GUIDE-AF; 101026554 BREASTCANCERSTEM; 101030725 RADCODE; 101038075 POP1Seed\n  axes: column=startDate nullness=12 status=TERMINATED scheme=MSCA-IF\n  why: A fully enumerable 12-row gold set with a clean, surprising invariant - every missing-date project is a terminated individual fellowship."
+        }
+      ],
+      "origin": {
+        "question_id": "sql-16",
+        "batch": "batchH",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    }
+  ]
+}
