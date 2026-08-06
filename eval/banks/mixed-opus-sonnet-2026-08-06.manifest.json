@@ -1,0 +1,161 @@
+{
+  "created": "2026-08-06",
+  "what": "9 Opus cells + all 7 accepted Sonnet questions. NOT the study bank; eval/bank.jsonl is untouched at 58.",
+  "identification": "'-s' infix in question_id = Sonnet (sql-s14). No infix = Opus (sql-14).",
+  "WARNING": "This file does NOT pass validate-bank. vec-s38 and vec-s41 are missing pooling_evidence, the required proof-of-search for a vector gold set. They are included by decision so the comparison is complete. Anything that calls load_bank on this file will raise; drop those two ids to judge it.",
+  "counts": {
+    "opus": 9,
+    "sonnet": 7,
+    "total": 16,
+    "schema_invalid": 2
+  },
+  "schema_invalid_ids": [
+    "vec-s38",
+    "vec-s41"
+  ],
+  "unpaired_opus": [
+    "vec-42",
+    "hyb-15"
+  ],
+  "records": [
+    {
+      "question_id": "sql-14",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "sql-15",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "sql-16",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "vec-38",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "vec-41",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "vec-42",
+      "author": "opus",
+      "source": "eval/archive/bank-trimmed-2026-08-03.jsonl",
+      "in_live_bank": false,
+      "archived_reason": "L3 over target; survey/exact-term, biomedical engineering - the three exact-term L3 slots went to transport, metrology and oncology",
+      "schema_valid": true
+    },
+    {
+      "question_id": "hyb-12",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "hyb-13",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "hyb-15",
+      "author": "opus",
+      "source": "eval/bank.jsonl",
+      "in_live_bank": true,
+      "archived_reason": null,
+      "schema_valid": true
+    },
+    {
+      "question_id": "sql-s14",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/sql/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "sql-14",
+      "schema_valid": true,
+      "schema_errors": null
+    },
+    {
+      "question_id": "sql-s15",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/sql/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "sql-15",
+      "schema_valid": true,
+      "schema_errors": null
+    },
+    {
+      "question_id": "sql-s16",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/sql/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "sql-16",
+      "schema_valid": true,
+      "schema_errors": null
+    },
+    {
+      "question_id": "vec-s38",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/vec/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "vec-38",
+      "schema_valid": false,
+      "schema_errors": [
+        "vec-s38 [vec-s38]: vector questions require pooling_evidence"
+      ]
+    },
+    {
+      "question_id": "vec-s41",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/vec/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "vec-41",
+      "schema_valid": false,
+      "schema_errors": [
+        "vec-s41 [vec-s41]: vector questions require pooling_evidence"
+      ]
+    },
+    {
+      "question_id": "hyb-s12",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/hyb/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "hyb-12",
+      "schema_valid": true,
+      "schema_errors": null
+    },
+    {
+      "question_id": "hyb-s13",
+      "author": "sonnet",
+      "source": "eval/drafts/sonnet-probe/hyb/draft-bank-2026-08-06.jsonl",
+      "in_live_bank": false,
+      "opus_counterpart": "hyb-13",
+      "schema_valid": true,
+      "schema_errors": null
+    }
+  ]
+}
