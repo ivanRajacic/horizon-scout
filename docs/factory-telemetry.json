@@ -1,0 +1,278 @@
+{
+  "journals": {
+    "batches": 14,
+    "per_batch": [
+      {
+        "batch": "batchA",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 0,
+        "abandons": 0
+      },
+      {
+        "batch": "batchB",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 2,
+        "abandons": 0
+      },
+      {
+        "batch": "batchC",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 4,
+        "abandons": 1
+      },
+      {
+        "batch": "batchD",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 2,
+        "abandons": 1
+      },
+      {
+        "batch": "batchE",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 0,
+        "abandons": 0
+      },
+      {
+        "batch": "batchF",
+        "date": "2026-07-28",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 3,
+        "abandons": 0
+      },
+      {
+        "batch": "batchG",
+        "date": "2026-07-29",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 1,
+        "abandons": 1
+      },
+      {
+        "batch": "batchH",
+        "date": "2026-07-29",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 2,
+        "abandons": 0
+      },
+      {
+        "batch": "batchI",
+        "date": "2026-08-01",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 4,
+        "abandons": 2
+      },
+      {
+        "batch": "batchJ",
+        "date": "2026-08-01",
+        "slots": 3,
+        "accepted": 2,
+        "fix_rounds": 0,
+        "abandons": 1
+      },
+      {
+        "batch": "batchK",
+        "date": "2026-08-04",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 1,
+        "abandons": 0
+      },
+      {
+        "batch": "batchL",
+        "date": "2026-08-04",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 1,
+        "abandons": 0
+      },
+      {
+        "batch": "batchM",
+        "date": "2026-08-04",
+        "slots": 3,
+        "accepted": 3,
+        "fix_rounds": 2,
+        "abandons": 0
+      },
+      {
+        "batch": "batch-2026-07-27-3",
+        "date": "2026-07-27",
+        "slots": 4,
+        "accepted": 4,
+        "fix_rounds": 0,
+        "abandons": 0
+      }
+    ],
+    "slots": 43,
+    "final_status": {
+      "ACCEPTED": 42,
+      "FAILED": 1
+    },
+    "candidates_tried": 58,
+    "dispositions": {
+      "ACCEPT": 42,
+      "FIX": 22,
+      "ABANDON": 6
+    },
+    "adjudication_rounds": {
+      "1": 22,
+      "2": 18,
+      "3": 1,
+      "4": 1,
+      "5": 1
+    },
+    "findings_by_severity": {
+      "LOW": 91,
+      "MID": 58,
+      "HIGH": 9
+    },
+    "rulings": {
+      "HIGH/RECORDED": 1,
+      "HIGH/UPHELD": 8,
+      "MID/DISMISSED": 5,
+      "MID/RECORDED": 16,
+      "MID/UPHELD": 33,
+      "MID/unadjudicated": 4
+    },
+    "defect_classes": {
+      "OTHER:*": 82,
+      "REFERENCE-UNSUPPORTED": 17,
+      "AMBIGUOUS-READING": 16,
+      "MISSED-GOLD": 14,
+      "GOLD-WRONG": 6,
+      "TELEGRAPH": 6,
+      "GENERIC-FACT": 5,
+      "NEAR-DUPLICATE": 5,
+      "NEAR-MISS": 2,
+      "ADV-PROOF-UNTYPED": 2,
+      "ROUTE-MISLABEL": 1,
+      "STALE-EVIDENCE": 1,
+      "FILTER-DECORATION": 1
+    },
+    "other_label_count": 76,
+    "accepted_with_upheld_finding": 26,
+    "accepted_with_fix_round": 20
+  },
+  "mcp": {
+    "calls": 3898,
+    "by_tool": {
+      "run_sql": 1763,
+      "search_corpus": 728,
+      "get_project_text": 722,
+      "precheck_record": 209,
+      "get_schema_docs": 172,
+      "get_bank_questions": 127,
+      "precheck_candidate": 125,
+      "get_corpus_profile": 43,
+      "get_bank_record": 9
+    },
+    "errors": 165,
+    "prechecks": {
+      "precheck_record": {
+        "calls": 209,
+        "with_failures": 30
+      },
+      "precheck_candidate": {
+        "calls": 125,
+        "with_failures": 23
+      }
+    },
+    "first_day": "2026-07-22",
+    "last_day": "2026-08-04",
+    "active_days": 10
+  },
+  "bank": {
+    "bank": 58,
+    "trimmed": 18,
+    "pipeline_total": 76,
+    "bank_from_batches": 28,
+    "bank_interactive": 30,
+    "trimmed_from_batches": 12
+  },
+  "transcripts": {
+    "by_type": {
+      "question-drafter": {
+        "agents": 103,
+        "turns": 4063,
+        "input_total": 249861550,
+        "cache_read": 205530829,
+        "output": 3123676,
+        "tool_calls": 2132,
+        "mcp_calls": 1716,
+        "active_seconds": 47686.2
+      },
+      "question-reviewer": {
+        "agents": 95,
+        "turns": 3380,
+        "input_total": 182382997,
+        "cache_read": 147212377,
+        "output": 1688677,
+        "tool_calls": 1802,
+        "mcp_calls": 1391,
+        "active_seconds": 29670.3
+      },
+      "question-judge": {
+        "agents": 73,
+        "turns": 553,
+        "input_total": 11929259,
+        "cache_read": 4056893,
+        "output": 313615,
+        "tool_calls": 185,
+        "mcp_calls": 0,
+        "active_seconds": 5069.1
+      },
+      "(orchestrator)": {
+        "agents": 22,
+        "turns": 3137,
+        "input_total": 598280719,
+        "cache_read": 577602410,
+        "output": 7810308,
+        "tool_calls": 1789,
+        "mcp_calls": 43,
+        "active_seconds": 100926.2
+      }
+    },
+    "by_model": [
+      {
+        "model": "claude-opus-5",
+        "input_fresh": 86424,
+        "cache_read": 852035537,
+        "cache_creation": 98020194,
+        "output": 11539987,
+        "cost_usd": 1327.58
+      },
+      {
+        "model": "claude-opus-4-8",
+        "input_fresh": 1476,
+        "cache_read": 46830390,
+        "cache_creation": 8289239,
+        "output": 873059,
+        "cost_usd": 97.06
+      },
+      {
+        "model": "claude-fable-5",
+        "input_fresh": 300,
+        "cache_read": 35536582,
+        "cache_creation": 1654383,
+        "output": 523230,
+        "cost_usd": 82.38
+      }
+    ],
+    "total_cost_usd": 1507.01,
+    "unpriced_models": [],
+    "slots_traced": 70,
+    "median_output_tokens_per_slot": 58792
+  }
+}
