@@ -2,7 +2,9 @@
 
 Five parallel web-research passes over recent (2024-2026) papers, leaderboards and engineering blogs, one per axis of the system: retrieval, text-to-SQL, routing/agentic orchestration, evaluation/LLM-judge, and chunking/indexing. Each claim below carries its measured number and source. The brief was big levers, not micro-tuning; everything judged not worth doing is listed too, with the evidence for skipping it.
 
-How to read this against the three rounds (`horizon-scout.md` §2 - the plan this was written against was `GOALS.md`, now folded in there): sections 1-3 are candidate changes for round two (improved), section 4 is the menu for round three (agentic), section 5 makes all three rounds more defensible, section 6 is what to skip, section 7 is what this research says about the write-ups.
+**Reading note added 2026-08-06: the agentic round was cut** (`horizon-scout.md` §2), so **section 4 is dead as a plan** - it is the menu for a round that will not be run. It stays unedited as the record of what was researched. Nothing else in this file is affected. The research is findings, not a plan; it is never rewritten to match later decisions.
+
+How to read this against the rounds (`horizon-scout.md` §2 - the plan this was written against was `GOALS.md`, now folded in there): sections 1-3 are candidate changes for round two (improved), section 4 is the cut agentic round, section 5 makes the rounds more defensible, section 6 is what to skip, section 7 is what this research says about the write-ups.
 
 One thing here is now decided elsewhere: retrieval is not measured, so section 3's newer-embedder-and-reranker candidates would change a frozen artifact and need an explicit decision before anyone acts on them.
 

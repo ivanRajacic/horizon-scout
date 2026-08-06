@@ -37,13 +37,20 @@ authoring pipelines) carries over unchanged; the ceremony is dropped.
 
 ## 2. What is measured
 
-**Three rounds, in order. Each is one graph.**
+**Two rounds, in order. Each is one graph.**
 
 1. **Baseline.** The 58-question bank against the current system.
 2. **Improved.** Named fixes applied, same bank, same judge, same axes. The
    result is per-change before/after.
-3. **Agentic.** Runtime orchestration against the improved system - does
-   deciding *during* execution buy anything over deciding once, upfront?
+
+**The agentic round was cut on 2026-08-06.** It was the third round and it is
+gone. Nothing of it was ever built - there was no `src/agent/`, and it was the
+only remaining item that needed new architecture, a pilot and a freeze. The
+reason for cutting it is §7's own position: the QA system is the instrument, not
+the contribution, so a third graph of the instrument does not earn the day it
+costs. What replaces it in the write-up is the authoring pipeline's own record -
+see `docs/factory-telemetry.md` and `docs/factory-exemplars.md`, both produced
+from the batch journals rather than from a new run.
 
 **A round IS the `router` condition over all 58 questions.** That is the system
 as it ships, so that is what a round's number means.
@@ -51,9 +58,8 @@ as it ships, so that is what a round's number means.
 `always-hybrid` is an EXTRA arm, run on top of a round when the contrast is
 wanted: a router picks a capability per question, always-hybrid refuses to
 choose and composes both every time, and that contrast is the one the
-architecture poses. The agentic loop is an extra arm in the same sense (round
-three). `force-sql` and `force-vector` stay in the runner as floors and
-diagnostics; they are not part of the story.
+architecture poses. `force-sql` and `force-vector` stay in the runner as floors
+and diagnostics; they are not part of the story.
 
 **Retrieval is not measured.** One stack runs everywhere:
 `config.RUNTIME_RETRIEVER = "hybrid_rerank"`. It was chosen on the 2026-07-29
@@ -280,9 +286,9 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   bonus and never gates.
 - **Role separation, both seats external (changed 2026-08-04).** Opus authored
   the questions and references (done, on Max - authoring is over). At run time
-  nothing runs on the subscription: generation - the router call, text-to-SQL,
-  synthesis, and the agentic loop - moves off `claude -p` to a cheap external
-  API, same as judging. This replaces "generation stays on `claude -p`" (Haiku
+  nothing runs on the subscription: generation - the router call, text-to-SQL
+  and synthesis - moves off `claude -p` to a cheap external API, same as
+  judging. (This clause also covered the agentic loop, cut 2026-08-06.) This replaces "generation stays on `claude -p`" (Haiku
   on Max). Run-side cost is noise next to judging: ~18k in / ~1k out per
   question, so a full 58-question run prices at ~$0.20 on DeepSeek V4 Flash or
   ~$0.45 on gpt-5-mini (prices re-verified 2026-08-04). No model grades its own
@@ -314,7 +320,8 @@ Dropped, with the reason, so none of it is re-litigated:
 | **Study 2 as four static conditions** | force-sql and force-vector are floors, not the story | v4 §5B |
 | **Study 0.5 as a separate gate** | SQL execution accuracy is a column in every round, not its own study | v4 §5.0.5 |
 | **Ambiguous-route cell (n=3)** | dropped 2026-08-04 with the bank otherwise complete: underspecified questions are imprecise by construction, and the router-stress signal was judged not worth 3 hand-authored interactive-only questions | this table; §3 Allocation |
-| **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round; the agentic round now shows itself on the 58 (its cost/latency columns and failure buckets carry the story) | this table; §3 Allocation |
+| **Compositional cell (n=3)** | dropped 2026-08-04 with the ambiguous cell: 3 hand-authored diagnostics for the agentic round, which was itself cut 2026-08-06 (§2) | this table; §3 Allocation |
+| **Agentic round (round three)** | cut 2026-08-06: never built, and the only remaining item needing new architecture, a pilot and a freeze. §7 already holds that the QA system is the instrument and not the contribution | §2 |
 
 Disclosed under the relaxed freeze so far, all before any baseline number was
 recorded:
@@ -359,8 +366,7 @@ stack (`config.RUNTIME_RETRIEVER`), and the judge (DeepSeek V4 Flash) and
 generator (gpt-5-nano) decided in §5. The judge is pinned as of the 2026-08-05
 smoke, the generator as of 2026-08-06 - its open question was answer shape, and
 that was settled by decision rather than by a fix: answers stay uncapped (§8.5),
-and the judge scores coverage of the reference, so length costs nothing. The
-agentic scaffold freezes after its pilot so later runs stay comparable.
+and the judge scores coverage of the reference, so length costs nothing.
 
 ## 7. What ships
 
@@ -448,17 +454,14 @@ Live state and what is next: `working-plan.md`.
    the answer-length cap is dead code and stays dead, because the judge now
    scores coverage of the reference and capping would shorten answers and lower
    it. **All four are closed, and nothing now blocks the rounds.**
-6. **Build the agentic condition.** Edge policies fixed before implementation:
-   max steps, stop conditions, and the four failure buckets - planning error,
-   execution drift, non-termination, recovery win. Bucket counts are the
-   evidence; trace anecdotes are appendix illustrations. Latency and call count
-   are first-class result columns, reported as a multiplier rather than an
-   apology.
+6. ~~Build the agentic condition.~~ **Cut 2026-08-06 - see §2.** Never built.
 7. **Run round one**, `--no-judge` first, read the answers, then `--resume` for
-   verdicts.
+   verdicts. **Done: `data/runs/full-2026-08-06`.**
 8. **Round two** from what round one shows, plus the candidates already on the
-   shelf in `docs/improvement-research-2026-07-27.md`.
-9. **Round three**, then the write-up.
+   shelf in `docs/improvement-research-2026-07-27.md`. Optional as of
+   2026-08-06 - the baseline stands on its own and the write-up does not
+   require a before/after.
+9. **The write-up.**
 
 Perspective, for the days it feels like too much: the system took days and the
 benchmark has taken longer, and that ratio is industry-accurate rather than a

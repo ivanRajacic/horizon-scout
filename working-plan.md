@@ -5,6 +5,48 @@
 `docs/archive/working-plan-through-2026-08-03.md` (64 KB of dated status entries -
 every pipeline audit, every batch run, every promotion, with the reasoning).*
 
+## Decisions taken 2026-08-06 (the wrap-up)
+
+Four calls, all made after reading round one. They close the study.
+
+1. **The agentic round is cut.** Item 7 below, and `horizon-scout.md` §2. Never
+   built; the last item needing new architecture. The write-up's headline is the
+   authoring pipeline, not a third graph of the QA system.
+
+2. **No re-judge of `full-2026-08-06`, and the precision verdicts stay in the
+   log.** `records.jsonl` holds the f1 verdicts because that was the mode when
+   the run was judged; `precision-judge.log` holds the 33 precision verdicts
+   from the same stored answers. Re-judging them into the records would cost
+   $0.06 and produce a THIRD set of numbers, because the judge has measured
+   noise - 0.081 mean absolute drift on faithfulness at temperature 0, on
+   identical inputs. The log verdicts are the precision baseline. The write-up
+   computes its tables from the log and says so; `report.md` in that run
+   directory still shows f1 aggregates and is not to be quoted.
+
+3. **The factory's own record is analysed instead of running anything new.**
+   `src/eval/telemetry.py` computes every number from the batch journals, the
+   MCP log and the subagent transcripts: the funnel (43 slots, 58 candidates, 42
+   accepted, 1 failed), the critic's 158 terminal findings by class and ruling,
+   the deterministic gates, and the cost - **$1,507 of API-equivalent compute,
+   about $20 per accepted question, against $0.08 for a full judged run of the
+   finished bank**. Written to `docs/factory-telemetry.md` plus a JSON sidecar.
+   Three narrative episodes in `docs/factory-exemplars.md` - hyb-13 (a wrong
+   gold caught and repaired), hyb-14 (the one abandoned slot, killed on the stop
+   rule), vec-31 (a critic finding the judge dismissed). Bank membership was
+   verified for both accepted exemplars before they were written up.
+
+4. **Re-running the pipeline on a cheaper model is deferred, not rejected.**
+   Sonnet 5 would reprice the same token profile at roughly $850 against
+   Opus 5's $1,507 - about $11 per question. Not run, for two reasons. The cost
+   driver is architecture, not model: 934M of the tokens are cache reads from
+   warm agents re-reading held context across FIX rounds, and the orchestrator
+   sessions alone outspent the drafter, critic and judge combined. And the
+   comparison would not be clean - the Opus telemetry spans 14 batches run while
+   the pipeline itself was changing, so a matched Opus arm would be needed too.
+   The claim it would test is real and belongs in the write-up as a stated
+   implication: because every fact is verified by execution and every count is
+   code, the pipeline should tolerate a weaker model.
+
 ## Where things stand
 
 **Built and done.** M1-M4: CORDIS ingest (35,389 projects in DuckDB), chunker and
@@ -381,22 +423,18 @@ The order is `horizon-scout.md` §8. Immediately:
       on `unmatched`. Cheap option if it stays: `projection` and `columns_ok`
       are already on every score record, so the report can show "right rows,
       wrong shape" as its own line without touching the scorer.
-7. **Build the agentic condition.** Nothing exists yet - there is no `src/agent/`
-   and `run.py:CONDITIONS` has only router / force-sql / force-vector /
-   always-hybrid. It loops over capabilities that already exist
-   (`retrieval/sql_path.py`, the runtime retriever from `retrieval/registry.py`,
-   `retrieval/scoped.py`) - no new retrieval. Fix the edge policies BEFORE
-   implementing: max steps, stop conditions, and the four failure buckets
-   (planning error / execution drift / non-termination / recovery win). Traced
-   like everything else - versioned prompt, content hash, cost through
-   `src/eval/usage.py`. Freeze the scaffold after its pilot.
-8. **The three rounds** (`horizon-scout.md` §2). Round one is the `router`
-   condition over all 58 questions - that is the round. `always-hybrid` is an
-   extra arm run on top of it when the contrast is wanted, and the agentic loop
-   is an extra arm in the same sense. `--no-judge` first, read the answers, then
-   `--resume` for verdicts. Round two from what round one shows plus the
-   candidates in `docs/improvement-research-2026-07-27.md`. Round three is the
-   agentic condition against the improved system. Then the write-up.
+7. ~~Build the agentic condition.~~ **CUT 2026-08-06.** Nothing was ever built -
+   there is no `src/agent/`, and `run.py:CONDITIONS` still has only router /
+   force-sql / force-vector / always-hybrid. It was the last item that needed
+   new architecture, a pilot and a freeze, and `horizon-scout.md` §7 already
+   holds that the QA system is the instrument and not the contribution. The
+   write-up's headline is the authoring pipeline, and a third graph of the
+   instrument does not serve it. Recorded in `horizon-scout.md` §2 and §5.
+8. **The rounds** (`horizon-scout.md` §2, now two not three). Round one is the
+   `router` condition over all 58 questions - that is the round, and it is DONE:
+   `data/runs/full-2026-08-06`. `always-hybrid` is an extra arm run on top of it
+   when the contrast is wanted. Round two is optional as of 2026-08-06 - see the
+   decision block below. Then the write-up.
    **Item 6.1 has landed, so nothing blocks a baseline any more.** The fear it
    was blocking on: correct routing sends all 11 hybrid questions into the
    filter, and before the rebuild the 7 that reached `vector` by mistake scored
