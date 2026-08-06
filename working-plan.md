@@ -80,8 +80,14 @@ What the run found instead:
    runs and `ApiClient` sends no cap at all. Answers average 2,082 characters
    against references of 1,149. RAGAS `FactualCorrectness` runs `mode='f1'`,
    so the extra length costs precision: the shorter half of the judged
-   questions scored 0.497 mean factual, the longer half 0.282. **STILL OPEN**,
-   and it is what holds the generator pin.
+   questions scored 0.497 mean factual, the longer half 0.282.
+   **DECIDED 2026-08-06: leave it uncapped.** The judge moved to coverage of
+   the reference the same day, so length no longer costs score - and capping
+   would shorten answers and lower coverage, moving a measured number the wrong
+   way. The code now says so at both places (`ANSWER_TOKENS` is a budget
+   reservation, `Synthesizer.__init__` records that the branch never runs), so
+   nobody fixes it later by accident. **This releases the generator pin**: the
+   only thing the seat was waiting on was the unresolved answer shape.
 3. **The adversarial rule cannot pass a correct refusal.** `derive_pass`
    requires `coverage == "full"`, but an ADV reference carries near-miss
    forensics no correct refusal would reproduce. adv-06 refused correctly and
@@ -273,8 +279,10 @@ single question's delta means anything on its own; hyb-09's -0.53 is that noise,
 not a finding. This is a measured version of the plan's "differences under ~15
 points are noise" rule and belongs in the write-up.
 
-What none of this fixes: the dead answer cap (defect 2) is still in. Precision
-stops punishing the verbosity, it does not stop the verbosity.
+What none of this fixes: the dead answer cap (defect 2). Precision stops
+punishing the verbosity, it does not stop the verbosity - and the same day that
+became the reason to keep it uncapped, since a shorter answer covers less of the
+reference.
 
 ## Next
 
@@ -306,11 +314,13 @@ The order is `horizon-scout.md` §8. Immediately:
    rubric. **The smoke ran 2026-08-05** and went straight to full scale:
    `round1-router`, all 58 questions judged, $0.09. Both seats behaved. The
    judge behaved perfectly (0 unparseable completions of 198). The generator
-   did not: its answer-length cap turned out to be dead code, and the
-   verbosity that follows is costing most of the factual score (defect 2
-   above). **So the seats do NOT freeze yet.** The pin waits until that is
-   fixed and one more run shows the answer shape settled. Nothing else about
-   either seat is in question.
+   did not: its answer-length cap turned out to be dead code, and under the
+   f1 judge the verbosity that follows was costing most of the factual score
+   (defect 2 above). **Both seats are pinned as of 2026-08-06.** The judge
+   pinned on the smoke. The generator pinned when the answer shape was settled
+   by decision rather than by a fix: answers stay uncapped, and the judge now
+   scores coverage of the reference, so length costs nothing. Nothing else
+   about either seat was ever in question.
 3. ~~**Three pre-baseline fixes**~~ - **DONE 2026-08-05**, all from
    `docs/pilot-router-findings.md` Part 2, each with regression tests. Two had
    already landed on 2026-08-04 without this item being updated: the scoped
@@ -349,11 +359,13 @@ The order is `horizon-scout.md` §8. Immediately:
       above. The one open piece is closed too: `objective` stays banned as a
       narrowing column, and hyb-13 and hyb-16 losing their gold filter is
       accepted (user decision 2026-08-06, reasoning above).
-   2. **The dead answer cap** - STILL OPEN, and the next thing to do. `ask.py`
-      passes its shared client into `Synthesizer`, so
-      `make_llm(max_tokens=ANSWER_TOKENS)` at `synthesizer.py:97` never runs.
-      Comes with a decision on whether prompt tightening is pre-baseline wiring
-      or a round-two improvement. The cap itself is a bug either way.
+   2. ~~**The dead answer cap**~~ - **DECIDED 2026-08-06: uncapped, on
+      purpose.** `ask.py` passes its shared client into `Synthesizer`, so
+      `make_llm(max_tokens=ANSWER_TOKENS)` never runs and no answer has ever
+      been capped. Kept, because the judge now scores coverage of the reference
+      and a shorter answer covers less. Both places carry a comment saying so.
+      Prompt tightening is no longer coupled to this; if it happens it is a
+      round-two improvement like any other.
    3. ~~**The adversarial pass rule**~~ - **DONE 2026-08-05**, `82177f7`
       (`j0.3`), re-judged above.
    4. **The SQL column projection** - **left as is, 2026-08-06 (provisional).**

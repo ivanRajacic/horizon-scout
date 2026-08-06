@@ -357,9 +357,10 @@ disclosed in the write-up. Four things stay genuinely frozen because every
 recorded number depends on them - the chunking and index config, the retrieval
 stack (`config.RUNTIME_RETRIEVER`), and the judge (DeepSeek V4 Flash) and
 generator (gpt-5-nano) decided in §5. The judge is pinned as of the 2026-08-05
-smoke; the generator pin waits for the dead answer cap (§8.5) plus one run
-showing the answer shape settled. The agentic scaffold freezes after its pilot
-so later runs stay comparable.
+smoke, the generator as of 2026-08-06 - its open question was answer shape, and
+that was settled by decision rather than by a fix: answers stay uncapped (§8.5),
+and the judge scores coverage of the reference, so length costs nothing. The
+agentic scaffold freezes after its pilot so later runs stay comparable.
 
 ## 7. What ships
 
@@ -418,9 +419,9 @@ Live state and what is next: `working-plan.md`.
 1. ~~**Trim the bank to 49** via `archive-questions`~~ - **DONE 2026-08-03** (§3.3).
 2. **Swap both seats to external APIs, first** - **BUILT 2026-08-04; smoked
    2026-08-05 at full scale (`round1-router`, 58 questions judged, $0.09).
-   The judge froze on it; the generator did not** - its answer-length cap is
-   dead code and the verbosity that follows costs most of the factual score,
-   so the generator pin waits for that fix. An OpenAI-compatible
+   The judge froze on it; the generator froze on 2026-08-06**, when the answer
+   shape was settled by decision - answers stay uncapped and the judge scores
+   coverage, so length costs nothing. An OpenAI-compatible
    generation backend in `src/llm.py` beside `ClaudeCliLLM` pointed at
    gpt-5-nano, and the judge backend in `src/judge/ragas_backend.py` pointed
    at DeepSeek V4 Flash (§5). Pin both in `src/config.py`; the new backends
@@ -443,8 +444,10 @@ Live state and what is next: `working-plan.md`.
    rule could not pass a correct refusal. One was decided and left alone: the
    SQL scorer stays strict, so its number means "returned the right answer in
    the pinned shape" and that is what the write-up will say (2026-08-06,
-   provisional - revisit after round one). One is open and is the next thing to
-   do: the answer-length cap is dead code, and it holds the generator pin.
+   provisional - revisit after round one). The fourth was decided the same way:
+   the answer-length cap is dead code and stays dead, because the judge now
+   scores coverage of the reference and capping would shorten answers and lower
+   it. **All four are closed, and nothing now blocks the rounds.**
 6. **Build the agentic condition.** Edge policies fixed before implementation:
    max steps, stop conditions, and the four failure buckets - planning error,
    execution drift, non-termination, recovery win. Bucket counts are the

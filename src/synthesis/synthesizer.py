@@ -17,6 +17,12 @@ from src.retrieval.vector_search import SearchResult
 
 # Context arithmetic: reserve room for the system/instruction prompt and the
 # generated answer, leaving the rest for chunks. ~4 chars/token heuristic.
+#
+# ANSWER_TOKENS is a BUDGET RESERVATION here, not an enforced cap on the
+# answer - see __init__. Answers run about 2,082 chars against references of
+# 1,149, and that is accepted (2026-08-06, user decision): the judge scores
+# coverage of the reference, so length costs nothing, and capping would shorten
+# answers and lower coverage.
 ANSWER_TOKENS = 512
 PROMPT_OVERHEAD_TOKENS = 400
 CHUNK_BUDGET_TOKENS = LLM_CTX - ANSWER_TOKENS - PROMPT_OVERHEAD_TOKENS
@@ -94,6 +100,14 @@ class Synthesizer:
     def __init__(self, llm=None):
         # max_tokens applies to the local backend only; the claude backend
         # has no sampling controls (make_llm ignores it there).
+        #
+        # In the runtime this branch NEVER runs: Ask builds one shared client
+        # (ask.py, no max_tokens) and passes it in, so `llm or ...` short-
+        # circuits and ANSWER_TOKENS never reaches the API. Every answer the
+        # system has ever generated was uncapped. Left that way on purpose
+        # (2026-08-06, user decision) - do not "fix" it without saying so:
+        # capping shortens answers, and the judge scores coverage of the
+        # reference, so it would move a measured number.
         self.llm = llm or make_llm(max_tokens=ANSWER_TOKENS)
 
     def synthesize(self, question: str,
