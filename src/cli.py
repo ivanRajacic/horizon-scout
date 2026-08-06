@@ -954,7 +954,9 @@ def cmd_run_bank(args):
                         judge=not args.no_judge, ids=args.ids,
                         routes=args.routes, limit=args.limit,
                         run_id=args.run_id, judge_model=args.model,
-                        resume=args.resume, progress=ConsoleProgress())
+                        resume=args.resume,
+                        strict_bank=not args.unsafe_skip_bank_validation,
+                        progress=ConsoleProgress())
     except ValueError as e:
         print(f"\n{e}")
         sys.exit(2)
@@ -1268,6 +1270,11 @@ def main():
                         help="run the question bank end to end: execute, "
                              "judge, and write a traced run report")
     rb.add_argument("--bank", default=str(ROOT / "eval" / "bank.jsonl"))
+    rb.add_argument("--unsafe-skip-bank-validation", action="store_true",
+                    help="load records the schema validator rejects. For a "
+                         "bank with a known, deliberate gap - never for "
+                         "eval/bank.jsonl. The run's meta and the first line "
+                         "of its report both record that this was used.")
     rb.add_argument("--conditions", nargs="+", default=["router"],
                     help="router | force-sql | force-vector | always-hybrid "
                          "(default: router)")

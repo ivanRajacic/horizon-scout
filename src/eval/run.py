@@ -89,7 +89,8 @@ from pathlib import Path
 from src.config import (EMBED_MODEL, JUDGE_DEFAULT, JUDGE_MODELS,
                         JUDGE_PASS_FACTUAL, JUDGE_PASS_FAITHFULNESS, ROOT)
 from src.eval import usage
-from src.eval.bank import ROUTE_TO_MODE, BankQuestion, load_bank
+from src.eval.bank import (ROUTE_TO_MODE, BankQuestion, BankValidationError,
+                           load_bank, load_bank_with_errors)
 from src.eval.metrics import METRICS, dedup_projects, score_ranking
 from src.llm import fingerprint
 from src.retrieval.sql_path import (columns_match, project_to_answer_columns,
@@ -664,6 +665,7 @@ def run_bank(bank_path: Path, conditions: list[str], *, k: int = 10,
              routes: list[str] | None = None, limit: int | None = None,
              run_id: str | None = None, runs_dir: Path = RUNS_DIR,
              judge_model: str = JUDGE_DEFAULT, resume: bool = False,
+             strict_bank: bool = True,
              ask=None, pool=None, progress: RunProgress | None = None) -> dict:
     """Execute (phase A) then judge (phase B). Returns the run's meta dict;
     every record is written to <runs_dir>/<run_id>/records.jsonl the moment it
@@ -673,7 +675,13 @@ def run_bank(bank_path: Path, conditions: list[str], *, k: int = 10,
         raise ValueError(f"unknown condition(s) {bad}; "
                          f"choose from {sorted(CONDITIONS)}")
 
-    questions = select_questions(load_bank(bank_path), ids, routes, limit)
+    # strict_bank=False loads records the validator rejects. The violations
+    # are carried into meta and printed in the report, because a number off an
+    # unvalidated bank has to arrive with that fact attached.
+    loaded, bank_errors = load_bank_with_errors(bank_path, strict=strict_bank)
+    if bank_errors and strict_bank:
+        raise BankValidationError(bank_errors)
+    questions = select_questions(loaded, ids, routes, limit)
     run_id = run_id or new_run_id()
     out_dir = Path(runs_dir) / run_id
     records_path = out_dir / "records.jsonl"
@@ -703,6 +711,8 @@ def run_bank(bank_path: Path, conditions: list[str], *, k: int = 10,
         "started": datetime.now().isoformat(timespec="seconds"),
         "bank": str(bank_path),
         "bank_hash": fingerprint(Path(bank_path).read_text(encoding="utf-8")),
+        "bank_validation": "strict" if strict_bank else "BYPASSED",
+        "bank_violations": bank_errors,
         "conditions": conditions,
         "k": k,
         "judged": judge,
@@ -852,6 +862,17 @@ def _sum_cost(records: list[dict]) -> float:
 
 def render_report(records: list[dict], meta: dict) -> str:
     out: list[str] = [f"# Bank run {meta['run_id']}", ""]
+
+    # A bypassed validator is the first thing a reader must see, above the
+    # numbers it produced - not a footnote under them.
+    if meta.get("bank_validation") == "BYPASSED":
+        out += ["> **BANK VALIDATION BYPASSED.** This run loaded records the "
+                "schema validator rejects, so its numbers are not comparable "
+                "to a strict-bank run without saying so. Violations carried:",
+                ""]
+        out += [f"> - {e}" for e in (meta.get("bank_violations") or [])] or \
+               ["> - (none recorded)"]
+        out += [""]
 
     models = meta.get("models", {})
     out += [
