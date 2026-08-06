@@ -50,6 +50,34 @@ from ragas.metrics import FactualCorrectness, Faithfulness  # noqa: E402
 # invented fact, F1 went to 0 on a correct answer (js-01). This note is part
 # of the versioned judge rubric: bump the version on ANY edit; frozen at d10.
 NLI_LENIENCY_VERSION = "n1-pilot"
+
+# FactualCorrectness mode (2026-08-06, user decision). ragas defaults to "f1".
+#
+# READ THE COUNTERS BEFORE CHANGING THIS - ragas' mode names are inverted
+# relative to what they measure. It runs two claim decompositions in opposite
+# directions (`_factual_correctness.py`), and
+# `decompose_and_verify_claims(a, b)` decomposes a and verifies each claim
+# against b:
+#   tp = reference claims the ANSWER supports      (covered)
+#   fp = reference claims the answer does NOT      (omitted)
+#   fn = answer claims the REFERENCE does not      (extra content)
+# so "precision" = tp/(tp+fp) = the fraction of the reference the answer
+# covered, with extra content absent from the formula; "recall" = tp/(tp+fn) =
+# a penalty on saying anything the reference does not contain; "f1" is the
+# harmonic mean and always sits between them.
+#
+# We want the first: the generator's answers run ~2,082 chars against
+# references of ~1,149, and on full-2026-08-06 the shorter half scored 0.497
+# mean factual against 0.282 for the longer half - length, not correctness, was
+# moving the number. "precision" makes length free. The tradeoff, disclosed in
+# the write-up: it does not charge for invented content. Faithfulness still
+# does, against the retrieved context, and so does the adversarial rubric's
+# invented_results.
+#
+# Measured on the same 33 answers, judged three times: f1 0.374 mean, recall
+# 0.341 (the trial that exposed the inverted naming), precision below.
+# EVERY number recorded before 2026-08-06 used f1 and is not comparable.
+FACTUAL_MODE = "precision"
 NLI_LENIENCY = (
     "\nJudge semantic support, not verbatim wording: a statement is supported "
     "when its factual content follows from the context. Trivial framing about "
@@ -158,7 +186,7 @@ class JudgePool:
                                 transport=gated)
 
         self.faithfulness = Faithfulness(llm=self.backend)
-        self.factual = FactualCorrectness(llm=self.backend)
+        self.factual = FactualCorrectness(llm=self.backend, mode=FACTUAL_MODE)
         self.faithfulness.nli_statements_prompt.instruction += NLI_LENIENCY
         self.factual.nli_prompt.instruction += NLI_LENIENCY
 
@@ -257,6 +285,9 @@ class JudgePool:
             "ragas_version": ragas.__version__,
             "nli_leniency": f"{NLI_LENIENCY_VERSION}:"
                             f"{fingerprint(NLI_LENIENCY)}",
+            # Load-bearing: f1 and recall are different instruments and a run
+            # judged under one cannot be read against the other.
+            "factual_mode": FACTUAL_MODE,
             "faithfulness": v.faithfulness,
             "factual_correctness": v.factual_correctness,
             "thresholds": {"factual": JUDGE_PASS_FACTUAL,

@@ -177,6 +177,24 @@ def test_ordinary_dispatches_to_ragas(tmp_path):
                                     "faithfulness": JUDGE_PASS_FAITHFULNESS}
 
 
+def test_factual_metric_scores_coverage_not_f1(tmp_path):
+    """The mode is the instrument. ragas' names are inverted relative to what
+    they measure: "precision" is tp/(tp+fp) over the REFERENCE's claims, so it
+    is coverage of the reference and extra content cannot cost anything, while
+    "recall" is tp/(tp+fn) and is the extra-content penalty on its own
+    (2026-08-06). The mode is logged with the verdict because a run judged
+    under one cannot be read against another."""
+    pool = mk_pool(tmp_path, lambda p, m, **kw: envelope("unused"))
+    assert pool.factual.mode == "precision"
+    pool.faithfulness = StubMetric(0.9)
+    pool.factual = StubMetric(0.8)
+    pool.judge_all([{"question_id": "r-3", "question": "q?",
+                     "reference_answer": "ref", "answer": "ans",
+                     "contexts": ["evidence"]}])
+    logged = json.loads((tmp_path / "judge.jsonl").read_text(encoding="utf-8"))
+    assert logged["factual_mode"] == "precision"
+
+
 def test_no_contexts_skips_faithfulness(tmp_path):
     pool = mk_pool(tmp_path, lambda p, m, **kw: envelope("unused"))
     pool.faithfulness = StubMetric(0.0)   # would fail if consulted
