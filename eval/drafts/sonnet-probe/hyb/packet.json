@@ -1,0 +1,132 @@
+{
+  "kind": "packet",
+  "order": "sonnet probe, hyb x3 - re-draft the most recent batch-authored hyb cells with every role on Sonnet",
+  "output_dir": "eval/drafts/sonnet-probe/hyb",
+  "model": "claude-sonnet-5",
+  "siblings": [
+    "eval/drafts/sonnet-probe/sql",
+    "eval/drafts/sonnet-probe/vec"
+  ],
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd3",
+      "content_hash": "5e35917e899d"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "hyb-s12",
+      "cell": {
+        "route": "hybrid",
+        "level": "L1",
+        "subtype": "filter-read",
+        "term_style": "paraphrase"
+      },
+      "candidates": [
+        {
+          "topic": "Serious games / game-based learning for education and training",
+          "seed_id": "hybrid-26",
+          "block": "- id: hybrid-26\n  topic: Serious games / game-based learning for education and training\n  recommend: route=hybrid level=L3 subtype=filter-read\n  counts: 33 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: social sciences / educational sciences\n  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%serious game%' OR p.objective ILIKE '%game-based learning%') AND (p.objective ILIKE '%learn%' OR p.objective ILIKE '%educat%' OR p.objective ILIKE '%training%') AND p.fundingScheme LIKE 'SME%'` -> n=3 ; `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%serious game%' OR p.objective ILIKE '%game-based learning%') AND (p.objective ILIKE '%learn%' OR p.objective ILIKE '%educat%' OR p.objective ILIKE '%training%')` -> n=33\n  axes: scheme=SME-1/SME-2\n  why: Small enumerable survivor set; the bare gamification term is noisy (855133 MUNDOARTI is an art-contest platform), so the learning co-term is what keeps it on theme.",
+          "bucket_map": "good for: hybrid filter-read / filter-synthesize / filter-compare with scheme, date and budget filters; vector L2/L3 topical-multi on serious games, MOOCs, STEM education, inclusive education. / thin for: Country-scoped surveys below the top four coordinator countries (PL 4, CY 3, LU 3, EE 2), and single-answer L1 seeds - recurring themes each match 8-33 projects corpus-wide, so unique-project questions are hard to isolate. / texture: Third-level split is didactics 250, pedagogy 70, special education 10, inclusive education 10, and 7 with no third level; the labels are almost never echoed verbatim in member text - objectives say learning, training, curriculum, pupils, not didactics. Coordinators concentrate in UK 65, ES 39, IT 29, NL 27. Tag noise is real: 958318 INITIATE is a steel-residual-gas-to-urea industrial process project whose only educational content is summer schools and a MOOC. Questions must be built from text terms, never from the taxonomy label."
+        },
+        {
+          "topic": "STEM education projects starting in 2020 or later",
+          "seed_id": "hybrid-27",
+          "block": "- id: hybrid-27\n  topic: STEM education projects starting in 2020 or later\n  recommend: route=hybrid level=L3 subtype=filter-synthesize\n  counts: 12 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: social sciences / educational sciences\n  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%STEM education%' OR p.title ILIKE '%STEM education%') AND p.startDate >= DATE '2020-01-01'` -> n=5 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%STEM education%' OR p.title ILIKE '%STEM education%'` -> n=12\n  axes: dates=2020-2023\n  why: Date filter a user states naturally; survivors read as a coherent mix of school robotics/coding (961665 Robo Wunderkind) and STEM-skills programmes.",
+          "bucket_map": "good for: hybrid filter-read / filter-synthesize / filter-compare with scheme, date and budget filters; vector L2/L3 topical-multi on serious games, MOOCs, STEM education, inclusive education. / thin for: Country-scoped surveys below the top four coordinator countries (PL 4, CY 3, LU 3, EE 2), and single-answer L1 seeds - recurring themes each match 8-33 projects corpus-wide, so unique-project questions are hard to isolate. / texture: Third-level split is didactics 250, pedagogy 70, special education 10, inclusive education 10, and 7 with no third level; the labels are almost never echoed verbatim in member text - objectives say learning, training, curriculum, pupils, not didactics. Coordinators concentrate in UK 65, ES 39, IT 29, NL 27. Tag noise is real: 958318 INITIATE is a steel-residual-gas-to-urea industrial process project whose only educational content is summer schools and a MOOC. Questions must be built from text terms, never from the taxonomy label."
+        },
+        {
+          "topic": "Nanophotonic light-control approaches in ERC Starting Grant projects",
+          "seed_id": "hybrid-06",
+          "block": "- id: hybrid-06\n  topic: What nanophotonic light-control approaches do ERC Starting Grant projects pursue (photonic-mode engineering, metasurfaces, LED/colour conversion, quantum photonics)?\n  recommend: route=hybrid level=L3 subtype=filter-survey term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id WHERE e.euroSciVocPath LIKE '%/nanophotonics%' AND p.fundingScheme='ERC-STG'` -> 10 survivors, vs 62 total for nanophotonics. Samples: FLATLIGHT 639109, NANOPHOM 715832, PSINFONI 714151, ENLIGHTMENT 637116, aQUARiUM 802986.\n  axes: filter=scheme=ERC-STG topic=engineering and technology/nanotechnology/nanophotonics survivors=10 total=62\n  why: The nanophotonics subtree spans MSCA/RIA/ERC (10 of 62 are ERC-STG), so the scheme filter cuts, and what each grant does with nanophotonics lives only in free text.",
+          "bucket_map": "cp2 seed - no bucket-map entry; the seed's own evidence and why lines are the grounding. Note this is a euroSciVocPath-filtered seed, unlike the ILIKE-based cp8 seeds."
+        }
+      ],
+      "origin": {
+        "question_id": "hyb-12",
+        "batch": "batchI",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "hyb-s13",
+      "cell": {
+        "route": "hybrid",
+        "level": "L2",
+        "subtype": "filter-synthesize",
+        "term_style": "exact-term"
+      },
+      "candidates": [
+        {
+          "topic": "Working memory studied under Marie Sklodowska-Curie individual fellowships",
+          "seed_id": "hybrid-13",
+          "block": "- id: hybrid-13\n  topic: Working memory studied under Marie Sklodowska-Curie individual fellowships\n  recommend: route=hybrid level=L3 subtype=filter-synthesize\n  counts: 34 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: social sciences / psychology\n  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%working memory%' OR p.title ILIKE '%working memory%') AND p.fundingScheme LIKE 'MSCA-IF%'` -> 18 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%working memory%' OR p.title ILIKE '%working memory%'` -> 34\n  axes: scheme=MSCA-IF*\n  why: Individual fellowships hold over half the corpus-wide working-memory work (18 of 34), giving a synthesis set with one funding instrument in common.",
+          "bucket_map": "good for: hybrid filter-read and filter-synthesize on scheme-scoped behavioural topics (loneliness x RIA = 3, eye-tracking x ERC-STG = 9, working memory x MSCA-IF* = 18); vector topical-multi on autism (147 corpus-wide). Third-level nodes are large enough (cognitive psychology 133, ergonomics 116) to sustain several disjoint topics. / thin for: any question that treats the tag as the topic, or assumes members are psychology research - a substantial share is applied engineering or commercial software with a human-factors component. Also thin for small SQL aggregates: the bucket's own scheme mix is dominated by MSCA-IF and offers little numeric contrast. / texture: report_text coverage is corpus-level 98.1%; taxonomy labels are almost never echoed verbatim - RealValue's objective never says ergonomics or psychology, it says \"behavioural analysis\". Tags are noisiest at the top of the funding range and at the oldest start dates (both topic-blind extremes were non-psychology). Questions must be written from text terms (autism, working memory, eye-tracking, loneliness), never from the tag."
+        },
+        {
+          "topic": "Ultrasound technology in ERC Starting Grant projects",
+          "seed_id": "hybrid-21",
+          "block": "- id: hybrid-21\n  topic: Ultrasound technology in ERC Starting Grant projects\n  recommend: route=hybrid level=L3 subtype=filter-synthesize\n  counts: 182 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / medical engineering\n  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%ultrasound%' OR p.title ILIKE '%ultrasound%') AND p.fundingScheme='ERC-STG'` -> 12 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%ultrasound%' OR p.title ILIKE '%ultrasound%'` -> 182\n  axes: scheme=ERC-STG\n  why: Cuts a 182-project device theme down to its 12 exploratory-research members, which share method language and synthesise cleanly.",
+          "bucket_map": "good for: hybrid filter-survey and filter-compare across scheme and country axes (point-of-care x SME = 46, MRI x ERC-STG = 30, wearable coordinated in CH = 27, biopsy x SME = 12, ultrasound x ERC-STG = 12); also good for compare questions contrasting commercial and academic framings of the same device class. / thin for: small filter-read sets on the headline imaging topics - ultrasound (182), MRI (215) and wearable (387) stay large under most single filters, so read-sized questions need a narrower device term. Also thin for L1 vector seeds for the same reason. / texture: the tag is accurate here - all three topic-blind reads are genuinely medical devices or imaging - which is unusual for this corpus. The commercial half is heavily SME-1/SME-2 and writes in market language (market size, CAGR, business model, cost reduction) while the ERC/MSCA half writes in method language, so a scheme filter cleanly separates two writing styles inside one topic. Device terms appear verbatim in objectives (ultrasound, point-of-care, MRI, biopsy, wearable), so text-term filters are reliable."
+        },
+        {
+          "topic": "Structural-health-monitoring sensing techniques in Spain-based projects",
+          "seed_id": "hybrid-03",
+          "block": "- id: hybrid-03\n  topic: What structural-health-monitoring sensing techniques do Spain-based projects use for damage detection (acoustic emission, fibre-optic strain, digital image correlation)?\n  recommend: route=hybrid level=L2 subtype=filter-synthesize term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT p.id) FROM project p JOIN euroscivoc e ON e.projectID=p.id JOIN organization o ON o.projectID=p.id WHERE e.euroSciVocPath LIKE '%structural health monitoring%' AND o.country='ES'` -> 11 survivors, vs 39 total. Samples: TEST-inn 785393, PANOPTIS 769129, MoniTank 760528, PT-SMS 837131, DOMMINIO 101007022.\n  axes: filter=country=ES(any-participant) topic=engineering and technology/civil engineering/structural engineering/structural health monitoring survivors=11 total=39\n  why: SHM spans many countries (11 of 39 have an ES participant); TEST-inn confirms the sensor stack is described only in report text, so both the country filter and the text matter.",
+          "bucket_map": "cp2 seed - no bucket-map entry; the seed's own evidence and why lines are the grounding. Note this is a euroSciVocPath-filtered seed, unlike the ILIKE-based cp8 seeds."
+        }
+      ],
+      "origin": {
+        "question_id": "hyb-13",
+        "batch": "batchI",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "hyb-s15",
+      "cell": {
+        "route": "hybrid",
+        "level": "L3",
+        "subtype": "filter-compare",
+        "term_style": "paraphrase"
+      },
+      "candidates": [
+        {
+          "topic": "Loneliness and social isolation in RIA-funded projects",
+          "seed_id": "hybrid-12",
+          "block": "- id: hybrid-12\n  topic: Loneliness and social isolation in RIA-funded projects\n  recommend: route=hybrid level=L3 subtype=filter-read\n  counts: 8 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: social sciences / psychology\n  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') AND p.fundingScheme='RIA'` -> 3 ; `SELECT id, acronym FROM project p WHERE (p.objective ILIKE '%loneliness%' OR p.title ILIKE '%loneliness%') AND p.fundingScheme='RIA' ORDER BY id` -> 643808 MARIO; 769872 EMPATHIC; 945095 RECETAS\n  axes: scheme=RIA\n  why: Three named RIA projects attack loneliness from care robotics, virtual coaching and social prescribing - a small, contrastive, fully readable survivor set.",
+          "bucket_map": "good for: hybrid filter-read and filter-synthesize on scheme-scoped behavioural topics (loneliness x RIA = 3, eye-tracking x ERC-STG = 9, working memory x MSCA-IF* = 18); vector topical-multi on autism (147 corpus-wide). Third-level nodes are large enough (cognitive psychology 133, ergonomics 116) to sustain several disjoint topics. / thin for: any question that treats the tag as the topic, or assumes members are psychology research - a substantial share is applied engineering or commercial software with a human-factors component. Also thin for small SQL aggregates: the bucket's own scheme mix is dominated by MSCA-IF and offers little numeric contrast. / texture: report_text coverage is corpus-level 98.1%; taxonomy labels are almost never echoed verbatim - RealValue's objective never says ergonomics or psychology, it says \"behavioural analysis\". Tags are noisiest at the top of the funding range and at the oldest start dates (both topic-blind extremes were non-psychology). Questions must be written from text terms (autism, working memory, eye-tracking, loneliness), never from the tag."
+        },
+        {
+          "topic": "Inclusive education / special educational needs research carried by individual fellowships",
+          "seed_id": "hybrid-30",
+          "block": "- id: hybrid-30\n  topic: Inclusive education / special educational needs research carried by individual fellowships\n  recommend: route=hybrid level=L3 subtype=filter-read\n  counts: 8 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: social sciences / educational sciences\n  evidence: `SELECT count(*) n FROM project p WHERE (p.objective ILIKE '%inclusive education%' OR p.objective ILIKE '%special educational needs%') AND p.fundingScheme LIKE 'MSCA-IF%'` -> n=4 ; `SELECT count(*) n FROM project p WHERE p.objective ILIKE '%inclusive education%' OR p.objective ILIKE '%special educational needs%'` -> n=8\n  axes: scheme=MSCA-IF*\n  why: Half of all inclusive-education projects corpus-wide are individual fellowships; four survivors are readable end to end (includes 101030992 INCLUDed, intercultural competence in Italian lower-secondary schools).",
+          "bucket_map": "good for: hybrid filter-read / filter-synthesize / filter-compare with scheme, date and budget filters; vector L2/L3 topical-multi on serious games, MOOCs, STEM education, inclusive education. / thin for: Country-scoped surveys below the top four coordinator countries (PL 4, CY 3, LU 3, EE 2), and single-answer L1 seeds - recurring themes each match 8-33 projects corpus-wide, so unique-project questions are hard to isolate. / texture: Third-level split is didactics 250, pedagogy 70, special education 10, inclusive education 10, and 7 with no third level; the labels are almost never echoed verbatim in member text - objectives say learning, training, curriculum, pupils, not didactics. Coordinators concentrate in UK 65, ES 39, IT 29, NL 27. Tag noise is real: 958318 INITIATE is a steel-residual-gas-to-urea industrial process project whose only educational content is summer schools and a MOOC. Questions must be built from text terms, never from the taxonomy label."
+        },
+        {
+          "topic": "Biopsy technologies (including liquid biopsy) in SME Instrument projects",
+          "seed_id": "hybrid-23",
+          "block": "- id: hybrid-23\n  topic: Biopsy technologies (including liquid biopsy) in SME Instrument projects\n  recommend: route=hybrid level=L3 subtype=filter-compare\n  counts: 45 corpus-wide (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / medical engineering\n  evidence: `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%liquid biopsy%' OR p.title ILIKE '%biopsy%') AND p.fundingScheme IN ('SME-1','SME-2')` -> 12 ; `SELECT count(*) FROM project p WHERE p.objective ILIKE '%liquid biopsy%' OR p.title ILIKE '%biopsy%'` -> 45\n  axes: scheme=SME-1/SME-2\n  why: 12 SME-funded biopsy ventures out of 45 corpus-wide - a compact set whose diagnostic approaches can be set against one another.",
+          "bucket_map": "good for: hybrid filter-survey and filter-compare across scheme and country axes (point-of-care x SME = 46, MRI x ERC-STG = 30, wearable coordinated in CH = 27, biopsy x SME = 12, ultrasound x ERC-STG = 12); also good for compare questions contrasting commercial and academic framings of the same device class. / thin for: small filter-read sets on the headline imaging topics - ultrasound (182), MRI (215) and wearable (387) stay large under most single filters, so read-sized questions need a narrower device term. Also thin for L1 vector seeds for the same reason. / texture: the tag is accurate here - all three topic-blind reads are genuinely medical devices or imaging - which is unusual for this corpus. The commercial half is heavily SME-1/SME-2 and writes in market language (market size, CAGR, business model, cost reduction) while the ERC/MSCA half writes in method language, so a scheme filter cleanly separates two writing styles inside one topic. Device terms appear verbatim in objectives (ultrasound, point-of-care, MRI, biopsy, wearable), so text-term filters are reliable."
+        }
+      ],
+      "origin": {
+        "question_id": "hyb-15",
+        "batch": "batchJ",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    }
+  ]
+}

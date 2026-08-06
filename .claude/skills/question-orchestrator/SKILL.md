@@ -102,6 +102,7 @@ The payload holds ONLY what changed; the command merges it over the slot's lates
 {"kind": "batch", "date": "2026-07-25",
  "started": "2026-07-25T14:03:00",   // `date +%Y-%m-%dT%H:%M:%S`, at setup
  "order": "<the cells and counts the user asked for, in words>",
+ "model": "claude-opus-5",           // REQUIRED - see below
  "budgets": {"candidates_per_slot": 3, "passes_budget": 6},
  "versions": {
    "corpus_profile": {"version": "cp3", "content_hash": "..."},
@@ -109,6 +110,17 @@ The payload holds ONLY what changed; the command merges it over the slot's lates
    "bank_brief":     {"version": "bb1", "content_hash": "..."},
    "index":          {"fingerprint": "...", "n_vectors": 190248}}}
 ```
+
+**`model` is required and you must not guess it.** The three role agents do not
+pin a model in their frontmatter - they inherit the model this orchestrator
+session is running as - so the repo state does not record who authored a batch.
+The header is the only place it lives. Write the model id this session was
+launched with (`claude --model <id>`); if the packet carries a `model` field,
+that is authoritative and you copy it verbatim. Never write a placeholder and
+never infer one from the agent files. `write-batch` prints it on the report's
+provenance line, and a report reading `model: unrecorded` means this step was
+skipped - the run is then not comparable to any other and has to be re-labelled
+by hand from the transcripts.
 
 **Every later line is a slot:**
 
@@ -192,7 +204,7 @@ The packet is one JSON file:
 
 In packet mode:
 
-- Read the packet, write the batch header (line 0) into `<output_dir>/draft-batch-journal-<date>.jsonl` using the packet's `versions` verbatim and `date +%Y-%m-%dT%H:%M:%S` for `started`, then go straight to step 5, dispatching every slot's first drafter at once.
+- Read the packet, write the batch header (line 0) into `<output_dir>/draft-batch-journal-<date>.jsonl` using the packet's `versions` verbatim, the packet's `model` verbatim (or, if the packet has none, the model id this session was launched with - never a placeholder), and `date +%Y-%m-%dT%H:%M:%S` for `started`, then go straight to step 5, dispatching every slot's first drafter at once.
 - The candidate blocks and bucket-map lines in the packet are what you pass to drafters - do not re-pull them from the corpus profile. For an ADV slot, the parent record plays exactly that role: pass it verbatim, and never substitute a parent of your own choosing.
 - Everything from step 5 on is identical to a normal run: the per-slot loop, the stop rules, `write-batch`, the trace, the final message. The final message is your report; the launching session collects it, so make the two output paths and the tally unmissable.
 - The two decisions that stay yours: when a candidate is abandoned, move to the next candidate **in the packet's order**, and relay the distilled lesson (the trap, never the verdict or content) to the next drafter, exactly as step 5 says. Never invent a candidate not in the packet - if all three die, the slot fails, same as always.

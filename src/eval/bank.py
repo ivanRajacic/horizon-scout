@@ -283,7 +283,8 @@ def _validate_adversarial(obj, qid, level, subtype, bad):
                 f"absence_evidence entry with expect={required!r}")
 
 
-def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | None:
+def _validate_record(obj: dict, where: str, errs: list[str],
+                     *, strict: bool = True) -> BankQuestion | None:
     for key in obj:
         if key not in KNOWN_FIELDS:
             errs.append(f"{where}: unknown field {key!r}")
@@ -490,7 +491,12 @@ def _validate_record(obj: dict, where: str, errs: list[str]) -> BankQuestion | N
         if v is not None and (not isinstance(v, str) or not v.strip()):
             bad(f"{key} must be a non-empty string when present")
 
-    if errs:
+    # strict=False builds the question anyway and leaves `errs` populated for
+    # the caller to record. It exists for ONE job: judging a bank that carries
+    # a known, deliberate schema gap - the 2026-08-06 mixed Opus/Sonnet file,
+    # whose two Sonnet vector records have no pooling_evidence. Never use it on
+    # eval/bank.jsonl; a study number off an unvalidated bank is not a number.
+    if errs and strict:
         return None
     return BankQuestion(
         question_id=qid, text=text, expected_route=route,
@@ -531,9 +537,25 @@ def validate_record(obj: dict, where: str = "record") -> list[str]:
     return errors
 
 
-def load_bank(path: str | Path) -> list[BankQuestion]:
+def load_bank(path: str | Path, *, strict: bool = True) -> list[BankQuestion]:
     """Parse + validate a bank JSONL. Raises BankValidationError listing EVERY
-    violation in the file; returns the questions only if all lines are clean."""
+    violation in the file; returns the questions only if all lines are clean.
+
+    `strict=False` is an escape hatch, not an option: it loads records that
+    fail validation and returns them anyway. Use `load_bank_with_errors` when
+    you need the violations back to record them - a run that bypasses the
+    validator MUST say so in its own metadata.
+    """
+    questions, errors = load_bank_with_errors(path, strict=strict)
+    if errors and strict:
+        raise BankValidationError(errors)
+    return questions
+
+
+def load_bank_with_errors(path: str | Path, *, strict: bool = True
+                          ) -> tuple[list[BankQuestion], list[str]]:
+    """(questions, violations). Never raises. With `strict=True` a violating
+    record is dropped; with `strict=False` it is kept and still reported."""
     errors: list[str] = []
     questions: list[BankQuestion] = []
     seen_ids: set[str] = set()
@@ -551,7 +573,7 @@ def load_bank(path: str | Path) -> list[BankQuestion]:
             errors.append(f"{where}: record must be a JSON object")
             continue
         line_errs: list[str] = []
-        q = _validate_record(obj, where, line_errs)
+        q = _validate_record(obj, where, line_errs, strict=strict)
         errors.extend(line_errs)
         if q is None:
             continue
@@ -577,9 +599,7 @@ def load_bank(path: str | Path) -> list[BankQuestion]:
                           "an ADV question - the twin is the answerable "
                           "control, so it must be on the ladder")
 
-    if errors:
-        raise BankValidationError(errors)
-    return questions
+    return questions, errors
 
 
 def bank_summary(questions: list[BankQuestion]) -> str:

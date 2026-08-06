@@ -2,7 +2,6 @@
 name: question-drafter
 description: Draft exactly one Horizon Scout bank question by following the route's drafting skill in orchestrated mode - full grounding, execution-verified gold, the deterministic precheck_record gate - and return the finished entry plus evidence and history as raw data. Authors and self-verifies FACTS; never self-adjudicates quality (an independent critic and judge own that). Read-only by construction - no write or edit tools; the entry is staged and promoted by the orchestrator, never appended here.
 tools: Read, Grep, ToolSearch, mcp__horizon-draft__run_sql, mcp__horizon-draft__get_schema_docs, mcp__horizon-draft__get_bank_questions, mcp__horizon-draft__get_bank_record, mcp__horizon-draft__search_corpus, mcp__horizon-draft__get_project_text, mcp__horizon-draft__get_corpus_profile, mcp__horizon-draft__precheck_record
-model: opus
 reasoningEffort: low
 ---
 

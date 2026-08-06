@@ -88,15 +88,25 @@ def _read_jsonl(path: Path) -> list[dict]:
 # ---------------------------------------------------------------- journals
 
 def journal_files() -> list[tuple[str, Path]]:
-    """(batch label, journal path), batch dirs first, then the root journal
-    from before batches had their own directories."""
+    """(run label, journal path) for every journal under eval/drafts.
+
+    Discovery is recursive rather than a `batch*` glob, so a run that does not
+    follow the batch naming - the 2026-08-06 Sonnet probe lives in
+    `sonnet-probe/{sql,vec,hyb}/` - is counted instead of silently missing. The
+    label is the path relative to eval/drafts, so `sonnet-probe/vec` and
+    `batchI` are distinguishable in the per-run table.
+
+    `eval/drafts/archive/` is skipped: it holds the retired pre-skill runs,
+    whose journals predate the typed envelope and would distort every count.
+    """
     out = []
-    for d in sorted(DRAFTS.glob("batch*")):
-        if d.is_dir():
-            for j in sorted(d.glob("draft-batch-journal-*.jsonl")):
-                out.append((d.name, j))
-    for j in sorted(DRAFTS.glob("draft-batch-journal-*.jsonl")):
-        out.append((j.stem.replace("draft-batch-journal-", "batch-"), j))
+    for j in sorted(DRAFTS.rglob("draft-batch-journal-*.jsonl")):
+        rel = j.relative_to(DRAFTS)
+        if "archive" in rel.parts:
+            continue
+        label = (str(rel.parent).replace("\\", "/") if rel.parent != Path(".")
+                 else j.stem.replace("draft-batch-journal-", "batch-"))
+        out.append((label, j))
     return out
 
 
@@ -176,6 +186,9 @@ def journal_stats() -> dict:
         per_batch.append({
             "batch": label,
             "date": (batch or {}).get("date"),
+            # None for every run before 2026-08-06 - the header only started
+            # carrying the model when the role agents stopped pinning one.
+            "model": (batch or {}).get("model"),
             "slots": len(slots),
             "accepted": sum(1 for e in slots.values()
                             if e.get("status") == "ACCEPTED"),
@@ -375,11 +388,12 @@ def render(j: dict, m: dict, b: dict, t: dict) -> str:
           + ", ".join(f"{k}: {v}" for k, v in
                       j["adjudication_rounds"].items()), ""]
 
-    L += ["## Per batch", ""]
-    L += _table(["batch", "date", "slots", "accepted", "FIX rounds",
+    L += ["## Per run", ""]
+    L += _table(["run", "date", "model", "slots", "accepted", "FIX rounds",
                  "abandons"],
-                [[p["batch"], p["date"], p["slots"], p["accepted"],
-                  p["fix_rounds"], p["abandons"]] for p in j["per_batch"]])
+                [[p["batch"], p["date"], p.get("model") or "unrecorded",
+                  p["slots"], p["accepted"], p["fix_rounds"], p["abandons"]]
+                 for p in j["per_batch"]])
 
     L += ["", "## The critic's findings (terminal, deduplicated)", ""]
     L += _table(["severity", "count"],

@@ -235,16 +235,82 @@ of things left undone.
 
 Pointers, not promises. Each is one paragraph.
 
-- **Run the factory on a cheaper model.** Sonnet 5 reprices the same token
-  profile at roughly $850 against Opus 5's $1,507. The claim it tests is the
-  design's own: because every fact is verified by execution and every count is
-  code, the pipeline should tolerate a weaker model - the gates catch what the
-  model gets wrong. Say honestly why it was not run: the cost driver is
-  architecture, and a clean comparison needs a matched Opus arm because the
-  existing telemetry spans 14 batches run while the pipeline was still changing.
+- ~~Run the factory on a cheaper model.~~ **Done 2026-08-06 - see section 10,
+  which is now a result rather than a pointer.**
 - **Cut the orchestrator's token bill.** It is the largest single line and it is
   pure relay.
 - **The absence fix**, as above.
+
+### 10. The Sonnet probe - what a cheaper factory produced
+
+Nine cells were re-drafted with every factory role on Sonnet 5 instead of
+Opus 5, from the same recorded seeds, same cells, same gates, same effort. The
+plan and its disclosed limits are in `docs/sonnet-replication-plan.md`. **Call
+it a matched-workload run, never a replication** - the seed does not bind the
+question, so the two arms produce different questions from the same starting
+material.
+
+**The authoring side.**
+
+| | Opus | Sonnet |
+|---|---|---|
+| cells attempted | 9 | 9 |
+| slots accepted | 9 | 7 |
+| schema-valid records | 9 | **5** |
+| candidates consumed | 12 of 27 | 17 of 27 |
+| adjudication rounds | 18 | 16 |
+| `precheck_record` failures | 0 of 17 | **0 of 17** |
+| cost | ~$180 | **$65.72** |
+
+**The execution gate held perfectly.** Every Sonnet draft re-executed to the
+numbers it claimed. That is the design's own claim surviving contact: the
+deterministic re-execution does not care which model wrote the record.
+
+**Two contract breaches, both at the orchestrator, not the drafter.** The
+Sonnet orchestrators reset `judge_decisions` per candidate instead of
+accumulating across the slot, so the last journal line understates the work -
+`telemetry.py` reads that line and reports 0 FIX rounds where the true count
+across all lines is 4. And two accepted vector records shipped without
+`pooling_evidence` while the journal recorded `validate-record OK`; calling the
+validator directly on those records fails. Traced: `vec-s38`'s first candidate
+had the field, the second candidate onward never did.
+
+**The judged side** (`data/runs/mixed-2026-08-06`, router, 16 questions, $0.02).
+Both arms' questions were put in one bank, author readable off the id - an `-s`
+infix means Sonnet.
+
+| cell | Opus | Sonnet |
+|---|---|---|
+| sql-14 / sql-s14 | fail | PASS |
+| sql-15 / sql-s15 | fail | fail |
+| sql-16 / sql-s16 | PASS | PASS |
+| vec-38 / vec-s38 | 0.80 | 0.80 |
+| vec-41 / vec-s41 | 0.75 | 1.00 |
+| vec-42 / (none) | 0.19 | - |
+| hyb-12 / hyb-s12 | 0.00 | 0.00 |
+| hyb-13 / hyb-s13 | 0.26 | 0.45 |
+| hyb-15 / (none) | 0.33 | - |
+
+On the seven matched pairs the system scored **higher on three, equal on four,
+lower on none**. A question the system scores higher on is a question that
+discriminates less. The two Opus cells with no counterpart are the two hardest
+in the set - 0.19 and 0.33 - and they are exactly the two where Sonnet burned
+all three candidates and failed the slot.
+
+**The line to write.** A cheaper drafter finished the easy cells for a third of
+the money, wrote questions the system found easier, and could not close the two
+hardest ones at all. The gates that are code held; the parts that depend on the
+model keeping a contract did not. That is a sharper claim than either "Sonnet
+works" or "Sonnet doesn't".
+
+> **Footnote required wherever this table appears.** `vec-s38` (0.80) and
+> `vec-s41` (1.00) were scored off gold sets with no `pooling_evidence` behind
+> them - the record of the pooled search that proves a vector gold set was
+> derived rather than asserted. The judge never reads that field, so the run
+> scored them normally, but those two numbers rest on an unproven gold set and
+> are not the same kind of number as the other five. The run itself was executed
+> with `--unsafe-skip-bank-validation`, and both the run's meta and the first
+> line of its report record the bypass and name the two violations.
 
 ---
 
@@ -272,6 +338,11 @@ Pointers, not promises. Each is one paragraph.
 - **Judge noise floor provenance.** The 0.081 / 0.35 / 10-of-31 figures come from
   the three-mode re-judge. Confirm which two logs they were computed across and
   cite them by filename.
+- **Sonnet FIX-round count.** Section 10 says 4, counted by hand across all
+  journal lines. `telemetry.py` still reports 0 because it reads the last line
+  per slot, which the Sonnet orchestrators did not keep cumulative. Fix the
+  script to recount across lines before quoting either number - it is the
+  correct fix regardless of this run.
 - Everything else in this plan was recomputed from disk on 2026-08-06 and can be
   quoted as written.
 

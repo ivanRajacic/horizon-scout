@@ -1,0 +1,131 @@
+{
+  "kind": "packet",
+  "order": "sonnet probe, vec x3 - re-draft the most recent batch-authored vec cells with every role on Sonnet",
+  "output_dir": "eval/drafts/sonnet-probe/vec",
+  "model": "claude-sonnet-5",
+  "siblings": [
+    "eval/drafts/sonnet-probe/sql",
+    "eval/drafts/sonnet-probe/hyb"
+  ],
+  "versions": {
+    "corpus_profile": {
+      "version": "cp8",
+      "content_hash": "daea2b6899b9"
+    },
+    "schema_docs": {
+      "version": "sd3",
+      "content_hash": "5e35917e899d"
+    },
+    "bank_brief": {
+      "version": "bb4",
+      "content_hash": "213f17b36728"
+    },
+    "index": {
+      "fingerprint": "be84cbad9182",
+      "n_vectors": 190248
+    }
+  },
+  "slots": [
+    {
+      "question_id": "vec-s38",
+      "cell": {
+        "route": "vector",
+        "level": "L1",
+        "subtype": "identify",
+        "term_style": "exact-term"
+      },
+      "candidates": [
+        {
+          "topic": "A project in which philosophers and physicists together re-examined how time is represented at the beginning of the universe, contrasting Plato's and Kant's conceptions with emergent time in quantum gravity and quantum cosmology.",
+          "seed_id": "vector-04",
+          "block": "- id: vector-04\n  topic: A project in which philosophers and physicists together re-examined how time is represented at the beginning of the universe, contrasting Plato's and Kant's conceptions with emergent time in quantum gravity and quantum cosmology.\n  recommend: route=vector level=L1 subtype=identify term_style=exact-term\n  evidence: `SELECT COUNT(DISTINCT projectID) FROM euroscivoc WHERE euroSciVocTitle='history of philosophy'` -> 1 (project 758145 PROTEUS). Text read: history/philosophy of cosmology, Plato & Kant vs quantum gravity, \"time and timelessness in fundamental physics\".\n  axes: branch=philosophy-ethics-and-religion leaf=history-of-philosophy satisfying=1 report_coverage=1/1 term_style=exact-term sample_ids=758145 sample_acr=PROTEUS\n  why: Humanities-x-physics seed with strongly distinctive vocabulary (Plato, Kant, quantum gravity) - anchors a branch the bank never touches."
+        },
+        {
+          "topic": "Eliminating CAPTCHAs and passwords via a phone-as-security-token distributed cryptographic authentication platform",
+          "seed_id": "vector-35",
+          "block": "- id: vector-35\n  topic: Eliminating CAPTCHAs and passwords via a phone-as-security-token distributed cryptographic authentication platform\n  recommend: route=vector level=L1 subtype=topical-multi\n  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: natural sciences / computer and information sciences\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%CAPTCHA%'` -> 684168 | Excalibur 2.0 | Revolutionary trustworthy platform for seamless authentication of Internet users ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%CAPTCHA%'` -> 1\n  axes: topic=usable-security; technique=distributed cryptographic scheme, behaviometrics, proximity detection; artefact=cloud password manager\n  why: Read 684168: the objective names CAPTCHAs, logins and verification emails as the friction it removes, using the phone as a universal security token - the only corpus objective mentioning CAPTCHA.",
+          "bucket_map": "good for: Vector L1 seeds: the bucket is large and heterogeneous enough that sharply-worded technique phrases isolate exactly one project corpus-wide (deepfake, CAPTCHA, satisfiability modulo theories). Also supports L2/L3 technique clusters (program synthesis, differential privacy, serverless computing) whose members are genuinely comparable CS research.\nthin for: Poor for questions keyed on the euroSciVoc leaf label itself, because members are tagged into computing for applying it as much as for researching it. Also thin for absence claims, since almost any computing term returns something across 7,654 members.\ntexture: 7581 of 7654 members carry a report row (99.0%), above the 98.1% corpus rate, so report teasers are usable evidence here. Member text names its techniques in its own words (\"satisfiability modulo theories\", \"deepfakes\", \"serverless\") rather than echoing euroSciVoc labels, so topic questions should be written from text phrases, not tag names. Tag noise is real: 785907 (Human Brain Project) and 796752 (FLOODARC, a Mediterranean flood-archive project) both sit in this bucket, and corpus-wide singleton leaf tags reachable from here include 'hydrometeorology' and 'other medical sciences' - leaf labels are unreliable as topic proxies."
+        },
+        {
+          "topic": "Higher-order automation for interactive proof assistants: superposition provers and satisfiability-modulo-theories solvers",
+          "seed_id": "vector-36",
+          "block": "- id: vector-36\n  topic: Higher-order automation for interactive proof assistants: superposition provers and satisfiability-modulo-theories solvers\n  recommend: route=vector level=L1 subtype=topical-multi\n  counts: 1 corpus-wide, 1 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: natural sciences / computer and information sciences\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%satisfiability modulo%'` -> 1 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%satisfiability modulo%'` -> 713999 | Matryoshka | Fast Interactive Verification through Strong Higher-Order Automation ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%satisfiability modulo%'` -> 1\n  axes: topic=automated-theorem-proving; tools=Isabelle, Coq, TLA+ Proof System, Sledgehammer; goal=higher-order superposition and SMT\n  why: Read 713999: the objective sets out to enrich superposition and SMT with higher-order reasoning and integrate the provers into Coq, Isabelle and TLA+, and it is the corpus's only 'satisfiability modulo' project.",
+          "bucket_map": "good for: Vector L1 seeds: the bucket is large and heterogeneous enough that sharply-worded technique phrases isolate exactly one project corpus-wide (deepfake, CAPTCHA, satisfiability modulo theories). Also supports L2/L3 technique clusters (program synthesis, differential privacy, serverless computing) whose members are genuinely comparable CS research.\nthin for: Poor for questions keyed on the euroSciVoc leaf label itself, because members are tagged into computing for applying it as much as for researching it. Also thin for absence claims, since almost any computing term returns something across 7,654 members.\ntexture: 7581 of 7654 members carry a report row (99.0%), above the 98.1% corpus rate, so report teasers are usable evidence here. Member text names its techniques in its own words (\"satisfiability modulo theories\", \"deepfakes\", \"serverless\") rather than echoing euroSciVoc labels, so topic questions should be written from text phrases, not tag names. Tag noise is real: 785907 (Human Brain Project) and 796752 (FLOODARC, a Mediterranean flood-archive project) both sit in this bucket, and corpus-wide singleton leaf tags reachable from here include 'hydrometeorology' and 'other medical sciences' - leaf labels are unreliable as topic proxies."
+        }
+      ],
+      "origin": {
+        "question_id": "vec-38",
+        "batch": "batchE",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "vec-s41",
+      "cell": {
+        "route": "vector",
+        "level": "L2",
+        "subtype": "synthesis",
+        "term_style": "paraphrase"
+      },
+      "candidates": [
+        {
+          "topic": "Projects developing animal-venom toxins as drug leads or studying venom immunotherapy",
+          "seed_id": "vector-16",
+          "block": "- id: vector-16\n  topic: Projects developing animal-venom toxins as drug leads or studying venom immunotherapy\n  recommend: route=vector level=L2 subtype=topical-multi\n  bucket: medical and health sciences / basic medicine\n  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%venom%' OR p.title ILIKE '%venom%')` -> n=4 ; `SELECT DISTINCT p.id, p.acronym FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%venom%' OR p.title ILIKE '%venom%') ORDER BY p.id` -> 4 rows: 655153 IgEPath, 714366 GUTPEPTIDES, 891733 MITafterVIT, 949830 ToxMim\n  axes: domain=basic-medicine term_style=technical theme=venom-toxins satisfying=4\n  why: Exactly four basic-medicine projects mention venom, spanning toxin-derived drug discovery (ToxMim) and venom immunotherapy - a clean L2 set.",
+          "bucket_map": "good for: Vector route at all three levels: technical phrases like 'chimeric antigen receptor' (12) or 'organ-on-chip' (15) give clean L3 survey sets, rarer phrases like 'venom' (4) give L2. Also good for hybrid filters on funding scheme, since translational IA/RIA and ERC projects coexist here.\nthin for: Single-project L1 seeds - the common technical terms all return double digits (CRISPR alone matches 113 members), so uniqueness has to come from an unusual disease/organism pairing rather than a method word. Also thin for lay-vocabulary questions; the text is uniformly specialist.\ntexture: 4,178 of 4,252 members carry a report row (98.3%). Taxonomy labels are rarely echoed verbatim - no member says the tag words; the theme must be reached through technical vocabulary (chimeric antigen receptor, SLAMF7, toxin mimetic). 3,329 members (78%) also carry a euroSciVoc tag under another top-level branch, mostly natural sciences, so bucket membership is not exclusive and a question must be phrased topically, not by tag."
+        },
+        {
+          "topic": "Law of the sea research - ocean governance, marine biodiversity treaties and autonomous vessels",
+          "seed_id": "vector-29",
+          "block": "- id: vector-29\n  topic: Law of the sea research - ocean governance, marine biodiversity treaties and autonomous vessels\n  recommend: route=vector level=L2 subtype=small-set-synthesis\n  bucket: social sciences / law\n  evidence: `SELECT count(DISTINCT p.id) n FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%law of the sea%'` -> n = 4 ; `SELECT p.id, p.acronym FROM project p JOIN euroscivoc v ON v.projectID=p.id WHERE v.euroSciVocPath LIKE 'social sciences/law%' AND lower(p.objective) LIKE '%law of the sea%' GROUP BY 1,2 ORDER BY 1` -> 639070 SUSTAINABLEOCEAN, 804599 MARIPOLDATA, 101018998 LOSFARE, 101038097 P-ADMIRAL\n  axes: domain=law term_style=doctrinal-phrase theme=law-of-the-sea satisfying=4\n  why: Exactly four projects share one named legal regime, spanning ocean governance and the unmanned-vessel gap that P-ADMIRAL's objective states explicitly.",
+          "bucket_map": "good for: vector L2/L3 on well-named legal topics - human trafficking (5), law of the sea (4), the International Criminal Court (4), prisons (17) - each an ordinary phrase a user would type. Also good for ambiguous-route seeds, since enforcement technology and doctrinal scholarship answer different readings of the same question.\nthin for: L1 single-project questions on generic themes - 'human rights' is shared by 117 projects, so no one project is uniquely identified. Also thin for SQL/aggregate questions: nothing in the columns marks a project as legal, the classification lives only in euroscivoc.\ntexture: Two registers coexist and must not be conflated - ERC/MSCA legal-theory objectives (dense, argumentative, doctrinal) and H2020 security-call projects (CONNEXIONs, CRiTERIA) whose text is about platforms and tools with the tag attached only to the ethics/LEA dimension. A tag-only filter therefore pulls in technology projects; the theme must be confirmed in the objective, and 'law enforcement' in particular is mostly technology. report_text coverage is high and teasers restate the legal problem plainly."
+        },
+        {
+          "topic": "managed aquifer recharge - deliberately replenishing groundwater with treated or captured surface water",
+          "seed_id": "vector-62",
+          "block": "- id: vector-62\n  topic: managed aquifer recharge - deliberately replenishing groundwater with treated or captured surface water\n  recommend: route=vector level=L2 subtype=topical-multi\n  counts: 3 corpus-wide, 3 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / environmental engineering\n  evidence: `SELECT count(*) FROM project p WHERE p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%'` -> 3 ; `SELECT p.id,p.acronym FROM project p WHERE p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%' ORDER BY p.id` -> 689450 AquaNES; 814066 MARSoluT; 101028018 SPONGE ; `SELECT count(*) FROM project p WHERE (p.objective ILIKE '%aquifer recharge%' OR p.title ILIKE '%aquifer recharge%') AND EXISTS (SELECT 1 FROM euroscivoc e WHERE e.projectID=p.id AND split_part(e.euroSciVocPath,'/',2)='environmental engineering')` -> 3\n  axes: branch=engineering bucket=environmental-engineering topic=aquifer-recharge term_style=mixed satisfying=3\n  why: Read SPONGE (101028018) - safe recharge of urban aquifers expanding the sponge city strategy, collecting runoff both to reduce waterlogging and to recharge stressed aquifers, with microplastics and emerging contaminants as the quality risk. AquaNES combines natural and engineered treatment components; MARSoluT is a training network on the same practice. Askable in plain language.",
+          "bucket_map": "good for: water and wastewater treatment technologies; nutrient and material recovery from waste streams; landfill and leachate and mining residues; CO2 capture and conversion to fuels; urban groundwater and runoff quality\nthin for: environmental impact assessment, environmental law and policy, soil geotechnics (geological engineering 9, geotechnics 8 - too few members to sustain question families)\ntexture: Two populations sharing one tag: a handful of very large multi-hundred-million-euro industrial and aviation programme grants (Clean Sky GAMs) at one end, and a long tail of MSCA fellowships and SME-instrument projects on water, waste and emissions at the other. SME texts read like business plans (EBBR, 673683: market size, licensees, TRL7 prototypes); MSCA texts read like research plans with host-institution detail. Circular-economy vocabulary - valorisation, recovery, recycling of nutrients and metals - is pervasive across the waste and water nodes."
+        }
+      ],
+      "origin": {
+        "question_id": "vec-41",
+        "batch": "batchF",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question."
+      }
+    },
+    {
+      "question_id": "vec-s42",
+      "cell": {
+        "route": "vector",
+        "level": "L3",
+        "subtype": "survey",
+        "term_style": "exact-term"
+      },
+      "candidates": [
+        {
+          "topic": "Organ-on-chip / microphysiological human tissue models",
+          "seed_id": "vector-18",
+          "block": "- id: vector-18\n  topic: Organ-on-chip / microphysiological human tissue models\n  recommend: route=vector level=L3 subtype=topical-survey\n  bucket: medical and health sciences / basic medicine\n  evidence: `SELECT count(DISTINCT p.id) AS n FROM project p JOIN euroSciVoc e ON e.projectID=p.id WHERE split_part(e.euroSciVocPath,'/',1)='medical and health sciences' AND split_part(e.euroSciVocPath,'/',2)='basic medicine' AND (p.objective ILIKE '%organ-on-chip%' OR p.title ILIKE '%organ-on-chip%')` -> n=15\n  axes: domain=basic-medicine term_style=technical theme=organ-on-chip satisfying=15\n  why: Fifteen basic-medicine projects use the literal phrase organ-on-chip in title or objective, a well-bounded L3 topical set.",
+          "bucket_map": "good for: Vector route at all three levels: technical phrases like 'chimeric antigen receptor' (12) or 'organ-on-chip' (15) give clean L3 survey sets, rarer phrases like 'venom' (4) give L2. Also good for hybrid filters on funding scheme, since translational IA/RIA and ERC projects coexist here.\nthin for: Single-project L1 seeds - the common technical terms all return double digits (CRISPR alone matches 113 members), so uniqueness has to come from an unusual disease/organism pairing rather than a method word. Also thin for lay-vocabulary questions; the text is uniformly specialist.\ntexture: 4,178 of 4,252 members carry a report row (98.3%). Taxonomy labels are rarely echoed verbatim - no member says the tag words; the theme must be reached through technical vocabulary (chimeric antigen receptor, SLAMF7, toxin mimetic). 3,329 members (78%) also carry a euroSciVoc tag under another top-level branch, mostly natural sciences, so bucket membership is not exclusive and a question must be phrased topically, not by tag."
+        },
+        {
+          "topic": "quantum key distribution links",
+          "seed_id": "vector-59",
+          "block": "- id: vector-59\n  topic: quantum key distribution links\n  recommend: route=vector level=L3 subtype=topical-multi\n  counts: 8 corpus-wide, 8 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: engineering and technology / electrical engineering, electronic engineering, information engineering\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%'` -> 8 ; `SELECT p.id, p.acronym FROM project p WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%' ORDER BY p.id` -> 754509 WASPSNEST; 792557 GENIUS; 817021 EQUALITY; 840691 SatCV; 857156 OPENQKD; 899814 Qurope; 101004341 QUANGO; 101025664 QESPEM ; `WITH b AS (SELECT DISTINCT projectID id FROM euroscivoc WHERE split_part(euroSciVocPath,'/',2)='electrical engineering, electronic engineering, information engineering') SELECT COUNT(*) FROM project p JOIN b ON b.id=p.id WHERE p.objective ILIKE '%quantum key distribution%' OR p.title ILIKE '%quantum key distribution%'` -> 4\n  axes: branch=engineering bucket=electrical-engineering topic=quantum-key-distribution term_style=exact satisfying=8\n  why: Eight corpus-wide but only 4 inside this bucket - the other half is filed under physics or computing, exactly the fence effect the standard warns about. Spread runs satellite versus terrestrial-fibre links and device physics versus the Europe-wide OPENQKD testbed, and the natural question needs no tag knowledge.",
+          "bucket_map": "good for: Device- and material-specific vector questions (phase-change metasurfaces, memristive and spiking hardware, quantum-secure optical links); cross-domain instrument questions where an electronics technique is applied in a humanities or biomedical project\nthin for: Paraphrase-only questions - most members name their own technology verbatim in the objective; also thin for pure electrical-power engineering, only 527 projects\ntexture: Device-physics objectives are dense with specific material and structure names (GeSbTe, chalcogenide, nanoresonator, crossbar microheater), which makes exact-term retrieval easy and paraphrase questions rare. The tag travels far outside electronics: the same second-level label sits on the Human Brain Project and on a Herculaneum papyrus edition project (GreekSchools) that uses terahertz imaging as an instrument, so tag membership alone is a poor guide to what a project is about. Start dates run 2014-01-01 (SYS GAM 2018) to 2023-01-30 (DReM-PCM)."
+        },
+        {
+          "topic": "Differential privacy as a leakage guarantee in data analytics, genomic privacy and dynamic data structures",
+          "seed_id": "vector-38",
+          "block": "- id: vector-38\n  topic: Differential privacy as a leakage guarantee in data analytics, genomic privacy and dynamic data structures\n  recommend: route=vector level=L3 subtype=topical-multi\n  counts: 5 corpus-wide, 3 inside the bucket (the level is the corpus-wide count; the question carries no bucket filter)\n  bucket: natural sciences / computer and information sciences\n  evidence: `SELECT COUNT(*) FROM project p WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%'` -> 5 ; `SELECT p.id, p.acronym, p.title FROM project p WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%' ORDER BY p.id` -> 707135 GenoPri; 726361 IMPROVE; 731583 SODA; 101002277 TypeFoundry; 101019564 MoDynStruct ; `SELECT COUNT(*) FROM project p JOIN (SELECT DISTINCT projectID id FROM euroSciVoc WHERE split_part(euroSciVocPath,'/',1)='natural sciences' AND split_part(euroSciVocPath,'/',2)='computer and information sciences') b ON b.id=p.id WHERE p.objective ILIKE '%differential privacy%' OR p.title ILIKE '%differential privacy%'` -> 3\n  axes: topic=differential-privacy; settings=multi-party computation (731583), genomic data (707135), dynamic data structures (101019564); spill=2 members outside the bucket (726361, 101002277)\n  why: Read 731583: its objective combines multi-party computation with differential privacy so aggregated results do not leak individual data, and the phrase recurs across five corpus projects in clearly different settings.",
+          "bucket_map": "good for: Vector L1 seeds: the bucket is large and heterogeneous enough that sharply-worded technique phrases isolate exactly one project corpus-wide (deepfake, CAPTCHA, satisfiability modulo theories). Also supports L2/L3 technique clusters (program synthesis, differential privacy, serverless computing) whose members are genuinely comparable CS research.\nthin for: Poor for questions keyed on the euroSciVoc leaf label itself, because members are tagged into computing for applying it as much as for researching it. Also thin for absence claims, since almost any computing term returns something across 7,654 members.\ntexture: 7581 of 7654 members carry a report row (99.0%), above the 98.1% corpus rate, so report teasers are usable evidence here. Member text names its techniques in its own words (\"satisfiability modulo theories\", \"deepfakes\", \"serverless\") rather than echoing euroSciVoc labels, so topic questions should be written from text phrases, not tag names. Tag noise is real: 785907 (Human Brain Project) and 796752 (FLOODARC, a Mediterranean flood-archive project) both sit in this bucket, and corpus-wide singleton leaf tags reachable from here include 'hydrometeorology' and 'other medical sciences' - leaf labels are unreliable as topic proxies."
+        }
+      ],
+      "origin": {
+        "question_id": "vec-42",
+        "batch": "batchF",
+        "note": "Opus original; this slot re-draws the same cell from the same candidate list. Not a replication - the seed does not bind the question. ARCHIVED 2026-08-03 for allocation, not quality: 'L3 over target; survey/exact-term, biomedical engineering'. It passed drafter, critic and judge and shipped to the bank before the v5 trim removed it. Its record is intact in eval/archive/bank-trimmed-2026-08-03.jsonl."
+      }
+    }
+  ]
+}
