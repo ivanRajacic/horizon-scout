@@ -300,6 +300,19 @@ def test_vector_level_must_match_gold_count(tmp_path):
     assert len(load_bank(write_bank(tmp_path, [rec]))) == 1
 
 
+def test_vector_ladder_empty_gold_fails_the_level_bound(tmp_path):
+    # `gold_project_ids: []` on a ladder vector question used to skip the
+    # level check entirely (a truthiness guard) and validate clean. Empty
+    # gold is only legal on zero-match, which is ADV-level.
+    rec = {**VALID_VECTOR, "gold_project_ids": [],
+           "pooling_evidence": {**VALID_VECTOR["pooling_evidence"],
+                                "accepted": []}}
+    assert "requires |gold_project_ids|" in errors_of(tmp_path, [rec])
+    # and zero-match stays valid with its empty gold
+    assert len(load_bank(write_bank(tmp_path, [VALID_VECTOR,
+                                               VALID_ADV]))) == 2
+
+
 def test_vector_ladder_requires_verification_fields(tmp_path):
     for missing in ("gold_project_ids", "term_style", "pooling_evidence"):
         rec = dict(VALID_VECTOR)

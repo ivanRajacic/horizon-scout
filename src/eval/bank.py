@@ -404,8 +404,11 @@ def _validate_record(obj: dict, where: str, errs: list[str],
             bad("gold_project_ids contains duplicates")
         elif subtype == "zero-match" and gold_ids:
             bad("zero-match questions must have empty gold_project_ids")
-        elif route == "vector" and level in LADDER and gold_ids:
+        elif route == "vector" and level in LADDER:
             # Vector-route level is DEFINED by |gold_project_ids| (§1).
+            # No emptiness guard here on purpose: [] must FAIL the L1 bound
+            # (n=0 != 1), not skip the check - only zero-match, caught
+            # above, may be empty, and that subtype is ADV-level anyway.
             n = len(gold_ids)
             want = {"L1": n == 1, "L2": 2 <= n <= 4, "L3": n >= 5}
             if not want[level]:
