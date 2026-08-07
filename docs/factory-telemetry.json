@@ -323,7 +323,7 @@
     ],
     "total_cost_usd": 1572.74,
     "unpriced_models": [],
-    "slots_traced": 70,
-    "median_output_tokens_per_slot": 58792
+    "slots_traced": 79,
+    "median_output_tokens_per_slot": 54685
   }
 }

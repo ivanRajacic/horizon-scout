@@ -110,7 +110,7 @@ MCP activity: 4152 calls over 11 days (2026-07-22 to 2026-08-06), 169 errored.
 | question-judge | 86 | 607 | 13.0M | 4.4M | 336k | 203 (0 MCP) | 91.1m |
 | (orchestrator) | 25 | 3470 | 646.0M | 623.7M | 8.3M | 1949 (43 MCP) | 1724.6m |
 
-Slots traceable to a question id: 70; median output tokens per slot: 58792.
+Slots traceable to a question id: 79; median output tokens per slot: 54685.
 
 ### Cost in dollars, by model
 
