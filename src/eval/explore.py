@@ -1001,17 +1001,21 @@ def _verify_count(slice_id: str, label: str, payload: dict,
     the sort of number that drifts unnoticed, so it is still held to the
     house rule: every claim reproduces from its own evidence.
     """
+    failures = []
     for key in ("satisfying_count", "survivor_count"):
         value = payload.get(key)
         if not isinstance(value, int) or isinstance(value, bool):
             continue
         if str(value) not in live:
-            return [Check(
+            # Collect, don't return: when both counts are unbacked, one
+            # re-run must surface both instead of revealing them one at a
+            # time.
+            failures.append(Check(
                 slice_id, f"COUNT {label}", "FAIL",
                 f"{key}={value} appears in no evidence result for this "
                 f"payload (values seen: {sorted(live, key=len)[:8]}) - record "
-                "the query that produced it")]
-    return []
+                "the query that produced it"))
+    return failures
 
 
 # euroSciVoc predicates a one-reading check can recognise. Deliberately
@@ -1828,6 +1832,11 @@ def write_profile(journal_path: Path, version: str,
     # silently desynchronise src/config.py from the real file.
     canonical = profile_path.resolve() == CORPUS_PROFILE_PATH.resolve()
     if not dry_run:
+        if canonical:
+            # Refuse BEFORE the profile write: a missing marker used to
+            # raise after it, and the "nothing written" refusal message
+            # then lied about a profile already on disk.
+            _config_text_with_version_marker(config_path)
         profile_path.write_text(text, encoding="utf-8")
         if canonical:
             _bump_config_version(config_path, version)
@@ -1855,14 +1864,28 @@ def _bump_header(text: str, version: str, date: str, telemetry: str) -> str:
     return text[:start] + "\n".join(lines) + "\n" + text[end:]
 
 
-def _bump_config_version(config_path: Path, version: str) -> None:
+_CONFIG_VERSION_RE = re.compile(r'^CORPUS_PROFILE_VERSION = ".*?"',
+                                re.MULTILINE)
+
+
+def _config_text_with_version_marker(config_path: Path) -> str:
+    """The config text, after verifying the version marker is present.
+
+    Split from the write so `write_profile` can run this check BEFORE the
+    profile lands on disk: the bump used to raise after the profile write,
+    and cli.py then printed "WRITE REFUSED - nothing written" over a file
+    that was already written."""
     text = config_path.read_text(encoding="utf-8")
-    updated, n = re.subn(r'^CORPUS_PROFILE_VERSION = ".*?"',
-                         f'CORPUS_PROFILE_VERSION = "{version}"', text,
-                         count=1, flags=re.MULTILINE)
-    if not n:
+    if not _CONFIG_VERSION_RE.search(text):
         raise ExploreError("could not find CORPUS_PROFILE_VERSION in "
                            f"{config_path}")
+    return text
+
+
+def _bump_config_version(config_path: Path, version: str) -> None:
+    text = _config_text_with_version_marker(config_path)
+    updated = _CONFIG_VERSION_RE.sub(
+        f'CORPUS_PROFILE_VERSION = "{version}"', text, count=1)
     config_path.write_text(updated, encoding="utf-8")
 
 

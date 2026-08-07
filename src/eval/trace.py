@@ -303,7 +303,13 @@ def _accumulate(trace: AgentTrace, entries: list[dict]) -> AgentTrace:
             current = ensure_step(stamp)
             trace.spend.add_usage(usage)
             current.spend.add_usage(usage)
-            trace.model = trace.model or str(message.get("model") or "?")
+            # Only a real value may claim the slot: locking in "?" on a
+            # first usage message without a model would leave the whole
+            # trace unpriced in telemetry.price_spend even when a later
+            # message names the model. Consumers fall back with
+            # `t.model or "?"` at render time.
+            if not trace.model and message.get("model"):
+                trace.model = str(message["model"])
             if stamp:
                 current.ended = stamp
         content = message.get("content")

@@ -499,6 +499,20 @@ def test_a_satisfying_count_from_no_query_fails(corpus):
     assert "satisfying_count=7" in detail
 
 
+def test_both_unbacked_counts_fail_in_one_pass(corpus):
+    """One re-run must surface every unbacked count, not reveal them one at
+    a time - the check used to return on the first failing key."""
+    invented = a_slice()
+    invented["candidates"][0]["satisfying_count"] = 7
+    invented["candidates"][0]["survivor_count"] = 9
+    count_failures = [f for f in failures(checks_for(corpus, invented))
+                      if f[0].startswith("COUNT")]
+    assert len(count_failures) == 2
+    details = " | ".join(d for _, d in count_failures)
+    assert "satisfying_count=7" in details
+    assert "survivor_count=9" in details
+
+
 def test_a_survivor_count_outside_the_subtype_window_fails(corpus):
     """The hyb-02 birth-failure, caught before a drafter is ever spawned."""
     combo = a_slice()

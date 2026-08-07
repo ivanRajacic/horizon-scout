@@ -1117,13 +1117,6 @@ def render_report(records: list[dict], meta: dict) -> str:
         for name, cost in sorted(by_model.items(), key=lambda kv: -kv[1]):
             out.append(f"- `{name}` {_money(cost)}")
 
-    judge_batches = {r.get("judge_batch_s") for r in ok
-                     if r.get("judge_batch_s")}
-    if judge_batches:
-        out += ["",
-                f"Judging ran as one concurrent batch per condition "
-                f"({', '.join(f'{s:.0f}s' for s in sorted(judge_batches))}), "
-                "so judge time is a batch figure, not per question."]
     out.append("")
 
     # --- what to actually read ---------------------------------------------

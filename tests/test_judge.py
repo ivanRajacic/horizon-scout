@@ -41,6 +41,23 @@ def mk_judge(tmp_path, transport):
                  transport=transport)
 
 
+# --- default transport resolution ---
+
+def test_default_transport_follows_judge_backends(tmp_path):
+    """Judge() used to default to model_key=deepseek WITH transport=
+    call_claude - an API model on the `claude -p` shell-out. None now
+    resolves from config.JUDGE_BACKENDS; nothing is called, only resolved."""
+    from src.claude_cli import call_claude
+    api_judge = Judge(log_path=tmp_path / "judge.jsonl")   # deepseek default
+    assert api_judge.transport is not call_claude
+    assert callable(api_judge.transport)
+    legacy = Judge(model_key="haiku", log_path=tmp_path / "judge.jsonl")
+    assert legacy.transport is call_claude
+    # explicit injection still wins
+    fake = FakeTransport([])
+    assert mk_judge(tmp_path, fake).transport is fake
+
+
 # --- pure logic ---
 
 def test_derive_pass_is_the_refusal_and_nothing_else():

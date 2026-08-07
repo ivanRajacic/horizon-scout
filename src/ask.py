@@ -226,7 +226,7 @@ class Ask:
                    "chunks_passed_to_gen": len(s.used_chunks)})
 
     def _explain_sql(self, question, columns, rows, base) -> str:
-        preview = [dict(zip(columns, r)) for r in rows[:20]]
+        preview = [dict(zip(columns, r)) for r in rows[:EXPLAIN_ROWS]]
         msg = [{"role": "system", "content":
                 "Explain this SQL query result in one or two plain sentences. "
                 "State only what the numbers show; add no outside knowledge."},

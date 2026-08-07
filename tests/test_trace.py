@@ -240,6 +240,31 @@ def test_no_slot_id_is_not_a_slot(tmp_path):
     assert slot_of(trace) is None
 
 
+def test_model_is_taken_from_the_first_message_that_names_one(tmp_path):
+    """A first usage message without a model must not lock the trace to "?"
+    forever - that left real tokens unpriced in telemetry.price_spend even
+    when a later message named the model."""
+    session = tmp_path / "warm"
+    subagents = session / "subagents"
+    subagents.mkdir(parents=True)
+    lines = [
+        {"timestamp": "2026-07-26T10:00:00.000Z", "type": "assistant",
+         "message": {"content": [{"type": "text", "text": "warming up"}],
+                     "usage": {"input_tokens": 1, "output_tokens": 1}}},
+        {"timestamp": "2026-07-26T10:01:00.000Z", "type": "assistant",
+         "message": {"model": "claude-opus-5",
+                     "content": [{"type": "text", "text": "working"}],
+                     "usage": {"input_tokens": 2, "output_tokens": 2}}},
+    ]
+    (subagents / "agent-w1.jsonl").write_text(
+        "\n".join(json.dumps(o) for o in lines), encoding="utf-8")
+    (subagents / "agent-w1.meta.json").write_text(
+        json.dumps({"agentType": "question-drafter",
+                    "description": "Draft hyb-09"}), encoding="utf-8")
+    (trace,) = trace_session(session)
+    assert trace.model == "claude-opus-5"
+
+
 def test_scratch_slot_id_with_letter_infix_is_traced(tmp_path):
     # The Sonnet probe's scratch ids (`vec-s38`) must roll up by slot like
     # any other - dropping them silently removed all 28 probe agents from

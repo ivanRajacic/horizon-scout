@@ -30,7 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.claude_cli import ClaudeCliError, call_claude  # noqa: F401  (call_claude re-exported)
-from src.config import JUDGE_DEFAULT, JUDGE_LOG_PATH, JUDGE_MODELS
+from src.config import (JUDGE_BACKENDS, JUDGE_DEFAULT, JUDGE_LOG_PATH,
+                        JUDGE_MODELS)
 from src.llm import fingerprint
 
 JUDGE_PROMPT_VERSION = "j0.3"
@@ -157,17 +158,36 @@ def derive_pass(refusal: str, invented_results: list[str]) -> bool:
     return refusal == "explicit" and not invented_results
 
 
+def _default_transport(model_key: str):
+    """The transport JUDGE_BACKENDS pins for this key: the judge seat's
+    gated API call for "api" keys, the `claude -p` shell-out for the legacy
+    "claude" keys. Deferred import, like JudgePool's - src.openai_compat
+    only loads when an API-backed judge is actually constructed."""
+    if JUDGE_BACKENDS.get(model_key, "claude") == "api":
+        from src.openai_compat import JUDGE_SEAT, call_api_gated
+
+        def api_transport(prompt: str, model: str, **kw):
+            return call_api_gated([{"role": "user", "content": prompt}],
+                                  JUDGE_SEAT)
+        return api_transport
+    return call_claude
+
+
 class Judge:
     def __init__(self, model_key: str = JUDGE_DEFAULT,
                  log_path: Path = JUDGE_LOG_PATH,
-                 transport=call_claude):
+                 transport=None):
         if model_key not in JUDGE_MODELS:
             raise ValueError(f"unknown judge {model_key!r}; "
                              f"choose from {sorted(JUDGE_MODELS)}")
         self.model_key = model_key
         self.model = JUDGE_MODELS[model_key]
         self.log_path = log_path
-        self.transport = transport   # injectable for tests
+        # Injectable for tests and for JudgePool, which passes its own gated
+        # transport. None resolves from config.JUDGE_BACKENDS - the old
+        # default was call_claude regardless of key, which contradicted the
+        # default DeepSeek seat living on the API transport.
+        self.transport = transport or _default_transport(model_key)
         self.prompt_version = (
             f"{JUDGE_PROMPT_VERSION}:{fingerprint(RUBRIC_PROMPT)}")
 
