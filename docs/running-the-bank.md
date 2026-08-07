@@ -2,10 +2,13 @@
 
 How to execute the question bank against the system and read what comes back.
 The runner is `src/eval/run.py`, driven by `python -m src.cli run-bank`. This is
-the real Study-2 runner; it is also what the smoke tests use, at a smaller size.
+the study runner - a round is the `router` condition over all 58 questions
+(`horizon-scout.md` §2) - and it is also what the smoke tests use, at a smaller
+size.
 
-Study 1 has its own runner, `run-retrieval`, which varies the retriever instead
-of the router. It is the last section of this file.
+`run-retrieval` varies the retriever instead of the router. It is a diagnostic
+now, not a study arm - retrieval is not measured. It is the last section of
+this file.
 
 ## Before you start
 
@@ -70,7 +73,9 @@ so this is how you look at the answers before deciding to pay for verdicts:
 ./.venv/Scripts/python.exe -m src.cli run-bank --run-id pilot --resume
 ```
 
-One capability forced on every question (the Study-2 ladder):
+One capability forced on every question (the condition ladder - `always-hybrid`
+is the extra arm the study contrasts against the router; `force-sql` and
+`force-vector` are floors and diagnostics):
 
 ```bash
 ./.venv/Scripts/python.exe -m src.cli run-bank --run-id ladder \
@@ -81,6 +86,17 @@ Useful narrowing: `--routes vector hybrid`, `--limit N`, `--ids a b c`
 (which also fixes the order), `-k 10`, `--model deepseek|sonnet|haiku` for
 the judge (deepseek is the v5 default; the claude keys are the retired v4
 seats).
+
+Two flags added 2026-08-06 for the mixed Opus/Sonnet run:
+
+- `--bank <path>` points the runner at an alternative bank file. The mixed
+  banks live in `eval/banks/`, each beside a manifest naming its sources.
+- `--unsafe-skip-bank-validation` loads records the schema validator rejects.
+  Only for a bank with a known, deliberate gap - never for `eval/bank.jsonl`.
+  It cannot hide that it was used: the run's meta records
+  `bank_validation: "BYPASSED"` plus every named violation, and the report
+  opens with a blockquote saying the same. If you see that blockquote at the
+  top of a report, this flag is why.
 
 ## Watching it happen
 

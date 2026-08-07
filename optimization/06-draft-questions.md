@@ -2,7 +2,9 @@
 
 **Kind:** prompt assets (`.claude/skills/`), plus small additions to `src/eval/batch.py`
 and `src/cli.py`.
-**Status: APPROVED 2026-07-28 by the user. Not started.**
+**Status: APPROVED 2026-07-28 by the user. IMPLEMENTED - the skill exists at
+`.claude/skills/draft-questions/SKILL.md` and `/question-orchestrator` has
+packet mode (status corrected 2026-08-07).**
 **Depends on:** nothing. Plans 01-04 are already in; this sits on top of them and changes
 none of their code.
 

@@ -13,6 +13,10 @@ and fix 3 (SQL scorer projects to `answer_columns`) in `9dc61c6`, both
 judge completion gets one re-ask, both counted in the report's Judge health.
 Fixes 2 (retrieval budget by project) and 5 (topic-classification routing)
 remain unadopted candidates for round two.
+**Also superseded (2026-08-06): the "cheap way to settle the judging question"
+section.** The question was settled differently - `factual_correctness` moved
+to `mode="precision"` after the same 33 answers were judged under all three
+modes (`horizon-scout.md` §5); the f1-vs-recall framing below predates that.
 
 What the first end-to-end bank run showed, and what to do about it.
 

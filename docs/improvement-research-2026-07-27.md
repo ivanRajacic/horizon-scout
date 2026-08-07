@@ -4,6 +4,8 @@ Five parallel web-research passes over recent (2024-2026) papers, leaderboards a
 
 **Reading note added 2026-08-06: the agentic round was cut** (`horizon-scout.md` §2), so **section 4 is dead as a plan** - it is the menu for a round that will not be run. It stays unedited as the record of what was researched. Nothing else in this file is affected. The research is findings, not a plan; it is never rewritten to match later decisions.
 
+*Two more translation notes, added 2026-08-07: where the text says "three graphs" read two - the third was the cut agentic round. And where section 5 names Sonnet as the judge, the seat went to DeepSeek V4 Flash on 2026-08-04.*
+
 How to read this against the rounds (`horizon-scout.md` §2 - the plan this was written against was `GOALS.md`, now folded in there): sections 1-3 are candidate changes for round two (improved), section 4 is the cut agentic round, section 5 makes the rounds more defensible, section 6 is what to skip, section 7 is what this research says about the write-ups.
 
 One thing here is now decided elsewhere: retrieval is not measured, so section 3's newer-embedder-and-reranker candidates would change a frozen artifact and need an explicit decision before anyone acts on them.

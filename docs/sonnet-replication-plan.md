@@ -1,6 +1,10 @@
 # Sonnet replication run - what will be done
 
-*Proposal, 2026-08-06. Nothing has been run. Awaiting approval.*
+*Proposal, 2026-08-06. Approved and RUN the same day. This file stays as the
+record of what was planned and why. The results - authoring numbers, the judged
+mixed run (`data/runs/mixed-2026-08-06`), the two orchestrator contract
+breaches - live in `docs/writeup-plan.md` §10. Outputs are in
+`eval/drafts/sonnet-probe/` and `eval/banks/mixed-opus-sonnet-2026-08-06.jsonl`.*
 
 Re-draft nine already-authored cells with every factory role on Sonnet instead
 of Opus, and compare how hard the pipeline had to work. The bank is not touched.

@@ -1,11 +1,17 @@
-# Plan: the SQL value gate (approved direction, not yet built)
+# Plan: the SQL value gate (BUILT and shipped 2026-08-05)
+
+*Status update 2026-08-07: this plan is implemented. The value gate is live in
+`src/retrieval/scoped.py` (`narrow-v4`), landed in `6d9345d` and measured in
+`working-plan.md` ("The scoped route was rebuilt"). The file stays as the
+design record; nothing below is pending work.*
 
 Written 2026-08-05, after the narrow-v3 constraint-plumbing change. Self-contained:
 a fresh session can implement from this file alone.
 
 ## State as of writing
 
-Today's changes are implemented and tested (604 passing) but NOT committed:
+Today's changes were implemented and tested (604 passing at the time) but not
+yet committed:
 
 - Guardrail fixes in `src/retrieval/sql_path.py`: comment stripping before
   validation, string-literal-aware checks, `replace_limit` for the narrowing

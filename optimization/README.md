@@ -53,6 +53,7 @@ Three measured facts drive everything here:
 | 03 | [Critic & judge economics](03-critic-judge-economics.md) | prompt assets | implemented 2026-07-26 | - |
 | 04 | [Orchestrator throughput](04-orchestrator-throughput.md) | code + prompt assets | implemented 2026-07-26 | - |
 | 05 | [Per-question workspace store](05-workspace-store.md) | code (architecture) | **proposal - decide before starting** | supersedes part of 04 |
+| 06 | [/draft-questions launcher](06-draft-questions.md) | prompt assets + small code | implemented (see its status line) | 01-04 |
 
 **Recommended order: 01, then 02 and 03 and 04 in any order.** 01 first because 02's
 skill edits reference the checks 01 adds. 03 and 04 are independent of both.
@@ -82,6 +83,9 @@ two prerequisites, in order:
    sum 37. Shipping the check makes `validate-bank` fail on the live bank and blocks
    `promote-drafts`. The bank is a frozen artifact per `CLAUDE.md`; fixing it needs Ivan's
    explicit say-so.
+   *(Stale as of 2026-08-07: vec-05 left the bank in the 2026-08-03 trim, so this
+   blocker no longer holds as written. Prerequisite 2 still does. The deferral
+   needs re-deciding, not re-reading.)*
 2. **The convention is unsettled.** `draft-hybrid-question/SKILL.md:167-169` explicitly
    authorizes exhaustive-read passes to source candidate counts from the scoped pool and
    adjudication counts from the full survivor read - which is what hyb-07 (12 vs 8+7) and
@@ -123,6 +127,11 @@ Considered and decided against - recorded so they are not re-proposed.
 - **Downgrading drafter or critic below Opus.** The critic produced 3 of 4 HIGH findings
   from angles a checklist does not contain; the drafter's errors cascade downstream. Both
   are already at `reasoningEffort: low`.
+  *(Update 2026-08-07: since the sonnet-probe merge the three factory agent files
+  carry no `model:` line - they inherit the launching session's model, so the
+  repo no longer enforces Opus. The batch journal header's required `model`
+  field is now the only record of who authored a batch. The 2026-08-06 Sonnet
+  probe measured the downgrade on nine cells: `docs/writeup-plan.md` §10.)*
 
 ## Verification, common to all plans
 

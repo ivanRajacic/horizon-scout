@@ -293,8 +293,8 @@ distributions are reported; the threshold stops mattering and is not calibrated.
   question, so a full 58-question run prices at ~$0.20 on DeepSeek V4 Flash or
   ~$0.45 on gpt-5-mini (prices re-verified 2026-08-04). No model grades its own
   output: gpt-5-nano generates, DeepSeek V4 Flash judges. Both
-  pinned in `src/config.py` and frozen before round one, identical across all
-  three rounds.
+  pinned in `src/config.py` and frozen before round one, identical across both
+  rounds.
 - **References** are written from gold evidence only, never from system
   retrieval - the measuring stick is independent of the thing measured. SQL
   references are the executed gold result, free.
@@ -304,7 +304,7 @@ comparisons between conditions, never accuracy.
 
 ## 6. What is settled, and what is dropped
 
-Live: the three rounds, the router/always-hybrid contrast, the 58-question bank,
+Live: the two rounds (§2), the router/always-hybrid contrast, the 58-question bank,
 one retrieval stack, a frozen cheap external judge and generator, the authoring
 pipeline.
 

@@ -13,8 +13,9 @@ Where the decisions live, in reading order:
 - `horizon-scout.md` - **the plan, v5, and the only one.** What is measured, the bank, the judge, what was dropped and why, and the order of work. If an older doc disagrees with it, the older doc is wrong.
 - `working-plan.md` - execution state. What is done, what is next, what is open.
 - `optimization/` - numbered, self-contained plans for the drafting/exploration pipelines, each measured against the 2026-07-25 batch baseline in `optimization/README.md`. Plans 01-04 and 06 implemented; 05 is an unapproved proposal.
+- `docs/writeup-plan.md` - what the write-up says and which fact carries each claim, every number recomputed from disk on 2026-08-06; §10 holds the Sonnet-probe results. `docs/factory-telemetry.md` and `docs/factory-exemplars.md` - the authoring factory's own measured record, computed by `src/eval/telemetry.py` from the batch journals. `docs/sonnet-replication-plan.md` - the probe's plan and its disclosed limits (run 2026-08-06).
 - `docs/pilot-router-findings.md` and `docs/improvement-research-2026-07-27.md` - findings and improvement candidates, not plans.
-- `docs/archive/` - the four superseded plan docs (v4 research design, goals, ship plan, retrieval note), the two pipeline audits and the M2 milestone doc. The record of *why*, unedited.
+- `docs/archive/` - the four superseded plan docs (v4 research design, goals, ship plan, retrieval note), the two pipeline audits, the M2 milestone doc and the pre-2026-08-03 working-plan history. The record of *why*, unedited.
 
 Read the first two before any M5/eval work. Decisions recorded there are locked unless the user changes them.
 
@@ -22,13 +23,13 @@ Read the first two before any M5/eval work. Decisions recorded there are locked 
 
 Always use the venv interpreter: `./.venv/Scripts/python.exe` (Git Bash syntax).
 
-- Tests: `./.venv/Scripts/python.exe -m pytest` (620 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
+- Tests: `./.venv/Scripts/python.exe -m pytest` (621 passing) - single file `-m pytest tests/test_bank.py`, single test `-k <name>`
 - Bank: `validate-bank`, `validate-record <record.json|->`, `promote-drafts <report.md>`, `archive-questions --ids ... --reason "<why>"` (the only way a question leaves the bank; `--dry-run` first), `judge-file <cases.jsonl>`
 - Runtime: `ask "<q>"`, `ask-sql`, `search`, `explore` (verbose REPL), `build-index`, `build-fts`, `smoke`, `smoke-sql`, `smoke-router`, `bench-retrievers`
 - `/question-orchestrator` nodes: `gap-report`, `next-ids` (`--sql/--vector/--hybrid/--adversarial`), `pick-parents` (the answerable bank questions an adversarial batch derives from), `journal-append`, `batch-crosscheck`, `write-batch`
 - `/explore-corpus` nodes: `frontier-report`, `verify-evidence`, `explore-crosscheck`, `write-profile`
-- Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`. `run-retrieval` and `bench-retrievers` still work but are diagnostics now, not study arms - retrieval is not measured.
-- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `src/eval/usage.py` records the dollars and tokens of every generation and judge call at the one gate per transport they all pass through (`src/openai_compat.py:call_api_gated` for the v5 API seats, `src/claude_cli.py:call_claude_gated` for the retired `claude -p` backends)
+- Study runs: `run-bank` - the bank end to end, executed then judged, checkpointed per question and resumable (`src/eval/run.py`). How to drive it and how to read what it writes: `docs/running-the-bank.md`. `--bank` points it at an alternative bank (mixed banks live in `eval/banks/`); `--unsafe-skip-bank-validation` loads records the validator rejects - the bypass and the named violations are recorded in the run meta and the first line of the report, so it cannot be used silently. `run-retrieval` and `bench-retrievers` still work but are diagnostics now, not study arms - retrieval is not measured.
+- Cost: `agent-trace` - per-agent time and tokens for a run, read from the subagent transcripts (`src/eval/trace.py`); `python -m src.eval.telemetry` - the factory's funnel, findings, gates and dollars, computed from the batch journals and MCP log into `docs/factory-telemetry.md`; `src/eval/usage.py` records the dollars and tokens of every generation and judge call at the one gate per transport they all pass through (`src/openai_compat.py:call_api_gated` for the v5 API seats, `src/claude_cli.py:call_claude_gated` for the retired `claude -p` backends)
 
 Local model servers (llama-server; launch commands pinned in `src/config.py`, flags LOAD-BEARING - do not tune them):
 
@@ -59,6 +60,8 @@ Generation and judging run through external APIs (v5, 2026-08-04; generator re-d
 ### Authoring pipelines
 
 Everything is authored by skills (`.claude/skills/`) driving read-only subagents (`.claude/agents/`), over deterministic CLI nodes.
+
+Since the sonnet-probe merge (2026-08-06) the three factory agents - `question-drafter`, `question-reviewer`, `question-judge` - carry NO `model:` line and inherit the launching session's model. The batch journal header's required `model` field is the only record of who authored a batch, and `write-batch` prints it on the report's provenance line. When launching a batch, state the model in the launch report (`corpus-explorer` and `explore-critic` still pin `model: opus`).
 
 - **`/question-orchestrator`** - quota-driven batches. `src/eval/batch.py` owns everything with a right answer; state is one typed append-only journal (`eval/drafts/draft-batch-journal-<date>.jsonl`) whose slot envelopes are validated while `record` stays opaque mid-run; both canonical outputs are GENERATED by `write-batch`, not written by a model.
 - **`/explore-corpus`** - cumulative corpus exploration. `src/eval/explore.py` is `batch.py`'s sibling: the frontier, the slice partition, the orientation block, id assignment, evidence verification, the width rule and the profile insertions are all code. Evidence is `{sql, key_result}` and **all** of it is re-executed at close-out - the profile's numbers are never trusted, only reproduced. Journal at `eval/exploration/journal-<date>.jsonl`.
