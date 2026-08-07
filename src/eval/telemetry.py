@@ -7,10 +7,13 @@ found, what the judge upheld, what the deterministic gates killed, and what
 it all cost. This module computes the totals. It is analysis, not pipeline:
 nothing here is called by a run, and it writes only its own report.
 
-Counting rule that matters: journals are append-only and every slot event
-restates the whole envelope (findings, decisions, history included), so all
-counts come from the LAST line per slot. Counting every line would inflate
-each finding by the number of times its slot was restated.
+Counting rule that matters: journals are append-only, but not every journal
+kept the slot envelope cumulative - some restate the full decision and
+finding history on every event, others reset `judge_decisions` and
+`findings` to the current round. So counts come from a MERGED view of every
+line per slot, deduplicated by content: reading only the last line
+undercounts the resetting journals, and counting every line raw would
+double the cumulative ones.
 
 Usage:
     ./.venv/Scripts/python.exe -m src.eval.telemetry [--skip-transcripts]
@@ -87,7 +90,7 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 # ---------------------------------------------------------------- journals
 
-def journal_files() -> list[tuple[str, Path]]:
+def journal_files(drafts_dir: Path = DRAFTS) -> list[tuple[str, Path]]:
     """(run label, journal path) for every journal under eval/drafts.
 
     Discovery is recursive rather than a `batch*` glob, so a run that does not
@@ -100,8 +103,8 @@ def journal_files() -> list[tuple[str, Path]]:
     whose journals predate the typed envelope and would distort every count.
     """
     out = []
-    for j in sorted(DRAFTS.rglob("draft-batch-journal-*.jsonl")):
-        rel = j.relative_to(DRAFTS)
+    for j in sorted(drafts_dir.rglob("draft-batch-journal-*.jsonl")):
+        rel = j.relative_to(drafts_dir)
         if "archive" in rel.parts:
             continue
         label = (str(rel.parent).replace("\\", "/") if rel.parent != Path(".")
@@ -110,8 +113,62 @@ def journal_files() -> list[tuple[str, Path]]:
     return out
 
 
-def terminal_slots(journal: Path) -> tuple[dict | None, dict[str, dict]]:
-    """The batch header line and the LAST slot line per question_id."""
+def _decision_key(d) -> tuple:
+    """Content identity of one judge decision, for cross-line dedup."""
+    if not isinstance(d, dict):
+        return ("raw", json.dumps(d, sort_keys=True, default=str))
+    return (d.get("round"), d.get("disposition"), str(d.get("targets")),
+            str(d.get("rationale") or "")[:200])
+
+
+def _merge_decisions(merged: list, line: list) -> list:
+    """One line's judge_decisions folded into the slot's merged list.
+
+    Journals restate decisions in two styles. Cumulative journals re-emit
+    the whole history on every event, sometimes paraphrasing earlier
+    rationales and reordering targets as they go (batchI does both) - so
+    when the line extends the merged sequence positionally, same
+    (round, disposition) sequence as a prefix, the line REPLACES the
+    merged list wholesale. Resetting journals emit only the current
+    round's decision, so a line that does not extend the sequence is
+    appended instead, deduplicated by content so a decision restated
+    verbatim across lines counts once. Two keys that do NOT work:
+    (candidate_index, round) collapses a cumulative history where two
+    candidates share a round-1 FIX (hyb-12), and content alone counts
+    every paraphrased restatement as a new decision (also hyb-12, which
+    it would inflate from 5 decisions to 13)."""
+    def seq(ds):
+        return [(d.get("round"), d.get("disposition")) if isinstance(d, dict)
+                else ("raw",) for d in ds]
+    if seq(merged) == seq(line)[:len(merged)]:
+        return list(line)
+    have = {_decision_key(d) for d in merged}
+    return merged + [d for d in line if _decision_key(d) not in have]
+
+
+def _finding_key(f) -> tuple:
+    """Content identity of one critic finding, for cross-line dedup.
+
+    The ruling fields are excluded on purpose: a finding first appears
+    unruled and is restated ruled - same finding. The merge keeps the LAST
+    occurrence per key, so the ruled restatement wins."""
+    if not isinstance(f, dict):
+        return ("raw", json.dumps(f, sort_keys=True, default=str))
+    return (f.get("class"), f.get("severity"), str(f.get("claim") or "")[:200])
+
+
+def merged_slots(journal: Path) -> tuple[dict | None, dict[str, dict]]:
+    """The batch header line and one MERGED slot view per question_id.
+
+    Not every journal restated the whole envelope cumulatively - six of the
+    nine journal sets reset `judge_decisions` (and findings) to the current
+    round on each event. So the last line per slot is not enough, and raw
+    counting of every line would double the journals that DID accumulate.
+    The merge: `status` from the last line, `candidate_index` as the max,
+    `judge_decisions` folded line by line via `_merge_decisions`, and
+    `findings` as the union across lines deduplicated by `_finding_key`
+    (last occurrence wins, so a finding restated with its ruling keeps
+    the ruling)."""
     batch = None
     slots: dict[str, dict] = {}
     for e in _read_jsonl(journal):
@@ -119,7 +176,20 @@ def terminal_slots(journal: Path) -> tuple[dict | None, dict[str, dict]]:
         if kind == "batch" and batch is None:
             batch = e
         elif kind == "slot" and e.get("question_id"):
-            slots[e["question_id"]] = e
+            m = slots.setdefault(e["question_id"], {
+                "status": None, "candidate_index": 0,
+                "judge_decisions": [], "_findings": {}})
+            m["status"] = e.get("status")
+            m["candidate_index"] = max(m["candidate_index"],
+                                       int(e.get("candidate_index") or 0))
+            line = e.get("judge_decisions") or []
+            if line:
+                m["judge_decisions"] = _merge_decisions(
+                    m["judge_decisions"], line)
+            for f in (e.get("findings") or []):
+                m["_findings"][_finding_key(f)] = f
+    for m in slots.values():
+        m["findings"] = list(m.pop("_findings").values())
     return batch, slots
 
 
@@ -127,7 +197,7 @@ def _is_upheld(ruling) -> bool:
     return isinstance(ruling, str) and ruling.startswith("UPHELD")
 
 
-def journal_stats() -> dict:
+def journal_stats(drafts_dir: Path = DRAFTS) -> dict:
     per_batch = []
     status = Counter()
     dispositions = Counter()
@@ -141,8 +211,8 @@ def journal_stats() -> dict:
     accepted_with_fix = 0
     slots_total = 0
 
-    for label, journal in journal_files():
-        batch, slots = terminal_slots(journal)
+    for label, journal in journal_files(drafts_dir):
+        batch, slots = merged_slots(journal)
         b_disp = Counter()
         for qid, e in slots.items():
             slots_total += 1
@@ -370,8 +440,10 @@ def render(j: dict, m: dict, b: dict, t: dict) -> str:
          "",
          "Every number below is computed by `src/eval/telemetry.py` from "
          "the batch journals, the MCP log and the subagent transcripts. "
-         "Counts are taken from the last journal line per slot, because "
-         "the journal restates a slot's whole envelope on every event.",
+         "Counts merge every journal line per slot with content-level "
+         "dedup of decisions and findings, because not every journal kept "
+         "the envelope cumulative - the last line alone undercounts the "
+         "runs that reset it per round.",
          ""]
 
     L += ["## The funnel", ""]
