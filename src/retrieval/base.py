@@ -8,10 +8,11 @@ swaps them by name and scores them on identical output.
 
 Score convention: results are returned BEST-FIRST. The numeric `score` field's
 meaning is implementation-defined and NOT comparable across retrievers - dense
-returns FAISS L2 distance (lower = closer), lexical returns BM25 relevance
-(higher = better), fusion returns an RRF score, rerank returns a cross-encoder
-logit (both higher = better). Consumers MUST rely on list order, never on the
-sign or scale of `score`.
+returns cosine similarity (the embedder L2-normalises in embed_client.py and
+the index is built with MAX_INNER_PRODUCT in embed_index.py, so higher =
+closer), lexical returns BM25 relevance, fusion returns an RRF score, rerank
+returns a cross-encoder logit (all higher = better). Consumers MUST rely on
+list order, never on the sign or scale of `score`.
 """
 
 from dataclasses import dataclass

@@ -87,9 +87,10 @@ def fit_to_budget(chunks: list[SearchResult],
     """Drop the worst chunks until the formatted context fits the budget.
 
     Retrievers return results BEST-FIRST and `score` is not comparable across
-    retrievers (base.Retriever contract: dense = L2 distance, lexical/RRF/rerank
-    = higher-is-better), so we trust the incoming ORDER and drop from the tail
-    rather than re-sorting by a score whose sign is retriever-specific."""
+    retrievers (base.Retriever contract: dense = cosine similarity, lexical =
+    BM25, RRF/rerank = their own scales - all higher-is-better but on different
+    scales), so we trust the incoming ORDER and drop from the tail rather than
+    re-sorting by a score that is retriever-specific."""
     kept = list(chunks)  # already best-first by contract
     while kept and estimate_tokens(format_chunks(kept)) > budget:
         kept.pop()  # remove worst (tail)

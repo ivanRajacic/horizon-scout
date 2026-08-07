@@ -8,7 +8,19 @@ text joined with acronym/title from DuckDB.
 
 Filters (`project_ids`, `source`) are post-filters over an over-fetched
 candidate list - milestone 4's hybrid hook and milestone 5's source
-routing evaluate on top of this without touching the index.
+routing evaluate on top of this without touching the index. FAISS has no
+id filter here, so a filtered search fetches globally and then discards;
+when a project_ids filter is narrow enough that the fetched slice holds
+fewer than k survivors, the fetch WIDENS and retries (see search()).
+
+2026-08-07: before the widening, a single fixed over-fetch of
+max(k*20, 200) was all a filtered search ever saw. HybridRetriever asks
+for k=FUSE_CANDIDATES=100, so the dense leg read 2,000 of 190,248
+vectors - about 1% of the index - and a scoped filter of ~18 projects
+(~100 chunks) expected near zero survivors in that slice. The dense
+contribution to RRF fusion collapsed and the scoped route quietly ran
+lexical-only. The only signal was a warnings.warn nothing listened to;
+counts now surface on `last_stats` instead.
 """
 
 import warnings
@@ -45,6 +57,13 @@ def validate_meta(meta: dict, gguf_hash: str) -> None:
 
 
 class VectorSearcher:
+    # The last search's own record: k, the fetch size it ended on, how many
+    # chunks survived the filter, how many times the fetch widened. A caller
+    # holding the searcher (HybridRetriever.dense, the registry's "dense")
+    # reads it after search() to trace a scoped retrieval. Class-level so it
+    # is always defined, even before the first search.
+    last_stats: dict | None = None
+
     def __init__(self, index_dir=INDEX_DIR, meta_path=INDEX_META_PATH,
                  db_path=DB_PATH):
         import json
@@ -66,18 +85,9 @@ class VectorSearcher:
                 f"{self.meta['n_vectors']} - refusing to serve.")
         self.con = duckdb.connect(str(db_path), read_only=True)
 
-    def search(self, query: str, k: int = 10,
-               project_ids: set[int] | None = None,
-               source: str | None = None,
-               dedup_projects: bool = False) -> list[SearchResult]:
-        if source is not None and source not in ("report", "objective"):
-            raise ValueError("source must be 'report' or 'objective'")
-        filtered = project_ids is not None or source is not None
-        fetch_k = max(k * 20, 200) if filtered or dedup_projects else k
-        qv = self.client.embed_query(query)
-        hits = self.vs.similarity_search_with_score_by_vector(
-            qv, k=min(fetch_k, self.vs.index.ntotal))
-
+    def _survivors(self, hits, k, project_ids, source, dedup_projects):
+        """The post-filter, best-first, stopping at k. Pure over `hits`, so a
+        widened retry re-runs it on the larger candidate list."""
         results, seen_projects = [], set()
         for doc, score in hits:
             m = doc.metadata
@@ -91,7 +101,55 @@ class VectorSearcher:
             results.append((doc, score))
             if len(results) == k:
                 break
-        if filtered and len(results) < k:
+        return results
+
+    def search(self, query: str, k: int = 10,
+               project_ids: set[int] | None = None,
+               source: str | None = None,
+               dedup_projects: bool = False) -> list[SearchResult]:
+        if source is not None and source not in ("report", "objective"):
+            raise ValueError("source must be 'report' or 'objective'")
+        filtered = project_ids is not None or source is not None
+        ntotal = self.vs.index.ntotal
+        fetch_k = min(max(k * 20, 200) if filtered or dedup_projects else k,
+                      ntotal)
+        # Embed ONCE. Every widened retry reuses this vector - the retry costs
+        # a FAISS search (cheap even at large k) and no embedding call.
+        qv = self.client.embed_query(query)
+        hits = self.vs.similarity_search_with_score_by_vector(qv, k=fetch_k)
+        results = self._survivors(hits, k, project_ids, source, dedup_projects)
+
+        # Widen only for an allowed-ids filter: that is the scoped route, where
+        # a narrow id set can miss the global slice entirely. Double the fetch
+        # until k survive or the fetch covers the whole index - the cap makes
+        # the last round a full-index search, and a shortfall after THAT is
+        # real (the id set holds fewer than k matching chunks), not an artefact
+        # of the over-fetch. Unfiltered search never enters this loop.
+        widenings = 0
+        while project_ids is not None and len(results) < k and fetch_k < ntotal:
+            fetch_k = min(max(fetch_k * 2, 2), ntotal)
+            widenings += 1
+            hits = self.vs.similarity_search_with_score_by_vector(qv, k=fetch_k)
+            results = self._survivors(hits, k, project_ids, source,
+                                      dedup_projects)
+
+        # What the search actually did, for the caller's trace. Overwritten on
+        # every call; Phase A retrieval is sequential (see src/eval/run.py) so
+        # one searcher is never mid-search on two threads at once.
+        self.last_stats = {
+            "k": k,
+            "fetch_k": fetch_k,
+            "survivors": len(results),
+            "index_size": ntotal,
+            "filtered": filtered,
+            "n_filter_ids": len(project_ids) if project_ids is not None
+                            else None,
+            "widenings": widenings,
+            "short": len(results) < k,
+        }
+        if filtered and project_ids is None and len(results) < k:
+            # No id filter to widen for (source-only / dedup callers), and
+            # nothing reads last_stats on that path yet - keep the warning.
             warnings.warn(
                 f"only {len(results)} of k={k} results survived filtering "
                 f"(over-fetched {fetch_k})")
