@@ -15,7 +15,7 @@ from src.config import ROOT
 from src.eval.batch import (BatchError, archived_ids, crosscheck, gap_report,
                             journal_append, load_journal, next_ids,
                             packet_claims, parse_allocation, pick_parents,
-                            twinned_ids,
+                            rejected_ids, twinned_ids,
                             write_batch)
 from src.eval.promote import promote
 
@@ -350,6 +350,21 @@ def test_gap_report_ignores_rejected_staged_records(tmp_path):
     # but the id stays taken, so the counter never reuses it
     assert next_ids({"hybrid": 1}, bank, drafts,
                     tmp_path / "archive")["hybrid"] == ["hyb-10"]
+
+
+def test_scratch_section_decision_never_attaches_to_the_previous_real_id(
+        tmp_path):
+    # A scratch heading (`## hyb-s12`, letter infix) is invisible to
+    # HEADING_ID_RE, so without an explicit reset a decision under it would
+    # attach to the last REAL heading still open above it.
+    drafts = tmp_path / "drafts"
+    drafts.mkdir(parents=True)
+    (drafts / "draft-report-2026-08-06.md").write_text(
+        "Draft-bank-file: eval/drafts/draft-bank-2026-08-06.jsonl\n\n"
+        "## hyb-09 - ACCEPTED\n\n"
+        "## hyb-s12 - ACCEPTED\n\nDecision: [ ] APPROVE  [x] REJECT\n",
+        encoding="utf-8")
+    assert rejected_ids(drafts) == set()
 
 
 def test_gap_report_still_counts_an_approved_but_unpromoted_record(tmp_path):

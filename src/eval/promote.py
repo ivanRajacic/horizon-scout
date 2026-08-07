@@ -25,6 +25,12 @@ class PromoteError(Exception):
 
 DRAFT_FILE_RE = re.compile(r"^Draft-bank-file:\s*(?P<path>.+?)\s*$")
 HEADING_ID_RE = re.compile(r"^##\s+((?:sql|vec|hyb|adv)-\d+)\b")
+# A letter infix (`sql-s15`) marks a scratch id - a draft outside the bank's
+# id space, like the Sonnet probe's. HEADING_ID_RE deliberately does not
+# match it: not matching is the guard that keeps scratch drafts out of the
+# bank. This second pattern only exists so the refusal can NAME the reason
+# instead of misreporting a well-formed report as malformed.
+SCRATCH_HEADING_RE = re.compile(r"^##\s+((?:sql|vec|hyb|adv)-[a-z]\d+)\b")
 DECISION_RE = re.compile(
     r"^Decision:\s*\[(?P<approve>[ xX])\]\s*APPROVE\s+"
     r"\[(?P<reject>[ xX])\]\s*REJECT\s*$")
@@ -53,6 +59,7 @@ def _parse_report(report_path: Path) -> tuple[Path, dict[str, bool]]:
     draft_file_raw: str | None = None
     decisions: dict[str, bool] = {}
     current_id: str | None = None
+    current_scratch: str | None = None
 
     for lineno, line in enumerate(
             report_path.read_text(encoding="utf-8").splitlines(), 1):
@@ -65,6 +72,12 @@ def _parse_report(report_path: Path) -> tuple[Path, dict[str, bool]]:
         m = HEADING_ID_RE.match(line)
         if m:
             current_id = m.group(1)
+            current_scratch = None
+            continue
+        m = SCRATCH_HEADING_RE.match(line)
+        if m:
+            current_id = None
+            current_scratch = m.group(1)
             continue
         m = DECISION_RE.match(line)
         if not m:
@@ -75,6 +88,11 @@ def _parse_report(report_path: Path) -> tuple[Path, dict[str, bool]]:
             continue
         approve = m.group("approve") != " "
         reject = m.group("reject") != " "
+        if current_scratch is not None:
+            errors.append(f"line {lineno}: scratch id {current_scratch} "
+                          f"cannot be promoted (letter infix marks a "
+                          f"non-bank draft)")
+            continue
         if current_id is None:
             errors.append(f"line {lineno}: decision line outside any "
                           f"'## <question_id>' section")

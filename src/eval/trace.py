@@ -421,8 +421,11 @@ def _tool_cell(spend: Spend) -> str:
 # A /question-orchestrator agent works one slot, and its spawn description names it:
 # "Draft hyb-09 candidate 2 viticulture", "Attack draft hyb-09 round 4",
 # "Judge slot hyb-09". That is what lets the cost of a question be added up
-# across the three agents that made it.
-SLOT_ID = re.compile(r"\b((?:sql|vector|vec|hybrid|hyb|adv|amb|comp)-\d+)\b",
+# across the three agents that made it. The optional letter infix accepts
+# scratch ids (`sql-s15`, `vec-s38` - the Sonnet probe's) so their agents
+# roll up by slot too; tracing is read-only reporting, and the infix stays
+# barred from promotion in promote.py.
+SLOT_ID = re.compile(r"\b((?:sql|vector|vec|hybrid|hyb|adv|amb|comp)-[a-z]?\d+)\b",
                      re.IGNORECASE)
 
 

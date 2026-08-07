@@ -31,7 +31,7 @@ from src.config import (BANK_BRIEF_PATH, BANK_BRIEF_VERSION, BANK_PATH,
                         CORPUS_PROFILE_PATH, CORPUS_PROFILE_VERSION, ROOT,
                         SCHEMA_DOCS_PATH, SCHEMA_DOCS_VERSION)
 from src.eval.bank import LADDER, LEVELS
-from src.eval.promote import DECISION_RE, HEADING_ID_RE
+from src.eval.promote import DECISION_RE, HEADING_ID_RE, SCRATCH_HEADING_RE
 from src.llm import fingerprint
 
 PLAN_DOC_PATH = ROOT / "horizon-scout.md"
@@ -266,6 +266,12 @@ def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
             heading = HEADING_ID_RE.match(line)
             if heading:
                 current = heading.group(1)
+                continue
+            # A scratch heading (`## sql-s15`, letter infix) opens a section
+            # whose decisions must attach to NOTHING - without this reset a
+            # scratch section's tick would count against the last real id.
+            if SCRATCH_HEADING_RE.match(line):
+                current = None
                 continue
             decision = DECISION_RE.match(line)
             if decision and current is not None:

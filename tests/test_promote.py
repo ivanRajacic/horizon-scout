@@ -141,6 +141,19 @@ def test_missing_decision_for_staged_draft_refused(tmp_path):
     assert bank_ids(bank) == []
 
 
+def test_scratch_id_refused_with_named_reason(tmp_path):
+    # A letter infix (`sql-s15`) marks a scratch draft - the Sonnet probe's -
+    # and the guard that keeps it out of the bank must SAY so, not report a
+    # well-formed report as having a decision outside any section.
+    scratch = {**SQL_A, "question_id": "sql-s15"}
+    report, bank, _ = make_files(tmp_path, [scratch], {"sql-s15": "approve"})
+    message = refusal(report, bank)
+    assert "scratch id sql-s15 cannot be promoted" in message
+    assert "letter infix" in message
+    assert "outside any" not in message
+    assert bank_ids(bank) == []
+
+
 def test_decision_for_unknown_id_refused(tmp_path):
     report, bank, _ = make_files(
         tmp_path, [SQL_A], {"sql-90": "approve", "vec-99": "approve"})

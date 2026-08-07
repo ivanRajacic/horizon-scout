@@ -240,6 +240,15 @@ def test_no_slot_id_is_not_a_slot(tmp_path):
     assert slot_of(trace) is None
 
 
+def test_scratch_slot_id_with_letter_infix_is_traced(tmp_path):
+    # The Sonnet probe's scratch ids (`vec-s38`) must roll up by slot like
+    # any other - dropping them silently removed all 28 probe agents from
+    # the by-slot table.
+    (trace,) = trace_session(
+        warm_session(tmp_path, description="Draft vec-s38 candidate 1"))
+    assert slot_of(trace) == "vec-s38"
+
+
 def test_rollups_add_up_the_agents_that_made_one_question(tmp_path):
     session = warm_session(tmp_path)
     rendered = render_traces(trace_session(session), steps=True)
