@@ -53,12 +53,42 @@ class AskResult:
     trace: dict = field(default_factory=dict)
 
 
-def _templated_sql_answer(columns, rows) -> str:
+# Prefixed to a scoped answer when the structured filter did not survive, so
+# the reader (and the judge) sees that the search was unfiltered.
+DEGRADED_NOTES = {
+    "sql_failed": "[Note: the structured filter could not be applied - the SQL "
+                  "step failed - so this answer is from an unfiltered search "
+                  "over all projects.]",
+    "value_not_found": "[Note: the structured filter was dropped - a filter "
+                       "value does not exist in the database - so this answer "
+                       "is from an unfiltered search over all projects.]",
+}
+
+
+def _templated_sql_answer(rows) -> str:
     if not rows:
         return "Query returned 0 rows."
     if len(rows) == 1 and len(rows[0]) == 1:
         return f"Result: {rows[0][0]}"
     return f"Query returned {len(rows)} row{'s' if len(rows) != 1 else ''}."
+
+
+def _scoped_constraints(decision) -> tuple[list[str] | None, str | None]:
+    """What the scoped route's narrowing step should be given.
+
+    Three cases, and `None` constraints means something different in each:
+      - decision with facts -> reuse the router's own list ("router"). One
+        extraction per question, not two.
+      - decision without facts (router fallback, or an archived mode-only
+        prompt) -> the list is UNKNOWN, so narrowing re-reads the raw question.
+      - no decision at all (forced mode, e.g. always-hybrid) -> nothing has been
+        extracted yet, so ScopedRetriever calls extract() itself.
+    """
+    if decision is None:
+        return None, None
+    if decision.needs_project_text is None:
+        return None, "fallback-raw"
+    return decision.structured_constraints, "router"
 
 
 class Ask:
@@ -118,19 +148,10 @@ class Ask:
         elif mode == "vector":
             res = self._ask_vector(question, k)
         else:
-            # The router condition reuses its decision's constraint list - one
-            # extraction per question, not two. No decision (forced mode) ->
-            # ScopedRetriever extracts. A decision without facts (fallback or
-            # an archived mode-only prompt) means the list is UNKNOWN, so the
-            # narrowing step reads the raw question as before.
-            constraints, source = None, None
-            if decision is not None:
-                if decision.needs_project_text is not None:
-                    constraints = decision.structured_constraints
-                    source = "router"
-                else:
-                    source = "fallback-raw"
-            res = self._ask_scoped(question, k, constraints, source)
+            # Deliberately `else`, not `elif mode == "scoped"`: the plan docs
+            # call this route "hybrid" and the runtime calls it "scoped", so a
+            # forced mode arrives under either name.
+            res = self._ask_scoped(question, k, *_scoped_constraints(decision))
 
         res.mode = mode
         res.router_reason = reason
@@ -151,7 +172,7 @@ class Ask:
                 degraded="sql_failed",
                 trace={"timings": stage, "error": r.error,
                        "rows_passed_to_gen": 0, "chunks_passed_to_gen": 0})
-        answer = _templated_sql_answer(r.columns, r.rows)
+        answer = _templated_sql_answer(r.rows)
         if explain:
             answer = self._explain_sql(question, r.columns, r.rows, answer)
         # RQ1 covariate: pure-SQL answers are templated, so nothing reaches a
@@ -203,15 +224,9 @@ class Ask:
                                   filter_note=h.filter_note)
         stage = {"retrieve": t_retrieve, "synth": time.perf_counter() - t}
         answer = s.answer
-        if h.degraded == "sql_failed":
-            answer = ("[Note: the structured filter could not be applied - the "
-                      "SQL step failed - so this answer is from an unfiltered "
-                      "search over all projects.]\n\n" + answer)
-        elif h.degraded == "value_not_found":
-            answer = ("[Note: the structured filter was dropped - a filter "
-                      "value does not exist in the database - so this answer "
-                      "is from an unfiltered search over all projects.]\n\n"
-                      + answer)
+        note = DEGRADED_NOTES.get(h.degraded)
+        if note:
+            answer = f"{note}\n\n{answer}"
         return AskResult(
             question=question, mode="scoped", router_reason="", answer=answer,
             sql=h.sql, chunks=s.used_chunks, degraded=h.degraded,
