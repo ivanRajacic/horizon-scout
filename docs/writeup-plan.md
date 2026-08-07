@@ -76,22 +76,27 @@ all deterministic nodes. Model nodes author and judge; they never do arithmetic.
 |---|---|
 | batches / slots / candidates tried | 14 / 43 / 58 |
 | accepted / failed | 42 / 1 |
-| FIX rounds / candidate abandons | 22 / 6 |
-| adjudication rounds per slot | 22 slots closed in 1; worst took 5 |
-| terminal findings | 158 - 9 HIGH, 58 MID, 91 LOW |
-| HIGH+MID rulings | 41 UPHELD, 5 DISMISSED |
-| top defect classes | REFERENCE-UNSUPPORTED 17, AMBIGUOUS-READING 16, MISSED-GOLD 14, GOLD-WRONG 6 |
-| **accepted questions carrying an upheld finding** | **26 of 42** |
-| accepted questions that went through a FIX round | 20 of 42 |
+| FIX rounds / candidate abandons | 37 / 12 |
+| adjudication rounds per slot | 11 slots closed in 1; worst took 5 |
+| terminal findings | 335 - 38 HIGH, 129 MID, 168 LOW |
+| HIGH+MID rulings | 88 UPHELD, 5 DISMISSED |
+| top defect classes | MISSED-GOLD 40, AMBIGUOUS-READING 39, REFERENCE-UNSUPPORTED 30, GOLD-WRONG 28 |
+| **accepted questions carrying an upheld finding** | **30 of 42** |
+| accepted questions that went through a FIX round | 30 of 42 |
 | `precheck_record` / `precheck_candidate` | 209 runs, 30 with failures / 125 runs, 23 with failures |
 | MCP calls over 10 days | 3,898 - of which 1,763 SQL executions |
 | questions through the pipeline | 76 (58 in the bank, 18 trimmed to the v5 allocation) |
 
-**The headline sentence: 26 of 42 accepted questions entered the bank in a
+**The headline sentence: 30 of 42 accepted questions entered the bank in a
 different state than the drafter first submitted.** That is the measurement of
 what review bought.
 
-**The 5 dismissals matter as much as the 41 upholds** - they show the critic was
+(These are the 2026-08-07 recounted numbers: `telemetry.py` now merges every
+journal line per slot instead of reading the last line, because several
+journals reset the decision and finding history per round. All Opus-only -
+the three `sonnet-probe/*` runs are excluded from this table.)
+
+**The 5 dismissals matter as much as the 88 upholds** - they show the critic was
 filtered, not rubber-stamped.
 
 **The three episodes** (`docs/factory-exemplars.md`, all quotes verbatim, bank
@@ -269,8 +274,9 @@ deterministic re-execution does not care which model wrote the record.
 **Two contract breaches, both at the orchestrator, not the drafter.** The
 Sonnet orchestrators reset `judge_decisions` per candidate instead of
 accumulating across the slot, so the last journal line understates the work -
-`telemetry.py` reads that line and reports 0 FIX rounds where the true count
-across all lines is 4. And two accepted vector records shipped without
+until the 2026-08-07 fix, `telemetry.py` read that line and reported 0 FIX
+rounds; it now merges across all of a slot's lines and reports the true count,
+4. And two accepted vector records shipped without
 `pooling_evidence` while the journal recorded `validate-record OK`; calling the
 validator directly on those records fails. Traced: `vec-s38`'s first candidate
 had the field, the second candidate onward never did.
@@ -338,11 +344,9 @@ works" or "Sonnet doesn't".
 - **Judge noise floor provenance.** The 0.081 / 0.35 / 10-of-31 figures come from
   the three-mode re-judge. Confirm which two logs they were computed across and
   cite them by filename.
-- **Sonnet FIX-round count.** Section 10 says 4, counted by hand across all
-  journal lines. `telemetry.py` still reports 0 because it reads the last line
-  per slot, which the Sonnet orchestrators did not keep cumulative. Fix the
-  script to recount across lines before quoting either number - it is the
-  correct fix regardless of this run.
+- **Sonnet FIX-round count - resolved 2026-08-07.** The recount landed:
+  `telemetry.py` now merges every journal line per slot and reports the probe's
+  FIX rounds as 4, matching the hand count. The number can be quoted.
 - Everything else in this plan was recomputed from disk on 2026-08-06 and can be
   quoted as written.
 
@@ -355,7 +359,10 @@ works" or "Sonnet doesn't".
   always-hybrid record. Filter on `condition == "router"` or every SQL question
   looks like it produced no SQL and 13 of 58 look misrouted. This error was made
   and caught while writing this plan.
-- **Journals restate the whole slot envelope on every event.** Count from the
-  last line per slot or every finding is multiplied by its slot's round count.
+- **Journals disagree on how they restate a slot's history.** Some re-emit the
+  whole decision and finding history on every event, others reset it to the
+  current round. Neither the last line nor a raw count over every line is
+  right - use `telemetry.py`'s merged counts, never a hand count over the raw
+  lines.
 - **`expected_route == "sql"` returns 19, not 16** - three adversarial questions
   wear a SQL costume. Filter `level != "ADV"` for the SQL cell.

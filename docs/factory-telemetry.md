@@ -1,77 +1,78 @@
 # Factory telemetry
 
-Every number below is computed by `src/eval/telemetry.py` from the batch journals, the MCP log and the subagent transcripts. Counts are taken from the last journal line per slot, because the journal restates a slot's whole envelope on every event.
+Every number below is computed by `src/eval/telemetry.py` from the batch journals, the MCP log and the subagent transcripts. Counts merge every journal line per slot with content-level dedup of decisions and findings, because not every journal kept the envelope cumulative - the last line alone undercounts the runs that reset it per round.
 
 ## The funnel
 
 | batches | slots | candidates tried | accepted | failed | FIX rounds | candidate abandons |
 |---|---|---|---|---|---|---|
-| 17 | 52 | 75 | 49 | 3 | 22 | 8 |
+| 17 | 52 | 75 | 49 | 3 | 41 | 17 |
 
-Adjudication rounds per slot (judge decisions until the slot closed): 1: 31, 2: 18, 3: 1, 4: 1, 5: 1
+Adjudication rounds per slot (judge decisions until the slot closed): 1: 16, 2: 25, 3: 4, 4: 6, 5: 1
 
 ## Per run
 
 | run | date | model | slots | accepted | FIX rounds | abandons |
 |---|---|---|---|---|---|---|
-| batchA | 2026-07-28 | unrecorded | 3 | 3 | 0 | 0 |
+| batchA | 2026-07-28 | unrecorded | 3 | 3 | 3 | 1 |
 | batchB | 2026-07-28 | unrecorded | 3 | 3 | 2 | 0 |
 | batchC | 2026-07-28 | unrecorded | 3 | 3 | 4 | 1 |
 | batchD | 2026-07-28 | unrecorded | 3 | 3 | 2 | 1 |
-| batchE | 2026-07-28 | unrecorded | 3 | 3 | 0 | 0 |
+| batchE | 2026-07-28 | unrecorded | 3 | 3 | 3 | 1 |
 | batchF | 2026-07-28 | unrecorded | 3 | 3 | 3 | 0 |
 | batchG | 2026-07-29 | unrecorded | 3 | 3 | 1 | 1 |
 | batchH | 2026-07-29 | unrecorded | 3 | 3 | 2 | 0 |
 | batchI | 2026-08-01 | unrecorded | 3 | 3 | 4 | 2 |
-| batchJ | 2026-08-01 | unrecorded | 3 | 2 | 0 | 1 |
+| batchJ | 2026-08-01 | unrecorded | 3 | 2 | 3 | 2 |
 | batchK | 2026-08-04 | unrecorded | 3 | 3 | 1 | 0 |
 | batchL | 2026-08-04 | unrecorded | 3 | 3 | 1 | 0 |
 | batchM | 2026-08-04 | unrecorded | 3 | 3 | 2 | 0 |
-| batch-2026-07-27-3 | 2026-07-27 | unrecorded | 4 | 4 | 0 | 0 |
-| sonnet-probe/hyb | 2026-08-06 | claude-sonnet-5 | 3 | 2 | 0 | 1 |
-| sonnet-probe/sql | 2026-08-06 | claude-sonnet-5 | 3 | 3 | 0 | 0 |
-| sonnet-probe/vec | 2026-08-06 | claude-sonnet-5 | 3 | 2 | 0 | 1 |
+| batch-2026-07-27-3 | 2026-07-27 | unrecorded | 4 | 4 | 6 | 3 |
+| sonnet-probe/hyb | 2026-08-06 | claude-sonnet-5 | 3 | 2 | 1 | 3 |
+| sonnet-probe/sql | 2026-08-06 | claude-sonnet-5 | 3 | 3 | 1 | 0 |
+| sonnet-probe/vec | 2026-08-06 | claude-sonnet-5 | 3 | 2 | 2 | 2 |
 
 ## The critic's findings (terminal, deduplicated)
 
 | severity | count |
 |---|---|
-| HIGH | 11 |
-| LOW | 92 |
-| MID | 62 |
+| HIGH | 47 |
+| LOW | 169 |
+| MID | 148 |
 
 Rulings on HIGH and MID findings (LOW is recorded, never adjudicated):
 
 | severity/ruling | count |
 |---|---|
 | HIGH/RECORDED | 1 |
-| HIGH/UPHELD | 10 |
+| HIGH/UPHELD | 27 |
+| HIGH/unadjudicated | 19 |
 | MID/DISMISSED | 6 |
-| MID/RECORDED | 16 |
-| MID/UPHELD | 36 |
-| MID/unadjudicated | 4 |
+| MID/RECORDED | 19 |
+| MID/UPHELD | 73 |
+| MID/unadjudicated | 50 |
 
-Defect classes (typed; the OTHER:* long tail is 84 findings across 78 distinct labels):
+Defect classes (typed; the OTHER:* long tail is 167 findings across 129 distinct labels):
 
 | class | count |
 |---|---|
-| REFERENCE-UNSUPPORTED | 18 |
-| MISSED-GOLD | 17 |
-| AMBIGUOUS-READING | 16 |
-| GOLD-WRONG | 6 |
-| TELEGRAPH | 6 |
-| GENERIC-FACT | 5 |
-| NEAR-DUPLICATE | 5 |
-| NEAR-MISS | 2 |
-| ADV-PROOF-UNTYPED | 2 |
+| MISSED-GOLD | 49 |
+| AMBIGUOUS-READING | 41 |
+| REFERENCE-UNSUPPORTED | 33 |
+| GOLD-WRONG | 32 |
+| NEAR-DUPLICATE | 12 |
+| TELEGRAPH | 8 |
+| GENERIC-FACT | 7 |
+| STALE-EVIDENCE | 4 |
+| NEAR-MISS | 4 |
+| ADV-PROOF-UNTYPED | 3 |
+| FILTER-DECORATION | 2 |
 | ROUTE-MISLABEL | 1 |
-| STALE-EVIDENCE | 1 |
-| FILTER-DECORATION | 1 |
 
 ## What review changed
 
-- Accepted slots with at least one UPHELD finding: **28**
-- Accepted slots that went through at least one FIX round: **20**
+- Accepted slots with at least one UPHELD finding: **32**
+- Accepted slots that went through at least one FIX round: **32**
 
 Each of these is a question that entered the bank in a different state than its drafter first submitted - a defect or weakness the split-authority review caught before it shipped.
 

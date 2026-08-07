@@ -8,8 +8,8 @@
         "model": null,
         "slots": 3,
         "accepted": 3,
-        "fix_rounds": 0,
-        "abandons": 0
+        "fix_rounds": 3,
+        "abandons": 1
       },
       {
         "batch": "batchB",
@@ -44,8 +44,8 @@
         "model": null,
         "slots": 3,
         "accepted": 3,
-        "fix_rounds": 0,
-        "abandons": 0
+        "fix_rounds": 3,
+        "abandons": 1
       },
       {
         "batch": "batchF",
@@ -89,8 +89,8 @@
         "model": null,
         "slots": 3,
         "accepted": 2,
-        "fix_rounds": 0,
-        "abandons": 1
+        "fix_rounds": 3,
+        "abandons": 2
       },
       {
         "batch": "batchK",
@@ -125,8 +125,8 @@
         "model": null,
         "slots": 4,
         "accepted": 4,
-        "fix_rounds": 0,
-        "abandons": 0
+        "fix_rounds": 6,
+        "abandons": 3
       },
       {
         "batch": "sonnet-probe/hyb",
@@ -134,8 +134,8 @@
         "model": "claude-sonnet-5",
         "slots": 3,
         "accepted": 2,
-        "fix_rounds": 0,
-        "abandons": 1
+        "fix_rounds": 1,
+        "abandons": 3
       },
       {
         "batch": "sonnet-probe/sql",
@@ -143,7 +143,7 @@
         "model": "claude-sonnet-5",
         "slots": 3,
         "accepted": 3,
-        "fix_rounds": 0,
+        "fix_rounds": 1,
         "abandons": 0
       },
       {
@@ -152,8 +152,8 @@
         "model": "claude-sonnet-5",
         "slots": 3,
         "accepted": 2,
-        "fix_rounds": 0,
-        "abandons": 1
+        "fix_rounds": 2,
+        "abandons": 2
       }
     ],
     "slots": 52,
@@ -164,48 +164,49 @@
     "candidates_tried": 75,
     "dispositions": {
       "ACCEPT": 49,
-      "FIX": 22,
-      "ABANDON": 8
+      "FIX": 41,
+      "ABANDON": 17
     },
     "adjudication_rounds": {
-      "1": 31,
-      "2": 18,
-      "3": 1,
-      "4": 1,
+      "1": 16,
+      "2": 25,
+      "3": 4,
+      "4": 6,
       "5": 1
     },
     "findings_by_severity": {
-      "LOW": 92,
-      "MID": 62,
-      "HIGH": 11
+      "LOW": 169,
+      "MID": 148,
+      "HIGH": 47
     },
     "rulings": {
       "HIGH/RECORDED": 1,
-      "HIGH/UPHELD": 10,
+      "HIGH/UPHELD": 27,
+      "HIGH/unadjudicated": 19,
       "MID/DISMISSED": 6,
-      "MID/RECORDED": 16,
-      "MID/UPHELD": 36,
-      "MID/unadjudicated": 4
+      "MID/RECORDED": 19,
+      "MID/UPHELD": 73,
+      "MID/unadjudicated": 50
     },
     "defect_classes": {
-      "OTHER:*": 84,
-      "REFERENCE-UNSUPPORTED": 18,
-      "MISSED-GOLD": 17,
-      "AMBIGUOUS-READING": 16,
-      "GOLD-WRONG": 6,
-      "TELEGRAPH": 6,
-      "GENERIC-FACT": 5,
-      "NEAR-DUPLICATE": 5,
-      "NEAR-MISS": 2,
-      "ADV-PROOF-UNTYPED": 2,
+      "OTHER:*": 167,
+      "MISSED-GOLD": 49,
+      "AMBIGUOUS-READING": 41,
+      "REFERENCE-UNSUPPORTED": 33,
+      "GOLD-WRONG": 32,
+      "NEAR-DUPLICATE": 12,
+      "TELEGRAPH": 8,
+      "GENERIC-FACT": 7,
+      "STALE-EVIDENCE": 4,
+      "NEAR-MISS": 4,
+      "ADV-PROOF-UNTYPED": 3,
+      "FILTER-DECORATION": 2,
       "ROUTE-MISLABEL": 1,
-      "STALE-EVIDENCE": 1,
-      "FILTER-DECORATION": 1,
       "value-groundedness-overstated": 1
     },
-    "other_label_count": 78,
-    "accepted_with_upheld_finding": 28,
-    "accepted_with_fix_round": 20
+    "other_label_count": 129,
+    "accepted_with_upheld_finding": 32,
+    "accepted_with_fix_round": 32
   },
   "mcp": {
     "calls": 4152,

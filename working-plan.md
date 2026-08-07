@@ -35,17 +35,26 @@ Four calls, all made after reading round one. They close the study.
    rule), vec-31 (a critic finding the judge dismissed). Bank membership was
    verified for both accepted exemplars before they were written up.
 
-4. **Re-running the pipeline on a cheaper model is deferred, not rejected.**
-   Sonnet 5 would reprice the same token profile at roughly $850 against
-   Opus 5's $1,507 - about $11 per question. Not run, for two reasons. The cost
-   driver is architecture, not model: 934M of the tokens are cache reads from
-   warm agents re-reading held context across FIX rounds, and the orchestrator
-   sessions alone outspent the drafter, critic and judge combined. And the
-   comparison would not be clean - the Opus telemetry spans 14 batches run while
-   the pipeline itself was changing, so a matched Opus arm would be needed too.
-   The claim it would test is real and belongs in the write-up as a stated
-   implication: because every fact is verified by execution and every count is
-   code, the pipeline should tolerate a weaker model.
+4. **Re-running the pipeline on a cheaper model: first deferred, then RUN the
+   same day as a nine-cell probe.** The deferral reasoning (cost driver is
+   architecture, not model; the 14-batch Opus telemetry is not a clean arm) was
+   answered by shrinking the scope: not a re-run of the factory, but nine
+   already-authored cells re-drafted with every role on Sonnet 5, from the same
+   recorded seeds. Plan and disclosed limits:
+   `docs/sonnet-replication-plan.md`. Results: `docs/writeup-plan.md` §10. The
+   short version: 7 of 9 slots accepted, only 5 schema-valid; `precheck_record`
+   0 failures of 17, so the execution gate held on a weaker model; $65.72
+   against ~$180 for the same nine on Opus. The judged mixed run
+   (`data/runs/mixed-2026-08-06`, 16 questions, $0.02, bank
+   `eval/banks/mixed-opus-sonnet-2026-08-06.jsonl`, author readable off the
+   `-s` infix) scored the seven matched pairs higher on three, equal on four,
+   lower on none - and Sonnet could not close the two hardest cells at all.
+   Two contract breaches, both at the orchestrator: `judge_decisions` was reset
+   per candidate instead of accumulated, and two vector records shipped without
+   `pooling_evidence` while the journal recorded `validate-record OK`. The
+   mixed run therefore used `run-bank --unsafe-skip-bank-validation`, and both
+   the run meta and the first line of its report record the bypass and name the
+   two violations.
 
 ## Where things stand
 
@@ -459,6 +468,21 @@ A backlog spanning four days of work went in as five commits, one per unit:
 
 ## Open, carried forward
 
+- ~~**`telemetry.py` counts FIX rounds and findings from the last journal line
+  per slot, and that undercounts most runs, not just the Sonnet probe.**~~
+  **Fixed 2026-08-07.** `merged_slots` now folds every journal line per slot:
+  a line that extends the decision history positionally replaces the merged
+  list (the cumulative style, which paraphrases old rationales as it re-emits
+  them - batchI), any other line is appended with content-level dedup (the
+  resetting style - the Sonnet probe). Findings are the union across lines,
+  deduplicated excluding the ruling so the ruled restatement wins. Acceptance
+  held: probe FIX rounds 4 (the hand count), batchI hyb-12 exactly 5
+  decisions. One correction to the review's measurement: its ~57 all-runs FIX
+  count came from a content-only key that also counts batchI's paraphrased
+  restatements as new decisions (hyb-12 inflates to 13); the merged count is
+  41 all-runs, 37 Opus-only. `docs/factory-telemetry.md`/`.json` regenerated;
+  `docs/writeup-plan.md` §3 and `docs/factory-exemplars.md` denominators
+  updated to the recounted values.
 - **`/review-bank` is STALE** against the reframed critic's vocabulary - its
   report format still expects verdicts and severities that no longer exist. A
   note sits at the top of that file. Not blocking anything.

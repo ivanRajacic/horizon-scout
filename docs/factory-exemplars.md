@@ -4,6 +4,13 @@ Narrative companions to `factory-telemetry.md`. Every quote is verbatim from the
 batch journals. Bank membership was checked for all 42 accepted records before
 these three were picked.
 
+*Scope note 2026-08-07: the denominators in this file (42 accepted, 43 slots,
+167 HIGH+MID findings) count the OPUS factory only - the three
+`sonnet-probe/*` runs are excluded. They are the recounted values from the
+2026-08-07 telemetry fix, which merges every journal line per slot instead of
+reading the last line; the finding denominator rose from the 46 the last-line
+method reported. The three episodes themselves are unaffected.*
+
 ---
 
 ## 1. A caught defect - hyb-13, working-memory fellowships
@@ -159,7 +166,7 @@ could not be made decidable, and the judge killed it on a rule rather than on
 taste.
 
 The critic could not have produced any of the three outcomes: it has no verdict,
-which is exactly why it is free to attack hard, and 5 of the 46 HIGH and MID
+which is exactly why it is free to attack hard, and 5 of the 167 HIGH and MID
 findings were ruled wrong without costing anything. The judge could not have
 produced them either: it has no tools, so every ruling is forced back onto
 evidence someone else executed. The drafter's own doubt about MEDEA-CHART sat in
