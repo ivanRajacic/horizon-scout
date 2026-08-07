@@ -157,7 +157,16 @@ def read_records(path: Path) -> list[dict]:
 
 
 def staged_files(drafts_dir: Path = DRAFTS_DIR) -> list[Path]:
-    return sorted(drafts_dir.glob("draft-bank-*.jsonl"))
+    """Every staged draft file, wherever its batch wrote it.
+
+    Recursive like `twinned_ids`, and for the same reason: batches write
+    into their own subdirectories (`batchF/draft-bank-...jsonl`), and a flat
+    glob saw 1 of 24 files - which is why the gap report said "Staged
+    (undecided): 0" for every batch that ever ran. `eval/drafts/archive/` is
+    skipped, as everywhere: its pre-skill files reuse ids the bank owns.
+    """
+    return sorted(p for p in drafts_dir.glob("**/draft-bank-*.jsonl")
+                  if "archive" not in p.relative_to(drafts_dir).parts)
 
 
 def packet_claims(drafts_dir: Path = DRAFTS_DIR) -> tuple[set[str], set[str]]:
@@ -254,9 +263,14 @@ def rejected_ids(drafts_dir: Path = DRAFTS_DIR) -> set[str]:
     tolerant where `promote.py` is strict: an unticked or malformed report
     means "no decision yet", never a crash, because a gap report must be
     readable mid-review.
+
+    Recursive like `staged_files`, skipping `archive/` for the same reason -
+    the retired pre-skill reports carry REJECT ticks against ids the bank
+    has long since decided.
     """
     ids: set[str] = set()
-    for path in sorted(drafts_dir.glob("draft-report-*.md")):
+    for path in sorted(p for p in drafts_dir.glob("**/draft-report-*.md")
+                       if "archive" not in p.relative_to(drafts_dir).parts):
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -330,7 +344,7 @@ def twinned_ids(bank_path: Path = BANK_PATH,
     slot's, since the tab may fall back to any of them, until it closes out and
     the two it did not use come free.
     """
-    # Recursive, unlike `staged_files`: a group writes its draft file into its
+    # Recursive, like `staged_files`: a group writes its draft file into its
     # own subdirectory, and a parent claimed there must stay claimed in the
     # window between close-out and promotion. Missing it would free the used
     # parent for a third run to pick up again.
@@ -407,8 +421,12 @@ def gap_report(bank_path: Path = BANK_PATH, drafts_dir: Path = DRAFTS_DIR,
                    | archived_ids(archive_dir))
     staged, live_paths = [], []
     for path in staged_paths:
+        # Scratch ids (letter infix - the Sonnet probe's) are dropped here,
+        # at collection, so no staged tally, subtype or term_style line below
+        # ever counts a non-bank draft toward a cell target.
         undecided = [r for r in read_records(path)
-                     if r.get("question_id") not in decided_ids]
+                     if r.get("question_id") not in decided_ids
+                     and ID_RE.match(str(r.get("question_id", "")))]
         staged.extend(undecided)
         if undecided:
             live_paths.append(path)

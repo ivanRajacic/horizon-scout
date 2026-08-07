@@ -367,6 +367,72 @@ def test_scratch_section_decision_never_attaches_to_the_previous_real_id(
     assert rejected_ids(drafts) == set()
 
 
+def test_staged_discovery_is_recursive_and_skips_archive(tmp_path):
+    # Batches write into their own subdirectories; a flat glob saw 1 of 24
+    # draft files on the real tree and reported "Staged (undecided): 0"
+    # forever. The archive subdir stays invisible - its pre-skill files
+    # reuse ids the bank owns.
+    from src.eval.batch import staged_files
+    drafts = tmp_path / "drafts"
+    flat = write_jsonl(drafts / "draft-bank-2026-07-27.jsonl",
+                       [{**HYB_A, "question_id": "hyb-08"}])
+    sub = write_jsonl(drafts / "batchF" / "draft-bank-2026-07-28.jsonl",
+                      [{**HYB_A, "question_id": "hyb-09"}])
+    scratch = write_jsonl(drafts / "probe" / "draft-bank-2026-08-06.jsonl",
+                          [{**HYB_A, "question_id": "hyb-s12"}])
+    write_jsonl(drafts / "archive" / "draft-bank-2026-07-24.jsonl",
+                [{**HYB_A, "question_id": "hyb-01"}])
+    assert staged_files(drafts) == sorted([flat, sub, scratch])
+
+
+def test_rejected_ids_sees_a_subdirectory_report(tmp_path):
+    # The REJECT ticks for hyb-10 (batchF) and hyb-11 (batchI) live in
+    # subdirectory reports; the flat glob never read them.
+    drafts = tmp_path / "drafts"
+    (drafts / "batchF").mkdir(parents=True)
+    (drafts / "batchF" / "draft-report-2026-07-28.md").write_text(
+        "Draft-bank-file: draft-bank-2026-07-28.jsonl\n\n"
+        "## hyb-10 - ACCEPTED\n\nDecision: [ ] APPROVE  [x] REJECT\n",
+        encoding="utf-8")
+    (drafts / "archive").mkdir(parents=True)
+    (drafts / "archive" / "draft-report-2026-07-24.md").write_text(
+        "## hyb-01 - SOUND\n\nDecision: [ ] APPROVE  [x] REJECT\n",
+        encoding="utf-8")
+    assert rejected_ids(drafts) == {"hyb-10"}
+
+
+def test_gap_report_counts_subdirectory_records_and_excludes_scratch(
+        tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "batchF" / "draft-bank-2026-07-28.jsonl",
+                [{**HYB_A, "question_id": "hyb-09"},
+                 {**HYB_A, "question_id": "hyb-10"}])
+    write_jsonl(drafts / "probe" / "draft-bank-2026-08-06.jsonl",
+                [{**HYB_A, "question_id": "hyb-s12"}])
+    (drafts / "batchF" / "draft-report-2026-07-28.md").write_text(
+        "Draft-bank-file: draft-bank-2026-07-28.jsonl\n\n"
+        "## hyb-10 - ACCEPTED\n\nDecision: [ ] APPROVE  [x] REJECT\n",
+        encoding="utf-8")
+    text = gap_report(bank, drafts, plan_file(tmp_path), tmp_path / "archive")
+    # hyb-09 pending; hyb-10 rejected (decided); hyb-s12 scratch (never
+    # counted toward a cell)
+    assert "Staged (undecided): 1 record(s)" in text
+    assert "| hybrid | 0+1/6 |" in text
+
+
+def test_next_ids_counts_subdirectory_staged_ids_and_ignores_scratch(
+        tmp_path):
+    bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
+    drafts = tmp_path / "drafts"
+    write_jsonl(drafts / "batchF" / "draft-bank-2026-07-28.jsonl",
+                [{**HYB_A, "question_id": "hyb-12"}])
+    write_jsonl(drafts / "probe" / "draft-bank-2026-08-06.jsonl",
+                [{**HYB_A, "question_id": "hyb-s44"}])
+    assigned = next_ids({"hybrid": 1}, bank, drafts, tmp_path / "archive")
+    assert assigned["hybrid"] == ["hyb-13"]
+
+
 def test_gap_report_still_counts_an_approved_but_unpromoted_record(tmp_path):
     # Ticked APPROVE but promote-drafts not yet run: genuinely pending.
     bank = write_jsonl(tmp_path / "bank.jsonl", [SQL_A])
