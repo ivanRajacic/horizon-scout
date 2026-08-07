@@ -24,3 +24,8 @@ data/runs/
 
 # local Claude Code permission settings
 .claude/settings.local.json
+
+# private working docs - local only
+docs/*
+!docs/assets/
+working-plan.md
