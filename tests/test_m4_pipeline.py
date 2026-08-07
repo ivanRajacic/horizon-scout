@@ -6,9 +6,9 @@ import re
 
 import pytest
 
-from src.retrieval.scoped import (WEAK_FILTER, ScopedRetriever,
-                                  filter_literals, filter_note,
-                                  uses_malformed_null_test,
+from src.retrieval.scoped import (NARROW_ROW_LIMIT, WEAK_FILTER,
+                                  ScopedRetriever, filter_literals,
+                                  filter_note, uses_malformed_null_test,
                                   uses_subject_filter)
 from src.retrieval.vector_search import SearchResult
 from src.router import router as router_mod
@@ -197,8 +197,9 @@ def test_fit_to_budget_drops_worst_first():
 # --- scoped edge policies ---
 
 class FakeSql:
-    def __init__(self, result):
+    def __init__(self, result, row_limit=NARROW_ROW_LIMIT):
         self._result = result
+        self.row_limit = row_limit    # what the real SqlPath caps rows at
 
     def ask(self, q):
         return self._result
@@ -295,6 +296,47 @@ def test_filter_note_is_suppressed_when_nothing_was_filtered():
     teach the model to over-assert."""
     assert filter_note("SELECT DISTINCT id FROM project", 35389) is None
     assert filter_note(None, 0) is None
+
+
+def test_filter_note_drops_the_completeness_claim_when_truncated():
+    """A truncated id set still satisfies the filter - it just is not all of
+    it. The generator must not read the excerpts as the complete answer."""
+    note = filter_note(SWEDISH, NARROW_ROW_LIMIT, truncated=True)
+    assert SWEDISH in note
+    assert "PARTIAL set" in note
+    assert "not describe the list as complete" in note
+    assert filter_note(SWEDISH, 12).endswith(
+        "Every project shown satisfies it.")
+
+
+def test_narrowing_at_the_row_cap_is_flagged_truncated_and_weak():
+    """A narrowing query missing DISTINCT over the organization join can
+    return far more rows than there are projects and come back cut off at the
+    cap. The ids that arrived are correct, so the filter stays and nothing
+    refuses - but it is weak, the trace says truncated, and the note stops
+    claiming completeness."""
+    sql = ("SELECT p.id FROM project p JOIN organization o ON "
+           "o.projectID = p.id WHERE o.country = 'SE'")
+    narrow = FakeSql(R(True, rows=[(1,), (2,), (3,)], sql=sql), row_limit=3)
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve("q", k=10)
+    assert res.status == "ok" and res.degraded is None
+    assert res.project_ids == {1, 2, 3}          # the filter was NOT dropped
+    assert searcher.last_project_ids == {1, 2, 3}
+    assert res.trace["truncated"] is True
+    assert res.weak_filter and res.trace["weak_filter"] is True
+    assert "PARTIAL set" in res.filter_note
+
+
+def test_narrowing_under_the_row_cap_still_claims_completeness():
+    sql = ("SELECT DISTINCT p.id FROM project p JOIN organization o ON "
+           "o.projectID = p.id WHERE o.country = 'SE'")
+    narrow = FakeSql(R(True, rows=[(1,), (2,)], sql=sql), row_limit=3)
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve("q", k=10)
+    assert res.trace["truncated"] is False
+    assert not res.weak_filter
+    assert res.filter_note.endswith("Every project shown satisfies it.")
 
 
 def test_scoped_ok_carries_the_note():
@@ -442,6 +484,11 @@ class GateSql(QueueSql):
     _EV_COUNT = re.compile(
         r"SELECT count\(\*\) FROM euroscivoc WHERE euroSciVocTitle ILIKE "
         r"'%((?:[^']|'')*)%' OR euroSciVocPath ILIKE")
+    # The value gate's euroSciVoc lookup since 2026-08-07: the comparison as
+    # the model wrote it, one column, one operator, one literal.
+    _EV_EXACT = re.compile(
+        r"SELECT count\(\*\) FROM euroscivoc WHERE (euroSciVoc\w+) "
+        r"(=|LIKE|ILIKE) '((?:[^']|'')*)'", re.IGNORECASE)
     _COL_COUNT = re.compile(
         r"SELECT count\(\*\) FROM (?:project|organization) WHERE "
         r"(\w+) (=|LIKE|ILIKE) '((?:[^']|'')*)'")
@@ -462,6 +509,16 @@ class GateSql(QueueSql):
         key = "euroscivoc" if column == "euroSciVocTitle" else column
         return self.values.get(key, [])
 
+    def _ev_column(self, column):
+        """The taxonomy column as stored rows. Every alive term gets a title
+        and a REAL-shaped path ending in that term, so a path pattern is
+        matched the way the database would match it - which is the whole
+        point of the gate executing the comparison as written."""
+        terms = self.values.get("euroscivoc", [])
+        if column.lower() == "euroscivocpath":
+            return [f"/natural sciences/{t}" for t in terms]
+        return list(terms)
+
     @staticmethod
     def _unesc(lit):
         return lit.replace("''", "'")
@@ -478,6 +535,13 @@ class GateSql(QueueSql):
             term = self._unesc(m.group(1)).lower()
             stored = self.values.get("euroscivoc", [])
             return ["count"], [(sum(term in v.lower() for v in stored),)]
+        if m := self._EV_EXACT.search(sql):
+            column, op = m.group(1), m.group(2).upper()
+            lit = self._unesc(m.group(3))
+            vals = self._ev_column(column)
+            n = (sum(v == lit for v in vals) if op == "=" else
+                 sum(self._like(v, lit, ci=op == "ILIKE") for v in vals))
+            return ["count"], [(n,)]
         if m := self._COL_COUNT.search(sql):
             col, op, lit = m.group(1), m.group(2), self._unesc(m.group(3))
             vals = self._stored(col)
@@ -594,10 +658,97 @@ def test_filter_literals_collects_every_guarded_comparison():
     assert ("fundingScheme", "=", "SME-1") in got
     assert ("country", "ILIKE", "se") in got          # qualified or bare
     assert ("status", "LIKE", "CLOSED") in got
-    assert ("euroscivoc", "term", "viticulture") in got
+    # The euroSciVoc entry keys the COLUMN and keeps the pattern as written -
+    # the gate re-executes it, so nothing may be normalised away here.
+    assert ("euroscivoc:euroSciVocPath", "LIKE", "%/viticulture%") in got
     assert len([g for g in got if g[0] == "fundingScheme"]) == 1  # deduped
     assert not any(lit == "2020-01-01" for _, _, lit in got)  # dates unguarded
     assert filter_literals(None) == []
+
+
+def test_filter_literals_skips_negated_comparisons():
+    """A NOT against a value that matches nothing keeps every row, so there is
+    nothing for the gate to correct. Reading NOT as non-capturing handed the
+    gate the POSITIVE comparison and it re-asked away a correct exclusion."""
+    got = filter_literals(
+        "SELECT DISTINCT p.id FROM project p "
+        "JOIN organization o ON o.projectID = p.id "
+        "JOIN euroscivoc e ON e.projectID = p.id "
+        "WHERE o.country NOT LIKE 'Zzz' "
+        "AND e.euroSciVocTitle NOT ILIKE 'nonexistent term' "
+        "AND o.country = 'SE'")
+    assert got == [("country", "=", "SE")]
+
+
+def test_filter_literals_keeps_title_and_path_comparisons_apart():
+    # Same term, two different questions to the database: dedup must not
+    # collapse them, because only one of the two may be dead.
+    got = filter_literals(
+        "SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON "
+        "e.projectID = p.id WHERE e.euroSciVocTitle = 'textiles' "
+        "OR e.euroSciVocPath LIKE '%/textiles%'")
+    assert got == [("euroscivoc:euroSciVocTitle", "=", "textiles"),
+                   ("euroscivoc:euroSciVocPath", "LIKE", "%/textiles%")]
+
+
+EV_TYPO = ("SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON "
+           "e.projectID = p.id WHERE e.euroSciVocPath LIKE '%/ textiles%'")
+EV_TEXTILES = ("SELECT DISTINCT p.id FROM project p JOIN euroscivoc e ON "
+               "e.projectID = p.id WHERE e.euroSciVocPath LIKE "
+               "'%/textiles%'")
+
+
+def test_value_gate_runs_the_euroscivoc_pattern_exactly_as_written():
+    """hyb-08: the model wrote `euroSciVocPath LIKE '%/ textiles%'` - a stray
+    space after the slash. The gate normalised that to the bare term
+    'textiles', found it alive in the taxonomy, and let the filter run; it
+    matched no project and the zero-match policy turned the typo into a
+    confident refusal. Only the pattern as written can catch this."""
+    narrow = GateSql([R(True, rows=[], sql=EV_TYPO),
+                      R(True, rows=[(4,)], sql=EV_TEXTILES)],
+                     alive_terms=["textiles"])
+    searcher = FakeSearcher([mk_chunk(4, "T")])
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve(
+        "q", k=10, constraints=["classified under textiles"],
+        constraints_source="router")
+    assert res.status == "ok" and res.project_ids == {4}   # never a refusal
+    assert res.trace["dead_values"] == [["euroscivoc:euroSciVocPath",
+                                         "%/ textiles%"]]
+    assert res.trace["value_reasked"] is True
+    # The lookup carried the pattern verbatim, wildcards and stray space.
+    assert any("euroSciVocPath LIKE '%/ textiles%'" in look
+               for look in narrow.lookups)
+    # The HINT still uses the normalised term, or no candidate would be found.
+    assert "'textiles'" in narrow.asked[1]
+
+
+def test_value_gate_passes_a_correct_euroscivoc_pattern_without_a_reask():
+    narrow = GateSql([R(True, rows=[(4,)], sql=EV_TEXTILES)],
+                     alive_terms=["textiles"])
+    searcher = FakeSearcher([mk_chunk(4, "T")])
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve(
+        "q", k=10, constraints=["classified under textiles"],
+        constraints_source="router")
+    assert res.status == "ok" and len(narrow.asked) == 1
+    assert res.trace["dead_values"] == []
+    assert res.trace["value_reasked"] is False
+
+
+def test_value_gate_leaves_a_negated_exclusion_alone():
+    """End to end for the NOT exemption: one narrowing call, no re-ask, the
+    filter kept, and 'Zzz' never looked up as if it were a wanted value."""
+    sql = ("SELECT DISTINCT p.id FROM project p JOIN organization o ON "
+           "o.projectID = p.id WHERE o.country NOT LIKE 'Zzz' "
+           "AND o.country = 'SE'")
+    narrow = GateSql([R(True, rows=[(1,), (2,)], sql=sql)],
+                     values={"country": ["SE", "DE"]})
+    searcher = FakeSearcher([mk_chunk(1, "A")])
+    res = ScopedRetriever(searcher, narrow_sql=narrow).retrieve("q", k=10)
+    assert res.status == "ok" and res.project_ids == {1, 2}
+    assert res.degraded is None
+    assert len(narrow.asked) == 1                 # no corrective re-ask
+    assert res.trace["dead_values"] == []
+    assert not any("Zzz" in look for look in narrow.lookups)
 
 
 def test_value_gate_reask_keeps_the_list_and_names_the_dead_term():
@@ -613,11 +764,12 @@ def test_value_gate_reask_keeps_the_list_and_names_the_dead_term():
         constraints=["classified under viticultura", "funding scheme SME-1"],
         constraints_source="router")
     assert res.status == "ok" and res.project_ids == {1, 2}
-    assert res.trace["dead_values"] == [["euroscivoc", "viticultura"]]
+    assert res.trace["dead_values"] == [["euroscivoc:euroSciVocPath",
+                                         "%/viticultura%"]]
     assert res.trace["value_reasked"] is True
     hint = narrow.asked[1]
     assert "- classified under viticultura" in hint   # the list is intact
-    assert "'viticultura' does not exist" in hint
+    assert "euroSciVocPath ... '%/viticultura%' matches no row" in hint
     assert "'viticulture'" in hint                    # the real candidate
 
 

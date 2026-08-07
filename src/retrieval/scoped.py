@@ -4,9 +4,13 @@ ids, then a semantic search runs WITHIN that scope.
 This is the "structured constraint + topic" path (router mode 'scoped'). It is
 distinct from hybrid.py, which fuses lexical and dense retrieval (RRF + rerank);
 the semantic step here takes any base.Retriever. That swap has now happened:
-since 2026-08-03 ask.py passes in config.RUNTIME_RETRIEVER (hybrid_rerank), so
-the filter narrows to a set of ids and lexical + dense both search WITHIN it -
-HybridRetriever.search forwards project_ids to both legs.
+since 2026-08-03 ask.py passes in config.RUNTIME_RETRIEVER (hybrid_rerank), and
+HybridRetriever.search forwards project_ids to both legs. The two legs honour
+the filter differently: lexical searches within the id set (SQL IN clause);
+dense post-filters a global FAISS fetch, and since 2026-08-07 widens that fetch
+until k survivors are found - before that, a narrow filter could silently empty
+the dense leg (a fixed 2,000-vector slice of 190,248) and the route degraded to
+lexical-only.
 
 Since narrow-v3 (2026-08-05) the narrowing step TRANSLATES a constraint list
 instead of deciding one. The hyb-filterfix-20260805 ablations showed every
@@ -30,6 +34,13 @@ Edge policies (decided in the milestone, enforced here):
 - SQL returns zero ids        -> that IS the answer (status="zero_match");
   never silently widen to unfiltered search.
 - SQL returns > WEAK_FILTER   -> proceed; flag weak_filter=true in the trace.
+- SQL returns exactly the row cap -> the id set is TRUNCATED, so it is a
+  partial answer to its own filter (a missing DISTINCT over the organization
+  join turns 150k rows into the first 50000). Proceed - the ids that came
+  back do satisfy the filter - but flag truncated=true, mark the filter weak,
+  and drop the completeness sentence from the note so synthesis cannot claim
+  the list is everything. Never refuse and never drop the filter: both would
+  throw away a filter that worked, only not exhaustively.
 - A subject filter survives the corrective re-ask, the filter tests a
   comparison's result with IS NULL, or the first column does not hold project
   ids -> same degrade as sql_failed. A query that was never legal to run must
@@ -63,6 +74,8 @@ WEAK_FILTER = 5000
 # Never truncate a real filter set; just bound pathology. replace_limit=True on
 # the narrowing SqlPath extends the promise to model-written limits: hyb-13 and
 # hyb-15 (2026-08-05) each ended in LIMIT 1 and collapsed the set to one project.
+# When the cap DOES bite (2026-08-07), retrieve() flags trace["truncated"] -
+# silence there is what let a partial id set be described as complete.
 NARROW_ROW_LIMIT = 50000
 
 # narrow-v2 (2026-08-05): the topics call-code line was added after hyb-06/
@@ -118,10 +131,22 @@ def _blank_euroscivoc(sql: str) -> str:
 
 _HAS_WHERE_RE = re.compile(r"\bWHERE\b", re.IGNORECASE)
 
-# The string literal of every euroSciVoc comparison, for the value gate.
+# Every euroSciVoc comparison, for the value gate: column, NOT, operator and
+# literal are ALL captured, because the gate re-executes the comparison exactly
+# as the model wrote it.
+#
+# 2026-08-07, hyb-08: the gate used to keep only the literal, normalise it to a
+# bare term, and look that term up with ILIKE '%term%'. The model had written
+# `e.euroSciVocPath LIKE '%/ textiles%'` - a stray space after the slash. The
+# gate looked up 'textiles', found 295 rows, called the value alive, and the
+# filter it then ran matched 0 projects; the zero-match policy turned the typo
+# into a confident refusal. Only the pattern AS WRITTEN can catch that.
 _EUROSCIVOC_LITERAL_RE = re.compile(
-    r"euroSciVoc(?:Title|Path)\s*(?:NOT\s+)?(?:ILIKE|LIKE|=)\s*'([^']*)'",
+    r"\b(euroSciVoc(?:Title|Path))\s*(NOT\s+)?(ILIKE|LIKE|=)\s*"
+    r"'((?:[^']|'')*)'",
     re.IGNORECASE)
+_CANON_EV_COLUMN = {"euroscivoctitle": "euroSciVocTitle",
+                    "euroscivocpath": "euroSciVocPath"}
 
 # Every column whose legal values are a closed set, and the table that holds
 # it. Dates and money stay out - they are continuous, so no "nonexistent
@@ -140,9 +165,14 @@ _CANON_COLUMN = {c.lower(): c for c in GUARDED_VALUE_COLUMNS}
 # The literal pattern honours '' escapes; \b matches the column with or
 # without a table qualifier. A column name INSIDE a string literal cannot
 # match - it is never followed by an operator and an opening quote there.
+#
+# NOT is CAPTURED, not skipped over (2026-08-07). Read as non-capturing, it
+# made `country NOT LIKE 'Zzz'` arrive at the gate as ('country','LIKE','Zzz');
+# the gate executed the POSITIVE form, found zero rows, called a perfectly good
+# exclusion filter dead, and re-asked it away.
 _VALUE_LITERAL_RE = re.compile(
     r"\b(" + "|".join(GUARDED_VALUE_COLUMNS) + r")\b\s*"
-    r"(?:NOT\s+)?(=|ILIKE|LIKE)\s*'((?:[^']|'')*)'",
+    r"(NOT\s+)?(=|ILIKE|LIKE)\s*'((?:[^']|'')*)'",
     re.IGNORECASE)
 
 
@@ -179,13 +209,29 @@ def uses_malformed_null_test(sql: str | None) -> bool:
     return bool(sql and _MALFORMED_NULL_RE.search(blank_strings(sql)))
 
 
+def normalise_euroscivoc_term(literal: str) -> str:
+    """The bare taxonomy term inside a euroSciVoc pattern: wildcards removed,
+    `_` read as the single character it stands for, path slashes trimmed.
+
+    This is the right input for a CANDIDATE lookup - '%/ textiles%' is meant to
+    be about textiles, and the hint has to show real terms near it. It is the
+    wrong input for the dead/alive DECISION, which must run the pattern as
+    written; see _EUROSCIVOC_LITERAL_RE.
+    """
+    return literal.replace("%", "").replace("_", " ").strip("/").strip()
+
+
 def euroscivoc_terms(sql: str | None) -> list[str]:
-    """The bare terms this SQL filters the taxonomy on, wildcards stripped."""
+    """The bare terms this SQL filters the taxonomy on, wildcards stripped.
+
+    Not the value gate's path any more (it needs the pattern as written) -
+    kept because a bare term is still the readable name of the constraint.
+    """
     if not sql:
         return []
     terms = []
     for m in _EUROSCIVOC_LITERAL_RE.finditer(sql):
-        term = m.group(1).replace("%", "").replace("_", " ").strip("/").strip()
+        term = normalise_euroscivoc_term(m.group(4).replace("''", "'"))
         if term:
             terms.append(term)
     return terms
@@ -193,18 +239,36 @@ def euroscivoc_terms(sql: str | None) -> list[str]:
 
 def filter_literals(sql: str | None) -> list[tuple[str, str, str]]:
     """Every (column, operator, literal) this SQL compares against a guarded
-    closed-set column, deduplicated in order. euroSciVoc comparisons are
-    folded in as ("euroscivoc", "term", <bare term>) - one gate, not two
-    siblings."""
+    closed-set column, deduplicated in order.
+
+    euroSciVoc comparisons are folded into the same gate, keyed
+    "euroscivoc:<column>" so the caller knows which taxonomy column to test,
+    and carrying the literal EXACTLY as written - wildcards, spaces and all.
+    Dedup is still (key, literal), so the same comparison written twice
+    collapses while Title and Path comparisons stay separate: they are
+    different questions to the database.
+
+    NEGATED comparisons are skipped entirely. The gate exists to catch a value
+    that matches nothing, because such a value silently empties an AND-filter.
+    A NOT against a value that matches nothing does the opposite - it keeps
+    every row - so it is harmless and there is nothing to correct. Treating it
+    as dead (which is what dropping the NOT did) re-asked away correct
+    exclusion filters.
+    """
     if not sql:
         return []
     out = []
     for m in _VALUE_LITERAL_RE.finditer(sql):
+        if m.group(2):                     # NOT: exempt, see the docstring
+            continue
         col = _CANON_COLUMN[m.group(1).lower()]
-        lit = m.group(3).replace("''", "'")
-        out.append((col, m.group(2).upper(), lit))
-    for term in euroscivoc_terms(sql):
-        out.append(("euroscivoc", "term", term))
+        out.append((col, m.group(3).upper(), m.group(4).replace("''", "'")))
+    for m in _EUROSCIVOC_LITERAL_RE.finditer(sql):
+        if m.group(2):                     # NOT: exempt, same reason
+            continue
+        ev_col = _CANON_EV_COLUMN[m.group(1).lower()]
+        out.append((f"euroscivoc:{ev_col}", m.group(3).upper(),
+                    m.group(4).replace("''", "'")))
     seen: set[tuple[str, str]] = set()
     deduped = []
     for col, op, lit in out:
@@ -214,7 +278,18 @@ def filter_literals(sql: str | None) -> list[tuple[str, str, str]]:
     return deduped
 
 
-def filter_note(sql: str | None, n_ids: int) -> str | None:
+def is_euroscivoc_key(col: str) -> bool:
+    return col == "euroscivoc" or col.startswith("euroscivoc:")
+
+
+def _euroscivoc_column(col: str) -> str:
+    """The taxonomy column a gate key names; Title for the bare legacy key."""
+    _, _, ev_col = col.partition(":")
+    return _CANON_EV_COLUMN.get(ev_col.lower(), "euroSciVocTitle")
+
+
+def filter_note(sql: str | None, n_ids: int,
+                truncated: bool = False) -> str | None:
     """What the generator must be told about the filter that already ran.
 
     Without this the synthesizer sees prose only, is never told the excerpts
@@ -229,13 +304,23 @@ def filter_note(sql: str | None, n_ids: int) -> str | None:
     `SELECT DISTINCT id FROM project` for a question with no structured
     constraint at all, and "every project satisfies: all projects" is noise that
     would only teach the model to over-assert.
+
+    truncated=True swaps the closing sentence. The id set then hit the row cap,
+    so the projects that came back do satisfy the filter but are not all of the
+    projects that satisfy it - and "every project shown satisfies it" reads, to
+    the generator, as permission to describe the set as the complete answer.
     """
     if not sql or not _HAS_WHERE_RE.search(sql):
         return None
-    return ("Structured filter already applied. The excerpts below are drawn "
+    head = ("Structured filter already applied. The excerpts below are drawn "
             f"ONLY from the {n_ids:,} projects returned by this query:\n"
-            f"{sql}\n"
-            "Every project shown satisfies it.")
+            f"{sql}\n")
+    if truncated:
+        return head + ("Every project shown satisfies it, but the query hit "
+                       "its row cap: this is a PARTIAL set and other projects "
+                       "that also satisfy the filter are missing. Do not "
+                       "describe the list as complete, and do not count it.")
+    return head + "Every project shown satisfies it."
 
 
 def build_id_narrowing_prompt() -> str:
@@ -392,17 +477,23 @@ class ScopedRetriever:
         never soften a genuine empty intersection of valid values. A LIKE /
         ILIKE literal is checked as the live pattern it is, so
         `LIKE 'MSCA%'` passes on the strength of its matches.
+
+        euroSciVoc runs the same way: the comparison the model wrote, against
+        the taxonomy column it wrote it against. Nothing is normalised first -
+        a pattern that the database will not match is exactly what this method
+        is here to find (hyb-08: `euroSciVocPath LIKE '%/ textiles%'`).
         """
         dead = []
         for col, op, lit in literals:
-            if col == "euroscivoc":
-                if self._dead_terms([lit]):
-                    dead.append((col, lit))
-                continue
             esc = lit.replace("'", "''")
+            if is_euroscivoc_key(col):
+                # The column comes from a closed regex alternation and is
+                # re-spelled from _CANON_EV_COLUMN, so it is never model text.
+                table, column = "euroscivoc", _euroscivoc_column(col)
+            else:
+                table, column = GUARDED_VALUE_COLUMNS[col], col
             _, rows = self.narrow.execute_trusted(
-                f"SELECT count(*) FROM {GUARDED_VALUE_COLUMNS[col]} "
-                f"WHERE {col} {op} '{esc}'")
+                f"SELECT count(*) FROM {table} WHERE {column} {op} '{esc}'")
             if not rows or not rows[0][0]:
                 dead.append((col, lit))
         return dead
@@ -411,8 +502,11 @@ class ScopedRetriever:
         """Up to 10 real values near a dead literal: substring match on the
         whole literal, then on its first word, else the column's most common
         values (for a 5-value column that is simply all of them)."""
-        if col == "euroscivoc":
+        if is_euroscivoc_key(col):
             table, lookup = "euroscivoc", "euroSciVocTitle"
+            # The gate key carries the PATTERN ('%/ textiles%'); a substring
+            # search on that finds nothing. Candidates want the bare term.
+            literal = normalise_euroscivoc_term(literal)
         else:
             table, lookup = GUARDED_VALUE_COLUMNS[col], col
         cleaned = literal.replace("%", " ").replace("_", " ").strip("/").strip()
@@ -438,12 +532,19 @@ class ScopedRetriever:
         (and NARROW_PROMPT_VERSION) is untouched."""
         lines = []
         for col, lit in dead:
-            name = "euroSciVoc term" if col == "euroscivoc" else col
             cands = self._candidates(col, lit)
             shown = (", ".join(f"'{c}'" for c in cands) if cands
                      else "none found")
-            lines.append(f"- {name} value '{lit}' does not exist in the "
-                         f"database. Stored values closest to it: {shown}.")
+            if is_euroscivoc_key(col):
+                # Name the comparison, not a tidied-up term: the whole point
+                # is that THIS pattern, against THIS column, matches nothing.
+                lines.append(
+                    f"- the euroSciVoc condition "
+                    f"{_euroscivoc_column(col)} ... '{lit}' matches no row in "
+                    f"the taxonomy. Stored terms closest to it: {shown}.")
+            else:
+                lines.append(f"- {col} value '{lit}' does not exist in the "
+                             f"database. Stored values closest to it: {shown}.")
         return ("\n\n(Correction needed - these filter values do not exist:\n"
                 + "\n".join(lines) + "\n"
                 "Rewrite the SQL using a stored value EXACTLY as shown when "
@@ -587,14 +688,25 @@ class ScopedRetriever:
                        "value_reasked": value_reasked,
                        "subject_corrected": subject_corrected})
 
-        weak = len(ids) > WEAK_FILTER
+        # The narrowing SQL always carries a trailing LIMIT (ensure_limit, with
+        # replace_limit=True). A query that came back holding exactly that many
+        # rows was almost certainly cut off - a missing DISTINCT over the
+        # organization join can turn 150k rows into the first 50000 - and the
+        # id set is then a partial answer to its own filter. Keep the filter
+        # (the ids it did return are correct), but mark it weak and stop the
+        # note claiming the set is everything. Refusing or dropping the filter
+        # would throw away a filter that worked, only not exhaustively.
+        row_limit = getattr(self.narrow, "row_limit", NARROW_ROW_LIMIT)
+        truncated = len(sql_result.rows) >= row_limit
+        weak = truncated or len(ids) > WEAK_FILTER
         chunks = self.searcher.search(question, k=k, project_ids=ids)
-        note = filter_note(sql_result.sql, len(ids))
+        note = filter_note(sql_result.sql, len(ids), truncated=truncated)
         return ScopedResult(
             question=question, status="ok", sql=sql_result.sql,
             project_ids=ids, chunks=chunks, weak_filter=weak,
             filter_note=note, constraints=constraints,
             trace={**base_trace, "n_ids": len(ids), "weak_filter": weak,
+                   "truncated": truncated,
                    "sql_retried": sql_result.retried,
                    "dead_values": [list(d) for d in dead],
                    "value_reasked": value_reasked,
