@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="770" viewBox="0 0 900 770" role="img" aria-label="The exploration frontier over 46 subject buckets">
+<defs>
+<marker id="arrI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#b8b2a8"/></marker>
+<marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#ff2d95"/></marker>
+<filter id="rough" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+<filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" seed="3"/><feColorMatrix type="saturate" values="0"/></filter>
+
+</defs>
+<rect x="0" y="0" width="900" height="770" fill="#141315"/>
+<rect x="0" y="0" width="900" height="770" fill="#1b1a1d"/><circle cx="150" cy="90" r="260" fill="#ffffff" opacity="0.050"/><circle cx="700" cy="300" r="320" fill="#ffffff" opacity="0.045"/><circle cx="420" cy="710" r="300" fill="#ffffff" opacity="0.040"/>
+<text x="28.0" y="52.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="22" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="1.4">The corpus, and how much of it was read</text>
+<text x="28.0" y="78.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">46 subject buckets of the Horizon corpus. Bar length is the bucket, on a square-root scale;</text>
+<text x="28.0" y="94.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">the bright part is the text an agent actually fetched.</text>
+<circle cx="32.5" cy="124.5" r="4.5" fill="#5b564f"/>
+<text x="42.0" y="128.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">unexplored - nobody has been there</text>
+<circle cx="462.5" cy="124.5" r="4.5" fill="#8d877d"/>
+<text x="472.0" y="128.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">mapped - visited once</text>
+<circle cx="32.5" cy="143.5" r="4.5" fill="#cbc5b9"/>
+<text x="42.0" y="147.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">mined - bank questions drawn from it</text>
+<circle cx="462.5" cy="143.5" r="4.5" fill="#ff2d95" stroke="#cbc5b9" stroke-width="1.2"/>
+<text x="472.0" y="147.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.2" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">read - an agent fetched these projects' text</text>
+<text x="28.0" y="177.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="12" font-weight="700" fill="#ff2d95" text-anchor="start" letter-spacing="0.2">37 mined, 3 mapped, 6 unexplored</text>
+<text x="28.0" y="230.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">engineering &amp; technology</text>
+<text x="356.0" y="230.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">21,123</text>
+<text x="38.0" y="246.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">electrical &amp; electronic eng.</text>
+<rect x="210.00" y="242.60" width="109.42" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="242.60" width="22.67" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="246.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">5,566 · 239 read</text>
+<text x="38.0" y="262.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">environmental engineering</text>
+<rect x="210.00" y="258.60" width="105.54" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="258.60" width="20.53" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="262.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">5,178 · 196 read</text>
+<text x="38.0" y="278.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">mechanical engineering</text>
+<rect x="210.00" y="274.60" width="82.42" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="274.60" width="13.44" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="278.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3,158 · 84 read</text>
+<text x="38.0" y="294.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">materials engineering</text>
+<rect x="210.00" y="290.60" width="74.86" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="290.60" width="13.76" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="294.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2,605 · 88 read</text>
+<text x="38.0" y="310.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">nanotechnology</text>
+<rect x="210.00" y="306.60" width="56.39" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="306.60" width="13.28" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="310.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">1,478 · 82 read</text>
+<text x="38.0" y="326.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">civil engineering</text>
+<rect x="210.00" y="322.60" width="42.61" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="322.60" width="9.62" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="326.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">844 · 43 read</text>
+<text x="38.0" y="342.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">other engineering</text>
+<rect x="210.00" y="338.60" width="36.90" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="338.60" width="10.27" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="342.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">633 · 49 read</text>
+<text x="38.0" y="358.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">industrial biotechnology</text>
+<rect x="210.00" y="354.60" width="36.31" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="354.60" width="7.48" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="358.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">613 · 26 read</text>
+<text x="38.0" y="374.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">medical engineering</text>
+<rect x="210.00" y="370.60" width="31.86" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="370.60" width="6.72" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="374.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">472 · 21 read</text>
+<text x="38.0" y="390.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">chemical engineering</text>
+<rect x="210.00" y="386.60" width="24.89" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="386.60" width="4.64" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="390.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">288 · 10 read</text>
+<text x="38.0" y="406.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">environmental biotechnology</text>
+<rect x="210.00" y="402.60" width="24.80" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="402.60" width="9.04" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="406.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">286 · 38 read</text>
+<text x="38.0" y="422.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">(top level only)</text>
+<rect x="210.00" y="418.60" width="2.07" height="6.00" rx="0.0" fill="#5b564f"/>
+<text x="356.0" y="422.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2 · 0 read</text>
+<text x="28.0" y="448.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">medical &amp; health</text>
+<text x="356.0" y="448.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">13,031</text>
+<text x="38.0" y="464.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">clinical medicine</text>
+<rect x="210.00" y="460.20" width="100.13" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="460.20" width="21.25" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="464.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">4,661 · 210 read</text>
+<text x="38.0" y="480.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">basic medicine</text>
+<rect x="210.00" y="476.20" width="95.64" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="476.20" width="21.00" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="480.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">4,252 · 205 read</text>
+<text x="38.0" y="496.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">health sciences</text>
+<rect x="210.00" y="492.20" width="75.91" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="492.20" width="17.23" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="496.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2,679 · 138 read</text>
+<text x="38.0" y="512.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">medical biotechnology</text>
+<rect x="210.00" y="508.20" width="54.76" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="508.20" width="11.27" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="512.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">1,394 · 59 read</text>
+<text x="38.0" y="528.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">other medical sciences</text>
+<rect x="210.00" y="524.20" width="8.30" height="6.00" rx="0.0" fill="#5b564f"/>
+<rect x="210.00" y="524.20" width="2.07" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="528.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">32 · 2 read</text>
+<text x="38.0" y="544.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">(top level only)</text>
+<rect x="210.00" y="540.20" width="5.29" height="6.00" rx="0.0" fill="#5b564f"/>
+<text x="356.0" y="544.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">13 · 0 read</text>
+<text x="28.0" y="569.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">humanities</text>
+<text x="356.0" y="569.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3,521</text>
+<text x="38.0" y="585.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">history and archaeology</text>
+<rect x="210.00" y="581.80" width="59.92" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="581.80" width="16.33" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="585.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">1,669 · 124 read</text>
+<text x="38.0" y="601.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">philosophy, ethics, religion</text>
+<rect x="210.00" y="597.80" width="36.73" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="597.80" width="8.43" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="601.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">627 · 33 read</text>
+<text x="38.0" y="617.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">arts</text>
+<rect x="210.00" y="613.80" width="34.46" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="613.80" width="12.79" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="617.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">552 · 76 read</text>
+<text x="38.0" y="633.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">languages and literature</text>
+<rect x="210.00" y="629.80" width="32.47" height="6.00" rx="0.0" fill="#8d877d"/>
+<rect x="210.00" y="629.80" width="7.90" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="633.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">490 · 29 read</text>
+<text x="38.0" y="649.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">other humanities</text>
+<rect x="210.00" y="645.80" width="18.78" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="210.00" y="645.80" width="5.68" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="649.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">164 · 15 read</text>
+<text x="38.0" y="665.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">(top level only)</text>
+<rect x="210.00" y="661.80" width="6.39" height="6.00" rx="0.0" fill="#5b564f"/>
+<rect x="210.00" y="661.80" width="1.50" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="356.0" y="665.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">19 · 1 read</text>
+<text x="466.0" y="230.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">natural sciences</text>
+<text x="794.0" y="230.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">30,863</text>
+<text x="476.0" y="246.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">biological sciences</text>
+<rect x="648.00" y="242.60" width="131.65" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="242.60" width="29.11" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="246.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">8,057 · 394 read</text>
+<text x="476.0" y="262.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">computer &amp; information sci.</text>
+<rect x="648.00" y="258.60" width="128.31" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="258.60" width="26.60" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="262.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">7,654 · 329 read</text>
+<text x="476.0" y="278.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">physical sciences</text>
+<rect x="648.00" y="274.60" width="111.58" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="274.60" width="22.82" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="278.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">5,788 · 242 read</text>
+<text x="476.0" y="294.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">chemical sciences</text>
+<rect x="648.00" y="290.60" width="96.52" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="290.60" width="18.14" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="294.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">4,331 · 153 read</text>
+<text x="476.0" y="310.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">earth &amp; environmental sci.</text>
+<rect x="648.00" y="306.60" width="79.28" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="306.60" width="17.96" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="310.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2,922 · 150 read</text>
+<text x="476.0" y="326.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">mathematics</text>
+<rect x="648.00" y="322.60" width="67.16" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="322.60" width="13.12" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="326.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2,097 · 80 read</text>
+<text x="476.0" y="342.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">(top level only)</text>
+<rect x="648.00" y="338.60" width="5.49" height="6.00" rx="0.0" fill="#5b564f"/>
+<text x="794.0" y="342.6" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">14 · 0 read</text>
+<text x="466.0" y="368.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">social sciences</text>
+<text x="794.0" y="368.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">13,628</text>
+<text x="476.0" y="384.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">economics and business</text>
+<rect x="648.00" y="380.20" width="100.67" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="380.20" width="23.24" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="384.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">4,711 · 251 read</text>
+<text x="476.0" y="400.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">sociology</text>
+<rect x="648.00" y="396.20" width="90.44" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="396.20" width="22.53" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="400.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3,802 · 236 read</text>
+<text x="476.0" y="416.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">political sciences</text>
+<rect x="648.00" y="412.20" width="62.14" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="412.20" width="15.80" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="416.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">1,795 · 116 read</text>
+<text x="476.0" y="432.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">social geography</text>
+<rect x="648.00" y="428.20" width="43.26" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="428.20" width="12.70" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="432.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">870 · 75 read</text>
+<text x="476.0" y="448.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">law</text>
+<rect x="648.00" y="444.20" width="43.16" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="444.20" width="13.60" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="448.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">866 · 86 read</text>
+<text x="476.0" y="464.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">psychology</text>
+<rect x="648.00" y="460.20" width="36.99" height="6.00" rx="0.0" fill="#8d877d"/>
+<rect x="648.00" y="460.20" width="9.84" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="464.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">636 · 45 read</text>
+<text x="476.0" y="480.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">other social sciences</text>
+<rect x="648.00" y="476.20" width="29.95" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="476.20" width="7.90" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="480.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">417 · 29 read</text>
+<text x="476.0" y="496.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">educational sciences</text>
+<rect x="648.00" y="492.20" width="25.74" height="6.00" rx="0.0" fill="#8d877d"/>
+<rect x="648.00" y="492.20" width="8.30" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="496.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">308 · 32 read</text>
+<text x="476.0" y="512.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">media and communications</text>
+<rect x="648.00" y="508.20" width="19.51" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="508.20" width="6.39" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="512.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">177 · 19 read</text>
+<text x="476.0" y="528.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">(top level only)</text>
+<rect x="648.00" y="524.20" width="9.95" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="524.20" width="2.07" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="528.2" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">46 · 2 read</text>
+<text x="466.0" y="553.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">unclassified</text>
+<text x="794.0" y="553.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3,153</text>
+<text x="476.0" y="569.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">no subject tag</text>
+<rect x="648.00" y="565.80" width="82.36" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="565.80" width="11.36" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="569.8" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3,153 · 60 read</text>
+<text x="466.0" y="595.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11" font-weight="700" fill="#f6f2ea" text-anchor="start" letter-spacing="0.8">agricultural sciences</text>
+<text x="794.0" y="595.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">2,464</text>
+<text x="476.0" y="611.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">agriculture, forestry, fisheries</text>
+<rect x="648.00" y="607.40" width="64.65" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="607.40" width="14.59" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="611.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">1,943 · 99 read</text>
+<text x="476.0" y="627.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">animal and dairy science</text>
+<rect x="648.00" y="623.40" width="29.41" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="623.40" width="9.04" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="627.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">402 · 38 read</text>
+<text x="476.0" y="643.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">agricultural biotechnology</text>
+<rect x="648.00" y="639.40" width="14.96" height="6.00" rx="0.0" fill="#5b564f"/>
+<rect x="648.00" y="639.40" width="2.93" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="643.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">104 · 4 read</text>
+<text x="476.0" y="659.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2">veterinary sciences</text>
+<rect x="648.00" y="655.40" width="5.68" height="6.00" rx="0.0" fill="#cbc5b9"/>
+<rect x="648.00" y="655.40" width="2.54" height="6.00" rx="0.0" fill="#ff2d95"/>
+<text x="794.0" y="659.4" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.5" font-weight="400" fill="#e8e2d6" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">15 · 3 read</text>
+<text x="28.0" y="718.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.4" font-weight="400" fill="#cec8bd" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">35,389 projects counted by SQL  →  1,613 project texts read  →  116 verified topic candidates  →  58 bank questions</text>
+<text x="28.0" y="735.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.8" font-weight="400" fill="#948f87" text-anchor="start" letter-spacing="0.2">Read means an agent fetched that project's text. Every count is SQL over the full corpus, and buckets overlap slightly.</text>
+<rect x="0" y="0" width="900" height="770" filter="url(#noise)" opacity="0.20" style="mix-blend-mode:screen"/>
+</svg>

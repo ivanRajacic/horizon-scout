@@ -29,3 +29,15 @@ data/runs/
 docs/*
 !docs/assets/
 working-plan.md
+
+# image workshop - local only; only the three SVGs the README shows stay tracked
+docs/assets/*
+!docs/assets/themes/
+docs/assets/themes/*
+!docs/assets/themes/t3/
+docs/assets/themes/t3/*
+!docs/assets/themes/t3/explore-corpus-flow.svg
+!docs/assets/themes/t3/frontier-bars.svg
+!docs/assets/themes/t3/loop-v2/
+docs/assets/themes/t3/loop-v2/*
+!docs/assets/themes/t3/loop-v2/draft-loop-c.svg
