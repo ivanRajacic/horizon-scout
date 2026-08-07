@@ -337,6 +337,15 @@ def apply_verdict(record: dict, verdict) -> None:
         "thresholds": {"factual": JUDGE_PASS_FACTUAL,
                        "faithfulness": JUDGE_PASS_FAITHFULNESS},
     }
+    if verdict.path == "ragas":
+        # Which factual_correctness scale produced this number ("precision"
+        # since 2026-08-06, ragas-default "f1" before - different scales,
+        # not comparable). On the record because a run directory must say
+        # this about itself, not defer to data/logs/judge.jsonl. Never on
+        # the overlay path: the rubric does not use the metric, and stamping
+        # it there would imply it did. Past runs are never backfilled.
+        from src.judge.ragas_judge import FACTUAL_MODE
+        record["score"]["factual_mode"] = FACTUAL_MODE
     if verdict.path == "overlay":
         # The ADV grade IS refusal (j0.3); coverage rides along as the bonus
         # it became, so a run can report how much detail correct refusals
@@ -1030,6 +1039,12 @@ def render_report(records: list[dict], meta: dict) -> str:
                          f"(recovered "
                          f"{health.get('parse_retry_recovered')})")
             out.append(line)
+        modes = sorted({(r.get("score") or {}).get("factual_mode")
+                        for r in ragas_judged} - {None})
+        if not modes:
+            from src.judge.ragas_judge import FACTUAL_MODE
+            modes = [FACTUAL_MODE]
+        out.append(f"- factual_correctness mode: {', '.join(modes)}")
         out += [f"- factual_correctness undefined (NaN): {len(nan_factual)} "
                 f"of {len(ragas_judged)} ragas-judged",
                 f"- faithfulness undefined (NaN): {len(nan_faith)}",

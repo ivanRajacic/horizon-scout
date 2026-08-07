@@ -452,6 +452,9 @@ def test_adv_sql_question_is_judged_end_to_end(tmp_path):
     assert r["score"]["method"] == "judge"
     assert r["score"]["passed"] is True
     assert r["score"]["judge_path"] == "overlay"
+    # The rubric never uses the factual_correctness metric, so an overlay
+    # record must not claim a metric mode it was not scored on.
+    assert "factual_mode" not in r["score"]
 
 
 # --- routing ---
@@ -751,6 +754,11 @@ def test_record_carries_full_provenance(tmp_path):
     assert r["run_id"] == meta["run_id"]
     assert meta["bank_hash"] and meta["ended"]
     assert r["score"]["thresholds"]["factual"]
+    # A ragas-judged record says which factual_correctness scale scored it -
+    # "precision" and "f1" are different scales, and a run directory must be
+    # able to say which one it is on without consulting the judge log.
+    from src.judge.ragas_judge import FACTUAL_MODE
+    assert r["score"]["factual_mode"] == FACTUAL_MODE
 
 
 # --- report ---
@@ -780,6 +788,7 @@ def test_report_renders_the_things_worth_reading(tmp_path):
     assert "sql exact 0/1" in report
     assert "0.20 (n=1)" in report                      # vector L-cell mean
     assert "## Judge health" in report
+    assert "factual_correctness mode: precision" in report
     assert "1/3 misrouted" in report and "hyb-01" in report   # routed to vector
     assert "## Retrieval (topical questions)" in report
     assert "SELECT wrong" in report                    # the failing SQL
