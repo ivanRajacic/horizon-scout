@@ -385,13 +385,25 @@ def test_synthesizer_without_a_note_is_unchanged():
 
 def test_the_pre_filter_rule_is_in_the_frozen_system_prompt():
     assert "Structured filter already applied" in synth_mod.SYSTEM_PROMPT
-    assert synth_mod.SYNTH_PROMPT_VERSION == "s2-provenance"
+    assert synth_mod.SYNTH_PROMPT_VERSION == "s3.2-coverage"
+
+
+def test_the_coverage_rules_are_in_the_system_prompt():
+    """s3-coverage: scan every project, cover every relevant project, and keep
+    not-retrieved apart from does-not-exist."""
+    p = synth_mod.SYSTEM_PROMPT
+    assert "check EVERY project shown" in p
+    assert "cover EVERY relevant project" in p
+    assert "the retrieved excerpts do not mention" in p
+    assert "Never say it does not exist" in p
+    # The prompt still fits its budget reservation.
+    assert synth_mod.estimate_tokens(p) < synth_mod.PROMPT_OVERHEAD_TOKENS
 
 
 def test_narrowing_prompt_names_the_call_code_trap_and_owns_its_version():
     from src.retrieval.scoped import (NARROW_PROMPT_VERSION,
                                       build_id_narrowing_prompt)
-    assert NARROW_PROMPT_VERSION == "narrow-v4"
+    assert NARROW_PROMPT_VERSION == "narrow-v5"
     prompt = build_id_narrowing_prompt()
     assert "CALL CODES" in prompt
     assert "euroSciVocPath" in prompt          # the classification is allowed
@@ -1179,6 +1191,6 @@ def test_ask_prefixes_the_value_not_found_note(monkeypatch, tmp_path):
         chunks=[mk_chunk(1, "A")]))
     a.synth = Synthesizer(llm=FakeLlm(["answer [A, 1]."]))
     res = a.ask("q", k=10, mode="scoped")
-    assert res.answer.startswith("[Note: the structured filter was dropped")
-    assert "does not exist in the database" in res.answer
+    assert res.answer.startswith("[Note: no structured filter was applied")
+    assert "unfiltered search" in res.answer
     assert res.degraded == "value_not_found"

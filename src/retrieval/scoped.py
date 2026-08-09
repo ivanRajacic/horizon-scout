@@ -31,8 +31,13 @@ phrases.
 Edge policies (decided in the milestone, enforced here):
 - SQL fails after its retry  -> degrade to pure vector over everything
   (status="sql_failed"); the caller must state the filter was not applied.
-- SQL returns zero ids        -> that IS the answer (status="zero_match");
-  never silently widen to unfiltered search.
+- SQL returns zero ids        -> that IS the answer (status="zero_match"),
+  but only once the zero is PROVEN: each top-level AND condition is executed
+  alone first. Every condition matching projects by itself makes the empty
+  intersection real, and its counts go into the refusal. One condition
+  matching nothing alone makes the zero unproven, so the filter is dropped
+  and the search runs unfiltered (status/degraded="unproven_zero") instead of
+  refusing. An unsplittable statement keeps the old behaviour.
 - SQL returns > WEAK_FILTER   -> proceed; flag weak_filter=true in the trace.
 - SQL returns exactly the row cap -> the id set is TRUNCATED, so it is a
   partial answer to its own filter (a missing DISTINCT over the organization
@@ -68,7 +73,7 @@ from dataclasses import dataclass, field
 
 from src.config import SCHEMA_DOCS_PATH
 from src.retrieval.base import Retriever, SearchResult
-from src.retrieval.sql_path import SqlPath, blank_strings
+from src.retrieval.sql_path import SqlPath, _string_end, blank_strings
 
 WEAK_FILTER = 5000
 # Never truncate a real filter set; just bound pathology. replace_limit=True on
@@ -91,7 +96,14 @@ NARROW_ROW_LIMIT = 50000
 # follows the doc, because the label is the part a person reads. The value
 # gate itself did NOT move it - the gate is code and its correction hints
 # ride in the user message.
-NARROW_PROMPT_VERSION = "narrow-v4"
+# narrow-v5 (2026-08-09): "never drop a listed constraint" is gone. The
+# extractor sometimes lists a semantic requirement under a field's name
+# ("activity type <a subject>"), and never-drop plus the subject-column ban
+# left the model one move: invent a proxy (round2-dev1, hyb-06's
+# activityType='PRC' clause emptied the gold set). An untranslatable
+# constraint is now SKIPPED - the semantic search it belongs to runs on the
+# full question anyway, so nothing is lost.
+NARROW_PROMPT_VERSION = "narrow-v5"
 
 # Subject-matter columns must never appear as a narrowing filter - they encode
 # what a project is ABOUT, which is semantic search's job, not the metadata
@@ -175,6 +187,19 @@ _VALUE_LITERAL_RE = re.compile(
     r"(NOT\s+)?(=|ILIKE|LIKE)\s*'((?:[^']|'')*)'",
     re.IGNORECASE)
 
+# A guarded column tested with IN ('a', 'b', ...). Each member is a plain
+# equality, so each one goes through the gate as ('col', '=', member) - an
+# IN list of dead values empties an AND-filter exactly like a dead `=`.
+# (2026-08-09: the narrowing model wrote activityType IN ('UNIVERSITY', ...)
+# - names, where the column stores codes - and the gate, blind to IN, let a
+# five-member all-dead list zero the filter.) NOT IN is exempt for the same
+# reason NOT is: dead values there keep rows instead of dropping them.
+_VALUE_IN_RE = re.compile(
+    r"\b(" + "|".join(GUARDED_VALUE_COLUMNS) + r")\b\s*"
+    r"(NOT\s+)?IN\s*\(\s*('(?:[^']|'')*'(?:\s*,\s*'(?:[^']|'')*')*)\s*\)",
+    re.IGNORECASE)
+_IN_MEMBER_RE = re.compile(r"'((?:[^']|'')*)'")
+
 
 # A comparison whose RESULT is then tested for null: `col = 'x' IS NULL`.
 # DuckDB reads it in two steps - `col = 'x'` answers true or false, and
@@ -199,6 +224,88 @@ _MALFORMED_NULL_RE = re.compile(
     re.IGNORECASE)
 
 
+# The zero-match proof. A filter whose value gate passed can still match
+# nothing for a reason the gate cannot see - a pattern that is legal against
+# its own column but wrong against the join, a range no row reaches. Before the
+# route may CLAIM emptiness, each top-level condition runs alone: if one of
+# them matches nothing by itself, the empty intersection proves nothing about
+# the corpus and the filter is dropped instead of refused.
+_WHERE_TERMINATORS = {"GROUP", "ORDER", "LIMIT", "OFFSET", "HAVING", "WINDOW",
+                      "QUALIFY", "UNION", "EXCEPT", "INTERSECT"}
+
+
+def _top_level_words(sql: str):
+    """(WORD, start, end) for every bare word at parenthesis depth 0.
+
+    String literals and quoted identifiers are skipped, so a keyword inside a
+    value is data. A parenthesized OR group is invisible here, which is what
+    makes it one conjunct.
+    """
+    i, n, depth = 0, len(sql), 0
+    while i < n:
+        c = sql[i]
+        if c == "'":
+            i = _string_end(sql, i)
+        elif c == '"':
+            j = sql.find('"', i + 1)
+            i = n if j == -1 else j + 1
+        elif c == "(":
+            depth += 1
+            i += 1
+        elif c == ")":
+            depth -= 1
+            i += 1
+        elif c.isalpha() or c == "_":
+            j = i
+            while j < n and (sql[j].isalnum() or sql[j] in "_$"):
+                j += 1
+            if depth == 0:
+                yield sql[i:j].upper(), i, j
+            i = j
+        else:
+            i += 1
+
+
+def split_where_conjuncts(sql: str | None) -> tuple[str, list[str]] | None:
+    """(everything before WHERE, the top-level AND conjuncts), or None.
+
+    None means the statement is not one this proof can reason about: no WHERE,
+    more than one top-level WHERE, or a bare top-level OR (whose precedence
+    makes the AND conjuncts not conjuncts at all). BETWEEN's own AND is not a
+    split point.
+    """
+    if not sql:
+        return None
+    words = list(_top_level_words(sql))
+    wheres = [w for w in words if w[0] == "WHERE"]
+    if len(wheres) != 1:
+        return None
+    start = wheres[0][2]
+    end = len(sql)
+    for word, s, _e in words:
+        if s >= start and word in _WHERE_TERMINATORS:
+            end = s
+            break
+    inner = [w for w in words if start <= w[1] < end]
+    if any(w[0] == "OR" for w in inner):
+        return None
+    parts, cut, between = [], start, False
+    for word, s, e in inner:
+        if word == "BETWEEN":
+            between = True
+        elif word == "AND":
+            if between:
+                between = False
+                continue
+            parts.append(sql[cut:s])
+            cut = e
+    parts.append(sql[cut:end])
+    parts = [p.strip() for p in parts]
+    if not all(parts):
+        return None
+    return sql[:wheres[0][1]].rstrip(), parts
+
+
 def uses_subject_filter(sql: str | None) -> bool:
     return bool(sql and _SUBJECT_FILTER_RE.search(_blank_euroscivoc(sql)))
 
@@ -207,6 +314,37 @@ def uses_malformed_null_test(sql: str | None) -> bool:
     """True when a comparison's RESULT is tested for null - a clause that can
     only empty the filter, never narrow it."""
     return bool(sql and _MALFORMED_NULL_RE.search(blank_strings(sql)))
+
+
+# Both operands literals: `0 = 1`, `1=1`, `'' = ''` (a blanked string pair).
+# A real condition always has a column on one side, so on the blanked
+# statement this only matches placeholders. 2026-08-09: told to SKIP an
+# untranslatable constraint, the narrowing model wrote `AND 0 = 1` - a
+# condition-shaped removal that empties the filter, the IS NULL trick with
+# new clothes.
+_CONSTANT_COMPARISON_RE = re.compile(
+    r"(?<![\w.'])(?:\d+(?:\.\d+)?|'')\s*(?:=|<>|!=|<=|>=|<|>)\s*"
+    r"(?:\d+(?:\.\d+)?|'')(?![\w.'])")
+
+# A bare boolean literal standing alone as a conjunct: `AND false`, `WHERE
+# true`. 2026-08-09 (hyb-16): told to skip a constraint, the narrowing model
+# wrote `AND false` - same condition-shaped removal as `0 = 1`, without the
+# comparison. `flag = false` has a column on one side and must not match, so
+# the literal must follow WHERE/AND/OR/( and must not start a comparison.
+_BARE_BOOLEAN_RE = re.compile(
+    r"(?i)(?:\b(?:where|and|or)\s+|\(\s*)(?:not\s+)?(?:true|false)\b"
+    r"(?!\s*(?:=|<>|!=|<=|>=|<|>|\bis\b|\bin\b))")
+
+
+def uses_constant_comparison(sql: str | None) -> bool:
+    """True when a condition can only be a placeholder: a comparison with
+    literals on BOTH sides (0 = 1 empties the filter, 1 = 1 pads it) or a
+    bare boolean literal as a conjunct (AND false). Neither ever narrows."""
+    if not sql:
+        return False
+    blanked = blank_strings(sql)
+    return bool(_CONSTANT_COMPARISON_RE.search(blanked)
+                or _BARE_BOOLEAN_RE.search(blanked))
 
 
 def normalise_euroscivoc_term(literal: str) -> str:
@@ -263,6 +401,15 @@ def filter_literals(sql: str | None) -> list[tuple[str, str, str]]:
             continue
         col = _CANON_COLUMN[m.group(1).lower()]
         out.append((col, m.group(3).upper(), m.group(4).replace("''", "'")))
+    for m in _VALUE_IN_RE.finditer(sql):
+        if m.group(2):                     # NOT IN: exempt, same reason
+            continue
+        col = _CANON_COLUMN[m.group(1).lower()]
+        # ONE entry per list, carrying the member text as written: the gate
+        # re-executes the whole membership test, so a list is dead only when
+        # EVERY member is - one dead member among live ones still filters,
+        # and flagging it would trade a working filter for no filter.
+        out.append((col, "IN", m.group(3)))
     for m in _EUROSCIVOC_LITERAL_RE.finditer(sql):
         if m.group(2):                     # NOT: exempt, same reason
             continue
@@ -348,12 +495,20 @@ def build_id_narrowing_prompt() -> str:
         "never a synonym or a broader word.\n"
         "- The user message contains either a CONSTRAINT LIST or a bare "
         "question.\n"
-        "- With a constraint list: translate EXACTLY the listed constraints, "
-        "one SQL condition per constraint, and NOTHING else. Never add a "
-        "condition that is not in the list - no status, no country, no date, "
-        "no scheme, no LIMIT, no IS NOT NULL - and never drop a listed "
-        "constraint. The question shown under the list is wording context "
-        "only, NEVER a source of conditions.\n"
+        "- With a constraint list: translate the listed constraints, one SQL "
+        "condition per constraint, and NOTHING else. Never add a condition "
+        "that is not in the list - no status, no country, no role, no "
+        "activity type, no date, no scheme, no LIMIT, no IS NOT NULL. A "
+        "listed constraint that has NO "
+        "translation on the allowed dimensions - it names a subject, a "
+        "disease, a technology, a method, a goal, or anything else that "
+        "lives in project text - is SKIPPED entirely: the semantic system "
+        "handles it. Never approximate such a constraint with a different "
+        "column, and never guess a value the constraint does not give. "
+        "Skipping means the condition does not appear in the SQL at all - "
+        "never write a placeholder such as 0 = 1 or 1 = 1. The "
+        "question shown under the list is wording context only, NEVER a "
+        "source of conditions.\n"
         "- With a bare question: add a condition ONLY if the question "
         "EXPLICITLY states it. Never invent a country, role, funding-amount, "
         "date, funding-scheme, or status filter that the question does not "
@@ -409,7 +564,8 @@ def build_narrowing_user_message(question: str, constraints: list[str]) -> str:
 @dataclass
 class ScopedResult:
     question: str
-    status: str    # "ok" | "zero_match" | "sql_failed" | "value_not_found"
+    # "ok" | "zero_match" | "sql_failed" | "value_not_found" | "unproven_zero"
+    status: str
     sql: str | None = None
     project_ids: set[int] | None = None
     chunks: list[SearchResult] = field(default_factory=list)
@@ -421,6 +577,9 @@ class ScopedResult:
     # announcing it would be a lie (ask.py prefixes its own note there).
     filter_note: str | None = None
     constraints: list[str] | None = None
+    # (condition, projects it matches alone) for every top-level conjunct, set
+    # on a PROVEN zero_match only. The caller phrases the refusal from it.
+    zero_conjunct_counts: list[tuple[str, int]] | None = None
     trace: dict = field(default_factory=dict)
 
 
@@ -485,15 +644,22 @@ class ScopedRetriever:
         """
         dead = []
         for col, op, lit in literals:
-            esc = lit.replace("'", "''")
             if is_euroscivoc_key(col):
                 # The column comes from a closed regex alternation and is
                 # re-spelled from _CANON_EV_COLUMN, so it is never model text.
                 table, column = "euroscivoc", _euroscivoc_column(col)
             else:
                 table, column = GUARDED_VALUE_COLUMNS[col], col
-            _, rows = self.narrow.execute_trusted(
-                f"SELECT count(*) FROM {table} WHERE {column} {op} '{esc}'")
+            if op == "IN":
+                # The member text comes straight from _VALUE_IN_RE, which
+                # only matches quoted literals and separators, so it is safe
+                # to re-execute as written. Dead means the WHOLE list is.
+                probe = f"SELECT count(*) FROM {table} WHERE {column} IN ({lit})"
+            else:
+                esc = lit.replace("'", "''")
+                probe = (f"SELECT count(*) FROM {table} "
+                         f"WHERE {column} {op} '{esc}'")
+            _, rows = self.narrow.execute_trusted(probe)
             if not rows or not rows[0][0]:
                 dead.append((col, lit))
         return dead
@@ -509,7 +675,8 @@ class ScopedRetriever:
             literal = normalise_euroscivoc_term(literal)
         else:
             table, lookup = GUARDED_VALUE_COLUMNS[col], col
-        cleaned = literal.replace("%", " ").replace("_", " ").strip("/").strip()
+        cleaned = (literal.replace("%", " ").replace("_", " ")
+                   .replace("'", " ").replace(",", " ").strip("/").strip())
         first_word = cleaned.split()[0] if cleaned.split() else ""
         for frag in dict.fromkeys([cleaned, first_word]):
             if not frag:
@@ -552,6 +719,39 @@ class ScopedRetriever:
                 "matches it, DROP that condition entirely. Keep every other "
                 "condition unchanged.)")
 
+    def _prove_zero(self, sql: str | None) -> dict:
+        """Run each top-level condition alone and report what it matches.
+
+        "unparsed" when the statement cannot be split or a single-condition
+        query errors: nothing is claimed either way, and the caller keeps its
+        old behaviour. "unproven" when one condition matches nothing by
+        itself - the intersection's emptiness then says nothing about the
+        corpus. "proven" when every condition matches projects alone.
+        """
+        split = split_where_conjuncts(sql)
+        if split is None:
+            return {"zero_proof": "unparsed"}
+        prefix, conjuncts = split
+        if len(conjuncts) == 1:
+            # One condition alone IS the whole filter, so its zero is already
+            # the proof - there is no intersection left to blame. Typos in a
+            # single condition are the value gate's job, and it ran first.
+            return {"zero_proof": "proven",
+                    "zero_conjunct_counts": [[conjuncts[0], 0]]}
+        counts: list[list] = []
+        for cond in conjuncts:
+            try:
+                _, rows = self.narrow.execute_trusted(
+                    f"SELECT count(*) FROM ({prefix} WHERE {cond}) _zp")
+            except Exception:
+                return {"zero_proof": "unparsed"}
+            n = int(rows[0][0]) if rows and rows[0] and rows[0][0] else 0
+            counts.append([cond, n])
+            if n == 0:
+                return {"zero_proof": "unproven", "zero_dead_conjunct": cond,
+                        "zero_conjunct_counts": counts}
+        return {"zero_proof": "proven", "zero_conjunct_counts": counts}
+
     def _unfiltered(self, question, k, status, degraded, sql, trace,
                     constraints=None):
         chunks = self.searcher.search(question, k=k)
@@ -584,6 +784,7 @@ class ScopedRetriever:
                         if constraints else question)
         sql_result = self.narrow.ask(narrow_input)
         subject_corrected = False
+        constant_corrected = False
 
         # Enforce the topic/metadata separation in code, not just the prompt:
         # if the model filtered on a subject-matter column, re-ask once with a
@@ -599,6 +800,22 @@ class ScopedRetriever:
             if retry.ok and not uses_subject_filter(retry.sql):
                 sql_result = retry
 
+        # Same shape for the placeholder trick: told to skip an untranslatable
+        # constraint, the model sometimes writes `0 = 1` instead of writing
+        # nothing, and a constant-false conjunct empties the whole filter the
+        # way the malformed IS NULL did. One pointed re-ask, and a survivor
+        # falls through to the failure funnel below.
+        if sql_result.ok and uses_constant_comparison(sql_result.sql):
+            hint = (narrow_input + "\n\n(Reminder: skipping a constraint "
+                    "means it does not appear in the SQL at all. Never write "
+                    "a placeholder condition such as 0 = 1 or 1 = 1 - remove "
+                    "the condition entirely and keep every other condition "
+                    "unchanged.)")
+            retry = self.narrow.ask(hint)
+            constant_corrected = True
+            if retry.ok and not uses_constant_comparison(retry.sql):
+                sql_result = retry
+
         # Everything that funnels here has the same meaning: no legal filter
         # exists, so search unfiltered and say the filter was dropped. Executing
         # a query on a banned column instead would let its (usually empty)
@@ -611,6 +828,9 @@ class ScopedRetriever:
         elif uses_malformed_null_test(sql_result.sql):
             failure = ("malformed filter: a comparison's result is tested "
                        "with IS NULL, which matches nothing")
+        elif uses_constant_comparison(sql_result.sql):
+            failure = ("malformed filter: a constant comparison survived "
+                       "the corrective re-ask")
 
         # Value gate, BEFORE the zero-ids branch: a filter value that does not
         # exist in its closed-set column can only produce a false zero_match.
@@ -642,6 +862,8 @@ class ScopedRetriever:
                 reask_rejected = "subject filter"
             elif uses_malformed_null_test(retry.sql):
                 reask_rejected = "malformed IS NULL test"
+            elif uses_constant_comparison(retry.sql):
+                reask_rejected = "constant comparison"
             elif self._dead_values(filter_literals(retry.sql)):
                 reask_rejected = "dead value again"
             if reask_rejected is None:
@@ -656,7 +878,8 @@ class ScopedRetriever:
                            "value_reasked": value_reasked,
                            "reask_rejected": reask_rejected,
                            "sql_retried": sql_result.retried,
-                           "subject_corrected": subject_corrected})
+                           "subject_corrected": subject_corrected,
+                           "constant_corrected": constant_corrected})
 
         ids: set[int] = set()
         if failure is None:
@@ -673,20 +896,34 @@ class ScopedRetriever:
                 sql=sql_result.sql,
                 trace={**base_trace, "sql_error": failure,
                        "sql_retried": sql_result.retried,
-                       "subject_corrected": subject_corrected})
+                       "subject_corrected": subject_corrected,
+                       "constant_corrected": constant_corrected})
 
         if not ids:
-            # Policy: zero ids IS the answer. Do not widen. (Every value in
-            # this SQL exists in its own column - the gate above ran first -
-            # so this is a genuinely empty intersection, not a misspelling.)
+            # Policy: zero ids IS the answer, but only once the zero is PROVEN.
+            # Every value here exists in its own column (the gate above ran
+            # first); the proof asks the harder question - does each condition
+            # match anything at all in this query's own shape. An unproven zero
+            # degrades to unfiltered search instead of refusing.
+            proof = self._prove_zero(sql_result.sql)
+            zero_trace = {**base_trace, "n_ids": 0,
+                          "sql_retried": sql_result.retried,
+                          "dead_values": [list(d) for d in dead],
+                          "value_reasked": value_reasked,
+                          "subject_corrected": subject_corrected,
+                          "constant_corrected": constant_corrected, **proof}
+            if proof["zero_proof"] == "unproven":
+                return self._unfiltered(
+                    question, k, status="unproven_zero",
+                    degraded="unproven_zero", sql=sql_result.sql,
+                    constraints=constraints, trace=zero_trace)
+            counts = proof.get("zero_conjunct_counts")
             return ScopedResult(
                 question=question, status="zero_match", sql=sql_result.sql,
                 project_ids=set(), chunks=[], constraints=constraints,
-                trace={**base_trace, "n_ids": 0,
-                       "sql_retried": sql_result.retried,
-                       "dead_values": [list(d) for d in dead],
-                       "value_reasked": value_reasked,
-                       "subject_corrected": subject_corrected})
+                zero_conjunct_counts=([(c, n) for c, n in counts]
+                                      if counts else None),
+                trace=zero_trace)
 
         # The narrowing SQL always carries a trailing LIMIT (ensure_limit, with
         # replace_limit=True). A query that came back holding exactly that many
@@ -711,4 +948,5 @@ class ScopedRetriever:
                    "dead_values": [list(d) for d in dead],
                    "value_reasked": value_reasked,
                    "subject_corrected": subject_corrected,
+                   "constant_corrected": constant_corrected,
                    "n_chunks": len(chunks)})

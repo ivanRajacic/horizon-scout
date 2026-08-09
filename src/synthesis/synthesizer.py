@@ -34,21 +34,58 @@ CHUNK_BUDGET_TOKENS = LLM_CTX - ANSWER_TOKENS - PROMPT_OVERHEAD_TOKENS
 # questions in the pilot (pilot-router-findings.md Part 2 §1). The rule is inert
 # when no filter block is present, so the vector route's behaviour is unchanged,
 # but its prompt text and hash move with it.
-SYNTH_PROMPT_VERSION = "s2-provenance"
+# s3-coverage (2026-08-09): the coverage rules below. The judge scores
+# factual_correctness as COVERAGE of the reference answer - missing content
+# costs everything, extra content costs nothing - and 10 of the 22 questions
+# under 0.5 in the last run had every gold project already in the context.
+# Three shapes were failing. (a) "Which project ...": the model examined one
+# candidate, found it did not match, and stopped, with the right project
+# further down the excerpts - so it is now told to scan EVERY project before
+# concluding and to name the match in the first sentence. (b) Multi-project
+# questions: one or two projects covered in depth, the rest ignored or
+# paraphrased away - so it is now told to cover every relevant project one by
+# one with the concrete specifics the excerpts state. (c) "There is no
+# reference to X" read as "X does not exist" when retrieval is partial - so
+# not-retrieved and does-not-exist are now separated explicitly. Grounding,
+# citation and pre-filter rules are unchanged in force.
+# s3.1-coverage (2026-08-09): the scan rule pushed too hard the other way - a
+# probe where retrieval missed the right project saw the model name the
+# closest one anyway, "implying" the match. Naming now requires the excerpts
+# to STATE the question's specific elements; a near match is not a match, and
+# no-match means saying the excerpts do not identify such a project.
+# s3.2-coverage (2026-08-09): two additions from the dev1 read-through. An
+# identification answer that stopped at the asked fact left the reference's
+# supporting facts uncovered (a coverage-scored judge counts them), so a
+# named match now brings its relevant details. And the match check now names
+# time period, place and population explicitly - a near match on those is
+# how a false-premise question gets a confident wrong name. Paid for by
+# trimming two redundant sentences; the prompt stays under the 400-token
+# overhead reservation.
+SYNTH_PROMPT_VERSION = "s3.2-coverage"
 
 SYSTEM_PROMPT = """You answer questions about Horizon 2020 research projects \
-using ONLY the excerpts provided below. Rules:
-- Use ONLY the provided excerpts. Do not use any outside knowledge about these \
-or any other projects.
-- If the excerpts do not contain the answer, say so plainly and do not guess.
+using ONLY the excerpts below. Rules:
+- Use ONLY the provided excerpts, never outside knowledge.
+- Answer the question in the first sentence, then support it.
+- Before answering a "which project" question, check EVERY project shown. \
+Name a project - acronym and projectID, in the first sentence - only if the \
+excerpts STATE the specific things the question asks for, including any time \
+period, place or population named. A near match is not a match: if no shown \
+project states them, say the retrieved excerpts do not identify such a \
+project. Then add the named project's relevant details from the excerpts.
+- If the question is about several projects, cover EVERY relevant project, \
+one by one, not just one or two. For each, give the concrete \
+specifics the excerpts state - methods, materials, species, instruments, \
+quantities, place names - not paraphrase.
+- Say which of these three holds. The excerpts answer it: give the answer. \
+They do not: say "the retrieved excerpts do not mention ..." and do not guess. \
+Never say it does not exist - retrieval sees only part of the corpus. The question assumes something the excerpts contradict: say what \
+the excerpts actually show.
 - If a "Structured filter already applied" block precedes the excerpts, every \
 project shown already satisfies that filter. Treat it as established fact: \
-state it plainly and never hedge about whether a project meets it. The excerpts \
-do not need to restate it.
-- After every substantive claim, cite its source as [ACRONYM, projectID]. Every \
-substantive sentence needs at least one citation.
-- If the excerpts only partially cover the question, say what is and is not \
-covered."""
+state it plainly and never hedge about whether a project meets it.
+- After every substantive claim, cite its source as [ACRONYM, projectID].
+- If the excerpts cover the question only partly, say what is missing."""
 
 _CITATION_RE = re.compile(r"\[([^\],]+),\s*(\d+)\]")
 

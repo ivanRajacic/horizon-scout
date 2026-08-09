@@ -54,20 +54,32 @@ class AskResult:
 
 
 # Prefixed to a scoped answer when the structured filter did not survive, so
-# the reader (and the judge) sees that the search was unfiltered.
+# the reader (and the judge) sees that the search was unfiltered. One short
+# sentence each (2026-08-09): the note is judged as part of the answer, and
+# its process claims have no support in the excerpts, so every extra clause
+# is a potential faithfulness deduction. The WHY of each degrade stays in the
+# trace, which records status and dead values in full.
 DEGRADED_NOTES = {
-    "sql_failed": "[Note: the structured filter could not be applied - the SQL "
-                  "step failed - so this answer is from an unfiltered search "
-                  "over all projects.]",
-    "value_not_found": "[Note: the structured filter was dropped - a filter "
-                       "value does not exist in the database - so this answer "
-                       "is from an unfiltered search over all projects.]",
+    "sql_failed": "[Note: no structured filter was applied; this answer is "
+                  "from an unfiltered search.]",
+    "value_not_found": "[Note: no structured filter was applied; this answer "
+                       "is from an unfiltered search.]",
+    "unproven_zero": "[Note: no structured filter was applied; this answer is "
+                     "from an unfiltered search.]",
 }
 
 
-def _templated_sql_answer(rows) -> str:
+def _templated_sql_answer(rows, sql: str | None = None) -> str:
+    """The empty result must READ as absence, not as a failed search.
+
+    "Query returned 0 rows." states what the machine did, so a refusal judged
+    on explicitness scores it as hedging. The executed query rides along as
+    the ground of the claim; nothing beyond the executed result is asserted.
+    """
     if not rows:
-        return "Query returned 0 rows."
+        base = ("No records in the database match this query's conditions. "
+                "Based on the data available, no such result exists.")
+        return f"{base}\n(Query: {sql})" if sql else base
     if len(rows) == 1 and len(rows[0]) == 1:
         return f"Result: {rows[0][0]}"
     return f"Query returned {len(rows)} row{'s' if len(rows) != 1 else ''}."
@@ -165,6 +177,17 @@ class Ask:
         t = time.perf_counter()
         r = self.sql_path.ask(question)
         stage = {"sql": time.perf_counter() - t}
+        if r.no_such_data:
+            # The schema records no such quantity. Say so explicitly instead of
+            # letting a proxy column answer a question the data cannot.
+            return AskResult(
+                question=question, mode="sql", router_reason="", sql=None,
+                answer=(f"The database does not record {r.no_such_data}, so "
+                        "this question cannot be answered from it."),
+                degraded=None,
+                trace={"timings": stage, "no_such_data": True,
+                       "no_such_data_detail": r.no_such_data,
+                       "rows_passed_to_gen": 0, "chunks_passed_to_gen": 0})
         if not r.ok:
             return AskResult(
                 question=question, mode="sql", router_reason="", sql=r.sql,
@@ -172,7 +195,7 @@ class Ask:
                 degraded="sql_failed",
                 trace={"timings": stage, "error": r.error,
                        "rows_passed_to_gen": 0, "chunks_passed_to_gen": 0})
-        answer = _templated_sql_answer(r.rows)
+        answer = _templated_sql_answer(r.rows, r.sql)
         if explain:
             answer = self._explain_sql(question, r.columns, r.rows, answer)
         # RQ1 covariate: pure-SQL answers are templated, so nothing reaches a
@@ -210,10 +233,26 @@ class Ask:
         t_retrieve = time.perf_counter() - t
 
         if h.status == "zero_match":
+            # With the per-conjunct proof available, the refusal names what was
+            # executed: each condition matches projects, their conjunction does
+            # not. Without it, the older sentence stands.
+            answer = ("No projects match the structured criteria in this "
+                      "question, so there is nothing to summarise.")
+            if h.zero_conjunct_counts and len(h.zero_conjunct_counts) == 1:
+                cond = h.zero_conjunct_counts[0][0]
+                answer = (f"No project in the database satisfies this "
+                          f"condition: {cond}. Based on the data, no such "
+                          "projects exist.")
+            elif h.zero_conjunct_counts:
+                detail = ", ".join(f"{c}: {n:,}"
+                                   for c, n in h.zero_conjunct_counts)
+                answer = ("No projects satisfy all of these conditions "
+                          "together, although each condition alone matches "
+                          f"projects ({detail}). Based on the data, no such "
+                          "projects exist.")
             return AskResult(
                 question=question, mode="scoped", router_reason="",
-                answer="No projects match the structured criteria in this "
-                       "question, so there is nothing to summarise.",
+                answer=answer,
                 sql=h.sql, degraded=None, weak_filter=False,
                 trace={"timings": {"retrieve": t_retrieve}, **h.trace,
                        "status": "zero_match",

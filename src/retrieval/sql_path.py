@@ -33,7 +33,21 @@ from src.llm import fingerprint, make_llm
 # does too. Run hyb-valuegate-20260805 executed the sd3 text under the OLD
 # labels (q2-pilot:390895368e0c, narrow-v3:22863c1ea173) - the hashes there
 # are this content, the names are not.
-SQL_PROMPT_VERSION = "q3-sd3"
+# q4-absence (2026-08-09): the data-absent escape. Asked for a quantity no
+# column records, the model used to substitute the nearest existing column and
+# answer confidently. The escape is deliberately narrow - it fires only when NO
+# table or column holds the fact, never when the query is merely hard - because
+# a false refusal on an answerable SQL question is measured as a regression.
+# q5-proxy (2026-08-09): q4's escape never fired in round2-dev1 - whenever any
+# column was thematically close, the model wrote the query. The bullet now
+# names the failure itself: a column recording a RELATED fact is not the
+# asked-for fact, and answering with it is the substitution the escape exists
+# to prevent.
+SQL_PROMPT_VERSION = "q5-proxy"
+
+# The one-line escape hatch. Recognized before the SQL guardrails, so it is
+# never parsed as a statement.
+NO_SUCH_DATA_MARKER = "NO_SUCH_DATA:"
 
 
 class SqlGuardrailError(ValueError):
@@ -48,6 +62,9 @@ class SqlResult:
     rows: list[tuple] = field(default_factory=list)
     error: str | None = None        # set only on give-up
     retried: bool = False
+    # What the schema does not record, when the model took the data-absent
+    # escape. No SQL was written and none is attempted.
+    no_such_data: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -67,6 +84,21 @@ def strip_fences(text: str) -> str:
     """Local models love fences despite the contract - strip them defensively."""
     m = _FENCE_RE.search(text)
     return (m.group(1) if m else text).strip()
+
+
+def parse_no_such_data(raw: str) -> str | None:
+    """What the schema does not record, or None when this is not the escape.
+
+    Checked on the fenced and unfenced text alike, and only when the marker
+    opens the reply: a SELECT that merely mentions the marker in a comment is
+    still a SELECT.
+    """
+    for text in (raw.strip(), strip_fences(raw)):
+        if text.upper().startswith(NO_SUCH_DATA_MARKER):
+            detail = text[len(NO_SUCH_DATA_MARKER):].strip().rstrip(".")
+            detail = detail.splitlines()[0].strip() if detail else ""
+            return detail or "this information"
+    return None
 
 
 def _string_end(sql: str, i: int) -> int:
@@ -182,7 +214,18 @@ def build_system_prompt() -> str:
         "markdown fences.\n"
         "- Read-only: never modify data.\n"
         "- Use only the tables, columns and enumerated values documented "
-        "above."
+        "above.\n"
+        "- If the question asks for a quantity or fact that NO column and NO "
+        "table in the schema above records, do not substitute a similar, "
+        "related or proxy column. A column that records a RELATED fact is "
+        "not the asked-for fact: answering with it is exactly the "
+        "substitution to avoid. Before writing the SELECT, check that the "
+        "column you chose records the thing itself, not a neighbour of it. "
+        "If it does not exist, reply with exactly one line of the form "
+        f"`{NO_SUCH_DATA_MARKER} <what the schema does not record>` and "
+        "nothing else. Use this ONLY when the fact is genuinely absent from "
+        "the schema. If any documented column holds the fact, even under a "
+        "different name, write the SELECT."
     )
 
 
@@ -213,8 +256,23 @@ class SqlPath:
         """At most 2 generation calls: initial + one error-informed retry."""
         result = SqlResult(question=question)
         messages = self.build_messages(question)
+        # The escape exists only where the prompt defines it. The narrowing
+        # SqlPath's prompt never mentions the marker, and parsing it there
+        # would let a stray marker reply become ok-with-no-SQL - which the
+        # scoped route reads as a clean empty filter, i.e. a confident
+        # refusal. Ungated prompts keep the old loud validate_sql failure.
+        marker_defined = NO_SUCH_DATA_MARKER in self.system_prompt
         for attempt in (0, 1):
             raw = self.llm.chat(messages)
+            absent = parse_no_such_data(raw) if marker_defined else None
+            if absent:
+                # No statement to guard, run or retry: the schema holds nothing
+                # to query. Logged like any attempt so the escape is traceable.
+                result.no_such_data = absent
+                result.sql = None
+                self._log(question, attempt, None, None, n_rows=None,
+                          no_such_data=absent)
+                return result
             error = None
             try:
                 sql = ensure_limit(validate_sql(strip_fences(raw)),
@@ -267,10 +325,12 @@ class SqlPath:
         """Run hand-written SQL (eval ground truth) with the same executor."""
         return self._execute(sql)
 
-    def _log(self, question, attempt, sql, error, n_rows):
+    def _log(self, question, attempt, sql, error, n_rows,
+             no_such_data: str | None = None):
         entry = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                  "question": question, "attempt": attempt, "sql": sql,
                  "ok": error is None, "error": error, "n_rows": n_rows,
+                 "no_such_data": no_such_data,
                  "model": self.llm.model, "prompt": self.prompt_version}
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.log_path, "a", encoding="utf-8") as f:
