@@ -42,10 +42,21 @@ MODES = ("sql", "vector", "scoped")
 #               the project's own words are needed rather than on whether
 #               anything is counted. 3 of 57 misrouted, and all 3 stated the
 #               right facts and then chose a mode contradicting them.
-#   r3-fields   active (2026-08-05). Same two questions as r2-columns, but the
+#   r3-fields   2026-08-05. Same two questions as r2-columns, but the
 #               model reports the two ANSWERS and derive_mode picks the mode.
 #               On the r2-columns-phaseA replies this rule gets all 3 right.
-ROUTER_PROMPT_VERSION = "r3-fields"
+#   r4-values   active (2026-08-09). Two leaks r3-fields left open. (a) The
+#               constraint ban worked on field NAMES but not on values: the
+#               model wrote "activity type antibiotic-resistant bacterial
+#               infections" - a legal field name carrying a subject as its
+#               value - and the narrowing step then had to invent SQL for it
+#               (round2-dev1, an activityType='PRC' clause that emptied the
+#               gold set). Now a constraint is legal only when its VALUE is
+#               the kind of value the field holds, and the activity types are
+#               named. (b) A question that DESCRIBES a project and asks which
+#               one it is was read as a column lookup because the answer is a
+#               name; it needs the project's own words to find that name.
+ROUTER_PROMPT_VERSION = "r4-values"
 
 _R1_PILOT = """You route natural-language questions about a Horizon 2020 \
 research-project database to one of three answering strategies. The database has \
@@ -232,10 +243,103 @@ Q: Among ERC Advanced Grant projects on volcanic hazard, what field instruments 
 Q: Which projects coordinated in Portugal work on wave energy converters, and what designs do they use?
 {"needs_project_text": true, "structured_constraints": ["coordinator country Portugal"], "reason": "designs come from the project text"}"""
 
+_R4_VALUES = """You read questions about a Horizon 2020 research-project \
+database and report two facts about each one. You do NOT choose how the \
+question gets answered - a separate rule does that from the two facts you \
+report. Report what is there; do not try to work out which strategy it leads \
+to.
+
+The database has STRUCTURED FIELDS, where every value sits in a column:
+- project: status, funding scheme, start / end / signature dates, EC \
+contribution, total cost
+- organization: country, role (coordinator or participant), SME flag, \
+activity type (the KIND of organisation), EC contribution
+- euroSciVoc: the science-subject classification carried by each project, \
+e.g. "classified under volcanology", "classified under machine learning"
+
+It also has FREE TEXT: every project's objective and its periodic-report \
+narrative, describing what the project does, how it works and what it found.
+
+Report these two facts.
+
+1. needs_project_text - does answering need the project's OWN WORDS?
+true when the answer must come from what a project says about itself: its \
+aim, its method, its results, or how several projects differ from one another.
+true also when the question DESCRIBES a project and asks which project it \
+is: the name sits in a column, but finding WHICH name matches the \
+description takes the project's own words.
+false when the answer is a count, a sum, an average, a ranking, a date, an \
+amount, a status, or a name or role that a column already holds.
+
+2. structured_constraints - a list of EVERY constraint the question states \
+whose value sits in a structured field. Write each one as a short phrase \
+starting with the field it uses. Rules:
+- ONLY these count, and nothing else: status, funding scheme, start / end / \
+signature date, EC contribution, total cost, organisation country, \
+organisation role, SME flag, activity type, euroSciVoc classification, and a \
+project named by acronym or by grant agreement number.
+- An entry is legal only when its VALUE is the kind of value that field \
+holds: a country name for country, a scheme name for funding scheme, a named \
+kind of organisation for activity type. A subject, disease, technology, \
+method or goal is NEVER a legal value of any field - a phrase like "activity \
+type <some subject>" is free text wearing a field name, so leave it out.
+- The objective, the title and the report narrative are FREE TEXT, never a \
+structured constraint. A subject, technology, method or result that the \
+question DESCRIBES lives in that free text, so it never goes in this list, \
+however precisely the question describes it. If you find yourself writing \
+"project objective ...", "abstract mentions ..." or "describes ...", that is \
+free text: leave it out.
+- euroSciVoc counts only when the question names a classification, in words \
+like "classified under X" or "whose euroSciVoc classification includes X". A \
+question that merely talks about a subject is NOT classified under it.
+- This has NOTHING to do with arithmetic. A constraint belongs in the list \
+whether or not the question counts or sums anything.
+- A constraint belongs in the list when the question states it in ordinary \
+prose. "among ERC Starting Grant projects", "that include a Swedish \
+participant", "classified under textiles" and "that started in 2021 or later" \
+are all structured constraints.
+- Naming one project by acronym or by grant agreement number is a structured \
+constraint: it is a lookup, not a topic.
+- Every entry must carry the actual VALUE the question gives: the country, \
+the scheme name, the status, the date, the amount, the acronym, the grant \
+number, the classification term. An entry that names a field without a value \
+from the question is not a constraint. Never copy a phrase from these rules \
+into the list.
+- Never enumerate a field's possible values as a constraint. If the question \
+does not state WHICH value the field takes, the field is not constrained and \
+nothing goes in the list.
+- When the question states none, return an empty list []. Never write "none" \
+or "no constraints" as a list entry.
+
+Reply with STRICT JSON only, no markdown, no commentary:
+{"needs_project_text": true|false, "structured_constraints": ["<short \
+phrase>", ...], "reason": "<one short clause>"}
+
+Examples:
+Q: How many projects were terminated?
+{"needs_project_text": false, "structured_constraints": ["status terminated"], "reason": "a count over a status column"}
+Q: How many projects classified under artificial intelligence are coordinated by German organisations?
+{"needs_project_text": false, "structured_constraints": ["classified under artificial intelligence", "coordinator country Germany"], "reason": "a count, both constraints are columns"}
+Q: Which organisation coordinates the BATTERY2030PLUS project?
+{"needs_project_text": false, "structured_constraints": ["project acronym BATTERY2030PLUS", "role coordinator"], "reason": "the organisation name is in a column"}
+Q: Which project built a floating platform that combines wave and wind energy in one hull?
+{"needs_project_text": true, "structured_constraints": [], "reason": "the project is described, not named; finding it needs the project text"}
+Q: Which projects develop solid-state batteries for electric vehicles?
+{"needs_project_text": true, "structured_constraints": [], "reason": "the subject is described, not recorded in any field"}
+Q: How do projects studying antimicrobial resistance differ in the pathogens they target?
+{"needs_project_text": true, "structured_constraints": [], "reason": "comparing what the projects say, no field constrains them"}
+Q: Among projects classified under archaeology that include a Greek organisation, what dating methods do they use?
+{"needs_project_text": true, "structured_constraints": ["classified under archaeology", "participant country Greece"], "reason": "methods come from the project text, both constraints are columns"}
+Q: Among ERC Advanced Grant projects on volcanic hazard, what field instruments do the teams deploy?
+{"needs_project_text": true, "structured_constraints": ["funding scheme ERC Advanced Grant"], "reason": "instruments come from the project text; volcanic hazard is only described"}
+Q: Among projects classified under photonics that include a Danish participant, how do the ones targeting eye surgery deliver the laser?
+{"needs_project_text": true, "structured_constraints": ["classified under photonics", "participant country Denmark"], "reason": "targeting eye surgery describes the projects' aim, free text; the two constraints are columns"}"""
+
 ROUTER_PROMPTS = {
     "r1-pilot": _R1_PILOT,
     "r2-columns": _R2_COLUMNS,
     "r3-fields": _R3_FIELDS,
+    "r4-values": _R4_VALUES,
 }
 
 # The JSON shape the ACTIVE prompt promises, quoted back at the model when its
@@ -246,6 +350,8 @@ _CONTRACT_HINTS = {
     "r1-pilot": '{"mode": "sql|vector|scoped", "reason": "..."}',
     "r2-columns": '{"mode": "sql|vector|scoped", "reason": "..."}',
     "r3-fields": '{"needs_project_text": true|false, '
+                 '"structured_constraints": ["..."], "reason": "..."}',
+    "r4-values": '{"needs_project_text": true|false, '
                  '"structured_constraints": ["..."], "reason": "..."}',
 }
 CONTRACT_HINT = _CONTRACT_HINTS[ROUTER_PROMPT_VERSION]
