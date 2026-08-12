@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="348" viewBox="0 0 900 348" role="img" aria-label="Where the failed answers failed">
+<defs>
+<marker id="arrI" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#4a453f"/></marker>
+<marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#e0007a"/></marker>
+<filter id="rough" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+<filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" seed="3"/><feColorMatrix type="saturate" values="0"/></filter>
+
+</defs>
+<rect x="0" y="0" width="900" height="348" fill="#ffffff"/>
+<rect x="0" y="0" width="900" height="348" fill="#ffffff"/><circle cx="150" cy="90" r="260" fill="#000000" opacity="0.030"/><circle cx="700" cy="300" r="320" fill="#000000" opacity="0.026"/><circle cx="420" cy="288" r="300" fill="#000000" opacity="0.024"/>
+<text x="28.0" y="52.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="22" font-weight="700" fill="#121114" text-anchor="start" letter-spacing="1.4">Most failures happen after retrieval</text>
+<text x="28.0" y="78.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.2" font-weight="400" fill="#3b3840" text-anchor="start" letter-spacing="0.2">22 of 33 judged questions scored under 0.50. Bar length is how many of the 22 fell in each group.</text>
+<text x="28.0" y="94.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.2" font-weight="400" fill="#3b3840" text-anchor="start" letter-spacing="0.2">The largest group had every gold project in front of it and still answered wrongly.</text>
+<text x="28.0" y="139.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.5" font-weight="700" fill="#121114" text-anchor="start" letter-spacing="0.8">answer failed anyway</text>
+<text x="28.0" y="154.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#6f6a72" text-anchor="start" letter-spacing="0.2">all the gold projects were in the context</text>
+<rect x="260.00" y="126.00" width="213.64" height="22.00" rx="0.0" fill="#e0007a"/>
+<text x="485.6" y="142.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="13" font-weight="400" fill="#121114" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">10</text>
+<text x="28.0" y="185.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.5" font-weight="700" fill="#121114" text-anchor="start" letter-spacing="0.8">some gold missing</text>
+<text x="28.0" y="200.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#6f6a72" text-anchor="start" letter-spacing="0.2">retrieval found part of the gold set</text>
+<rect x="260.00" y="172.00" width="192.27" height="22.00" rx="0.0" fill="#a49d92"/>
+<text x="464.3" y="188.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="13" font-weight="400" fill="#121114" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">9</text>
+<text x="28.0" y="231.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="11.5" font-weight="700" fill="#121114" text-anchor="start" letter-spacing="0.8">no gold found</text>
+<text x="28.0" y="246.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.1" font-weight="400" fill="#6f6a72" text-anchor="start" letter-spacing="0.2">retrieval found none of the gold set</text>
+<rect x="260.00" y="218.00" width="64.09" height="22.00" rx="0.0" fill="#a49d92"/>
+<text x="336.1" y="234.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="13" font-weight="400" fill="#121114" text-anchor="start" letter-spacing="0.2" font-variant-numeric="tabular-nums">3</text>
+<line x1="28.00" y1="282.00" x2="872.00" y2="282.00" stroke="#b3ada5" stroke-width="1.00" stroke-dasharray="9 4"/>
+<text x="28.0" y="306.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="10.4" font-weight="400" fill="#3b3840" text-anchor="start" letter-spacing="0.2">Mean score with the full gold set in context 0.45; with it missing or partial 0.28.</text>
+<text x="28.0" y="323.0" font-family='Consolas, "SF Mono", ui-monospace, "Liberation Mono", monospace' font-size="9.8" font-weight="400" fill="#6f6a72" text-anchor="start" letter-spacing="0.2">Better retrieval could move the 12 with gold missing - not the 10 that failed with it in hand.</text>
+<rect x="0" y="0" width="900" height="348" filter="url(#noise)" opacity="0.17" style="mix-blend-mode:multiply"/>
+</svg>
