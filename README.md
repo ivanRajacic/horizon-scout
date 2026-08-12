@@ -46,31 +46,35 @@ Why does any of this matter? Because the QA system itself cannot be tested by ha
 
 ## What the benchmark improved
 
-The benchmark was not only a grade at the end; running it against the baseline system drove concrete fixes:
+Running the benchmark against the system led to two rounds of fixes. Where they landed, plainly: the answers themselves did not get more factually correct - those scores are flat across all three runs, and the SQL count even dropped by one on the last run. What did improve: questions stopped getting sent down the wrong path (12 wrong at the start, 0 at the end), the system stopped refusing several questions it could answer, correct refusals on the unanswerable ones doubled, and hybrid answers now stay closer to what their sources actually say (faithfulness 0.60 to 0.77).
 
-- **The router was rebuilt.** Misroutes fell from 12/58 to 2/58 to 0/58 - not by changing the model, but by changing the contract: the router stopped returning a conclusion and now reports two facts, with the mode derived in code.
-- **The scoped path gained a value gate.** Every literal the model writes against a closed-set column is looked up in that column before the filter runs, so a misspelled value degrades to unfiltered search instead of becoming a confident refusal.
-- **"Not found" and "not present" were separated.** The baseline refused questions that had answers - in one case because of a single stray space in a generated SQL pattern; without the space, seven projects match. Round two made absence something the system must prove: an empty filter result is re-checked one condition at a time, and only a demonstrated empty intersection may become a refusal - anything unprovable degrades to unfiltered search and says so. Correct refusals doubled without a single new false one.
-- **Models write placeholders when told to omit.** Told to drop an untranslatable condition, the SQL-writing model instead wrote condition-shaped no-ops - `IS NULL`, `0 = 1`, `AND false`, a different disguise each run - each of which silently empties the filter and turns into a confident "no projects match". Every "skip X" instruction now has a code guard behind it. The general lesson: a prompt rule against an output shape needs a deterministic backstop, because the model will find a shape the rule did not name.
-- **The gap that remains, measured:** asked for a fact the database does not hold (money actually paid out), the system summed the closest column it could find (money committed) and answered confidently. No code guard can know a column is only a proxy for the asked-for fact - this is the documented open failure mode.
+The full bank was run three times - baseline, after the first round of fixes, after the second:
 
-The system was run over the full bank three times - the baseline, after a first round of fixes, and after a second - judged the same way each time:
-
-| cell | n | factual: base / r1 / r2 | faithfulness: base / r1 / r2 |
+| cell | n | factual: base* / r1 / r2 | faithfulness: base / r1 / r2 |
 |---|---|---|---|
-| vector L1 | 7 | 0.58 / 0.49 / 0.64 | 0.71 / 0.84 / 0.83 |
-| vector L2 | 9 | 0.33 / 0.41 / 0.42 | 0.89 / 0.90 / 0.86 |
-| vector L3 | 6 | 0.36 / 0.29 / 0.42 | 0.64 / 0.72 / 0.66 |
-| hybrid | 11 | 0.33 / 0.32 / 0.31 | 0.60 / 0.64 / 0.77 |
+| vector L1 | 7 | 0.58 / 0.63 / 0.64 | 0.71 / 0.84 / 0.83 |
+| vector L2 | 9 | 0.33 / 0.44 / 0.42 | 0.89 / 0.90 / 0.86 |
+| vector L3 | 6 | 0.36 / 0.37 / 0.42 | 0.64 / 0.72 / 0.66 |
+| hybrid | 11 | 0.33 / 0.35 / 0.31 | 0.60 / 0.64 / 0.77 |
 | SQL, exact | 16 | 9/16 / 12/16 / 11/16 | |
 | adversarial, refused correctly | 9 | 2/9 / 2/9 / 4/9 | |
 | misroutes | 58 | 12 / 2 / 0 | |
 
-The gains sit where the fixes were made. Round one rebuilt the router and the SQL route; round two targeted refusals and honesty, and that is where it shows: misroutes to zero, adversarial refusals doubled, hybrid faithfulness 0.64 to 0.77. The per-question factual scores move too, but two dev runs with near-identical prompts showed the generator's own resampling swings them by up to 0.5 on multi-claim questions - so the binary counts are the trustworthy row of this table, and the factual gains are direction, not proof.
+*The baseline was scored before the factual metric's mode was pinned, with a stricter variant, and no rescore of it exists - so its factual column sits somewhat lower than it would on the final scale. The r1 and r2 columns share one scale and are directly comparable.
+
+Two caveats for reading the decimal rows. The scale note above is one. The other: two dev runs with near-identical prompts showed single-question factual scores moving on the generation model's resampling alone - one question scored 0.00 in one run and 1.00 in the other. So the count rows (SQL, refusals, misroutes) are the trustworthy part of this table, and the decimal movements are direction at best.
+
+The fixes behind the numbers:
+
+- The router originally guessed the route in one step and got 12 of 58 wrong. It now answers two smaller questions instead - does this need the project texts, and what filters does it contain - and code picks the route from those answers. Zero wrong on the final run.
+- The baseline sometimes answered "no projects match" when the real problem was its own query - once because of a single stray space in a generated pattern; without the space, seven projects match. Now every filter value the model writes is checked against the database before it runs, and an empty result has to be proven empty, condition by condition, before it can become a refusal. Refusals of answerable questions fell from 10 at the baseline to 4, and correct refusals of unanswerable ones rose from 2 to 4.
+- When told to leave an untranslatable condition out of a query, the model would write a decorative condition instead (`IS NULL`, `0 = 1`, a different one each run), which silently emptied the filter. Those instructions now have code checks behind them - a model will find an output shape the prompt rule did not name.
+- The gap that remains: asked for a fact the database does not hold (money actually paid out), the system sums the closest column it can find (money committed) and answers confidently. No check can know that a column is only a stand-in for the asked-for fact.
 
 ## What came out of it
 
-- Review had a measurable effect: 30 of the 42 questions accepted through the batch pipeline were revised at least once, on findings the judge upheld, before entering the bank.
+- Review had a measurable effect: 30 of the 42 questions accepted through the batch pipeline were revised at least once, on findings the judge upheld, before entering the bank. 11 of the 43 slots closed in a single round; most took two, and the worst took five rounds and three candidate questions before one survived.
+- The judge was a filter, not a rubber stamp: it ruled on 93 HIGH and MID findings - 88 upheld, 5 dismissed - agreeing with the critic 95% of the time and throwing out the rest. One MID finding slipped through without a ruling across the whole record; the accounting is in `docs/writeup-plan.md` §3.
 - Difficulty levels are defined mechanically by gold-set size and were never tuned against results. Scores nonetheless fell in order across them: 0.49 / 0.41 / 0.29 on the improved run. This suggests the bank measures difficulty rather than noise.
 
 ![Per-question scores by difficulty level](docs/assets/themes/t3-light/results-strip.svg)
@@ -79,6 +83,8 @@ The gains sit where the fixes were made. Round one rebuilt the router and the SQ
 
 ![Where the failed answers failed](docs/assets/themes/t3-light/failure-split.svg)
 
+- The judge seat's known risk stayed a non-event: DeepSeek only offers loose JSON mode, so unparseable completions were counted rather than trusted away - 132 judge completions on the final run, 0 without parseable JSON, 0 undefined scores.
+- Answer latency, for the practical question of whether the system is usable: about 3 seconds for a SQL answer, 8 for a vector answer, 10 for a hybrid one.
 - Evaluating the full benchmark costs $0.08 per run. Authoring it cost approximately $1,507 in API-equivalent compute, roughly $20 per accepted question - with frontier models in every role. Most of that is not the drafting itself: the orchestrator sessions alone outspent the drafter, critic and judge combined, and the bulk of the tokens are warm agents re-reading held context across fix rounds. The cost driver is the architecture, not the model.
 
 To test the model side of that cost, nine cells were re-drafted with a cheaper model (Sonnet instead of Opus) in every role - same seeds, same gates:
