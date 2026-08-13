@@ -64,19 +64,19 @@ One caveat for reading the decimal rows: two dev runs with near-identical prompt
 
 The fixes behind the numbers:
 
-- The router originally guessed the route in one step and got 12 of 58 wrong. It now answers two smaller questions instead - does this need the project texts, and what filters does it contain - and code picks the route from those answers. Zero wrong on the final run.
-- The baseline sometimes answered "no projects match" when the real problem was its own query - once because of a single stray space in a generated pattern; without the space, seven projects match. Now every filter value the model writes is checked against the database before it runs, and an empty result has to be proven empty, condition by condition, before it can become a refusal. Refusals of answerable questions fell from 10 at the baseline to 4, and correct refusals of unanswerable ones rose from 2 to 4.
-- When told to leave an untranslatable condition out of a query, the model would write a decorative condition instead (`IS NULL`, `0 = 1`, a different one each run), which silently emptied the filter. Those instructions now have code checks behind them - a model will find an output shape the prompt rule did not name.
-- The gap that remains: asked for a fact the database does not hold (money actually paid out), the system sums the closest column it can find (money committed) and answers confidently. No check can know that a column is only a stand-in for the asked-for fact.
+- Routing is the biggest one. At the baseline the model guessed the route in a single step and got 12 of 58 questions wrong - and a question sent down the wrong path is usually lost, whatever happens after. The fix took the guess away from the model. It now answers two smaller factual questions - does this question need the project texts read, and which filter conditions does it name - and code turns those two answers into the route. On the final run, no question was misrouted.
+- The system refused questions it could answer. It would reply "no projects match" when the real problem was its own query - in one case a single stray space in a generated pattern; without the space, seven projects match. Two checks fixed this. Every filter value the model writes is first looked up in the database, so a misspelled value is caught before the query runs. And "nothing matches" is no longer taken at face value: each condition in the query is tested on its own, and only a proven-empty result may become a refusal. Refusals of answerable questions fell from 10 to 4, and correct refusals of unanswerable ones rose from 2 to 4.
+- The model wrote filler conditions. When a question holds a condition that cannot be expressed in SQL, the model is told to leave it out. Instead it would invent a harmless-looking substitute (`IS NULL`, `0 = 1`, a different one each run) that matched nothing and silently emptied the result. The prompt rule alone did not stop this - a model finds output shapes the rule did not name - so a code check now rejects these queries.
 
 ## How the authoring pipeline worked
 
-The full operational record of the drafter-critic-judge loop, computed from the batch journals and transcripts:
+The full operational record of the drafter-critic-judge loop, computed from the batch journals and transcripts (the cheaper-model experiment at the end of this section is counted separately):
 
-- The funnel, across every batch run including the cheaper-model probe described below: 17 runs, 52 slots, 75 candidate questions tried. 49 slots closed with an accepted question, 3 failed, and 17 candidates were abandoned along the way. 16 slots closed in a single adjudication round, 25 took two, and the worst took five rounds and three candidate questions before one survived.
-- The critic reported 364 findings that survived to a slot's final state: 47 HIGH, 148 MID, 169 LOW (LOW is recorded but never adjudicated). The most common defect classes: a gold set missing a project that qualifies (49), a question readable two ways (41), a reference claiming something the evidence does not support (33), and a gold answer that is simply wrong (32).
+- The funnel: 14 batch runs, 43 slots, 58 candidate questions tried. 42 slots closed with an accepted question, 1 failed, and 12 candidates were abandoned along the way. 11 slots closed in a single adjudication round, 23 took two, and the worst took five rounds and three candidate questions before one survived.
+- The pipeline produced more questions than the bank holds. 76 passed it in total; 18 vector questions were later cut when the study's allocation shrank - removed for scope, not for defects. They are archived rather than deleted, and their ids stay permanently retired.
+- The critic reported 335 findings that survived to a slot's final state: 38 HIGH, 129 MID, 168 LOW (LOW is recorded but never adjudicated). The most common defect classes: a gold set missing a project that qualifies (40), a question readable two ways (39), a reference claiming something the evidence does not support (30), and a gold answer that is simply wrong (28).
 - On the questions that entered the bank, the judge ruled on 93 HIGH and MID findings: 88 upheld, 5 dismissed. It agreed with the critic 95% of the time and threw out the rest.
-- 32 of the 49 accepted questions were revised at least once, on findings the judge upheld, before they were accepted.
+- 30 of the 42 accepted questions were revised at least once, on findings the judge upheld, before they were accepted.
 - The deterministic gates caught real defects before any model judged anything: `precheck_record` ran 226 times and reported a failure in 30, `precheck_candidate` ran 125 times and reported 23. In total the agents made 4,152 read-only database and retrieval calls over 11 days.
 - Cost: evaluating the full benchmark is $0.09 per run. Authoring it cost approximately $1,507 in API-equivalent compute, roughly $20 per accepted question - with frontier models in every role. Most of that is not the drafting itself: the orchestrator sessions alone outspent the drafter, critic and judge combined, and the bulk of the tokens are warm agents re-reading held context across fix rounds.
 
@@ -84,10 +84,10 @@ Per spawned agent, averaged over the whole record (input is dominated by cache r
 
 | role | spawned | avg input | of which cache | avg output | avg turns | avg cost |
 |---|---|---|---|---|---|---|
-| orchestrator | 25 | 25.8M | 24.9M | 332k | 139 | $27.26 |
-| drafter | 118 | 2.3M | 1.9M | 29k | 38 | $4.08 |
-| critic | 107 | 1.8M | 1.5M | 17k | 34 | $3.25 |
-| judge | 86 | 0.2M | 0.1M | 4k | 7 | $0.72 |
+| orchestrator | 22 | 27.2M | 26.3M | 355k | 143 | $29.75 |
+| drafter | 103 | 2.4M | 2.0M | 30k | 39 | $4.45 |
+| critic | 95 | 1.9M | 1.5M | 18k | 36 | $3.53 |
+| judge | 73 | 0.2M | 0.1M | 4k | 8 | $0.81 |
 
 To test the model side of that cost, nine cells were re-drafted with a cheaper model (Sonnet instead of Opus) in every role - same seeds, same gates:
 
