@@ -30,6 +30,7 @@ docs/*
 !docs/assets/
 working-plan.md
 optimization/
+CLAUDE.md
 
 # image workshop - local only; only the three SVGs the README shows stay tracked
 docs/assets/*
