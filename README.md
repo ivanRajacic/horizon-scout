@@ -46,23 +46,21 @@ Why does any of this matter? Because the QA system itself cannot be tested by ha
 
 ## What the benchmark improved
 
-Running the benchmark against the system led to two rounds of fixes. Where they landed, plainly: the answers themselves did not get more factually correct - those scores are flat across all three runs, and the SQL count even dropped by one on the last run. What did improve: questions stopped getting sent down the wrong path (12 wrong at the start, 0 at the end), the system stopped refusing several questions it could answer, correct refusals on the unanswerable ones doubled, and hybrid answers now stay closer to what their sources actually say (faithfulness 0.60 to 0.77).
+Running the benchmark against the system led to two rounds of fixes. Where they landed: the answers themselves did not get more factually correct - overall factual is 0.386 at the baseline and 0.388 at the end, on one scale. What did improve: questions stopped getting sent down the wrong path (12 wrong at the start, 0 at the end), the system stopped refusing several questions it could answer, correct refusals on the unanswerable ones doubled, and hybrid answers now stay closer to what their sources actually say (faithfulness 0.60 to 0.80).
 
-The full bank was run three times - baseline, after the first round of fixes, after the second:
+The full bank was run at the baseline and again after the two rounds of fixes, both judged on the same scale:
 
-| cell | n | factual: base* / r1 / r2 | faithfulness: base / r1 / r2 |
+| cell | n | factual: base / final | faithfulness: base / final |
 |---|---|---|---|
-| vector L1 | 7 | 0.58 / 0.63 / 0.64 | 0.71 / 0.84 / 0.83 |
-| vector L2 | 9 | 0.33 / 0.44 / 0.42 | 0.89 / 0.90 / 0.86 |
-| vector L3 | 6 | 0.36 / 0.37 / 0.42 | 0.64 / 0.72 / 0.66 |
-| hybrid | 11 | 0.33 / 0.35 / 0.31 | 0.60 / 0.64 / 0.77 |
-| SQL, exact | 16 | 9/16 / 12/16 / 11/16 | |
-| adversarial, refused correctly | 9 | 2/9 / 2/9 / 4/9 | |
-| misroutes | 58 | 12 / 2 / 0 | |
+| vector L1 | 7 | 0.58 / 0.52 | 0.71 / 0.80 |
+| vector L2 | 9 | 0.33 / 0.41 | 0.89 / 0.90 |
+| vector L3 | 6 | 0.36 / 0.40 | 0.64 / 0.71 |
+| hybrid | 11 | 0.33 / 0.28 | 0.60 / 0.80 |
+| SQL, exact | 16 | 9/16 / 11/16 | |
+| adversarial, refused correctly | 9 | 2/9 / 4/9 | |
+| misroutes | 58 | 12 / 0 | |
 
-*The baseline was scored before the factual metric's mode was pinned, with a stricter variant, and no rescore of it exists - so its factual column sits somewhat lower than it would on the final scale. The r1 and r2 columns share one scale and are directly comparable.
-
-Two caveats for reading the decimal rows. The scale note above is one. The other: two dev runs with near-identical prompts showed single-question factual scores moving on the generation model's resampling alone - one question scored 0.00 in one run and 1.00 in the other. So the count rows (SQL, refusals, misroutes) are the trustworthy part of this table, and the decimal movements are direction at best.
+One caveat for reading the decimal rows: two dev runs with near-identical prompts showed single-question factual scores moving on the generation model's resampling alone - one question scored 0.00 in one run and 1.00 in the other. So the count rows (SQL, refusals, misroutes) are the trustworthy part of this table, and the decimal movements are direction at best.
 
 The fixes behind the numbers:
 
@@ -71,21 +69,25 @@ The fixes behind the numbers:
 - When told to leave an untranslatable condition out of a query, the model would write a decorative condition instead (`IS NULL`, `0 = 1`, a different one each run), which silently emptied the filter. Those instructions now have code checks behind them - a model will find an output shape the prompt rule did not name.
 - The gap that remains: asked for a fact the database does not hold (money actually paid out), the system sums the closest column it can find (money committed) and answers confidently. No check can know that a column is only a stand-in for the asked-for fact.
 
-## What came out of it
+## How the authoring pipeline worked
 
-- Review had a measurable effect: 30 of the 42 questions accepted through the batch pipeline were revised at least once, on findings the judge upheld, before entering the bank. 11 of the 43 slots closed in a single round; most took two, and the worst took five rounds and three candidate questions before one survived.
-- The judge was a filter, not a rubber stamp: it ruled on 93 HIGH and MID findings - 88 upheld, 5 dismissed - agreeing with the critic 95% of the time and throwing out the rest. One MID finding slipped through without a ruling across the whole record; the accounting is in `docs/writeup-plan.md` §3.
-- Difficulty levels are defined mechanically by gold-set size and were never tuned against results. Scores nonetheless fell in order across them: 0.49 / 0.41 / 0.29 on the improved run. This suggests the bank measures difficulty rather than noise.
+The full operational record of the drafter-critic-judge loop, computed from the batch journals and transcripts (`docs/factory-telemetry.md`):
 
-![Per-question scores by difficulty level](docs/assets/themes/t3-light/results-strip.svg)
+- The funnel, across every batch run including the cheaper-model probe described below: 17 runs, 52 slots, 75 candidate questions tried. 49 slots closed with an accepted question, 3 failed, and 17 candidates were abandoned along the way. 16 slots closed in a single adjudication round, 25 took two, and the worst took five rounds and three candidate questions before one survived.
+- The critic reported 364 findings that survived to a slot's final state: 47 HIGH, 148 MID, 169 LOW (LOW is recorded but never adjudicated). The most common defect classes: a gold set missing a project that qualifies (49), a question readable two ways (41), a reference claiming something the evidence does not support (33), and a gold answer that is simply wrong (32).
+- On the questions that entered the bank, the judge ruled on 93 HIGH and MID findings: 88 upheld, 5 dismissed. It agreed with the critic 95% of the time and threw out the rest; the accounting is in `docs/writeup-plan.md` §3.
+- 32 of the 49 accepted questions were revised at least once, on findings the judge upheld, before they were accepted.
+- The deterministic gates caught real defects before any model judged anything: `precheck_record` ran 226 times and reported a failure in 30, `precheck_candidate` ran 125 times and reported 23. In total the agents made 4,152 read-only database and retrieval calls over 11 days.
+- Cost: evaluating the full benchmark is $0.09 per run. Authoring it cost approximately $1,507 in API-equivalent compute, roughly $20 per accepted question - with frontier models in every role. Most of that is not the drafting itself: the orchestrator sessions alone outspent the drafter, critic and judge combined, and the bulk of the tokens are warm agents re-reading held context across fix rounds.
 
-- Storing what was retrieved for every answer makes failures attributable. Retrieval holds on the easy levels (86-92% of gold projects found on L1 and L2) and drops hard on L3 (41%) - so part of the gradient is retrieval running out. But retrieval is not the main failure: of the 22 answers scoring under 0.5, ten had every gold project already in context and failed anyway, in the answer-writing step. Nine more had part of the gold, and only three had none of it.
+Per spawned agent, averaged over the whole record (input is dominated by cache reads - the same held context re-read every turn):
 
-![Where the failed answers failed](docs/assets/themes/t3-light/failure-split.svg)
-
-- The judge seat's known risk stayed a non-event: DeepSeek only offers loose JSON mode, so unparseable completions were counted rather than trusted away - 132 judge completions on the final run, 0 without parseable JSON, 0 undefined scores.
-- Answer latency, for the practical question of whether the system is usable: about 3 seconds for a SQL answer, 8 for a vector answer, 10 for a hybrid one.
-- Evaluating the full benchmark costs $0.08 per run. Authoring it cost approximately $1,507 in API-equivalent compute, roughly $20 per accepted question - with frontier models in every role. Most of that is not the drafting itself: the orchestrator sessions alone outspent the drafter, critic and judge combined, and the bulk of the tokens are warm agents re-reading held context across fix rounds. The cost driver is the architecture, not the model.
+| role | spawned | avg input | of which cache | avg output | avg turns | avg cost |
+|---|---|---|---|---|---|---|
+| orchestrator | 25 | 25.8M | 24.9M | 332k | 139 | $27.26 |
+| drafter | 118 | 2.3M | 1.9M | 29k | 38 | $4.08 |
+| critic | 107 | 1.8M | 1.5M | 17k | 34 | $3.25 |
+| judge | 86 | 0.2M | 0.1M | 4k | 7 | $0.72 |
 
 To test the model side of that cost, nine cells were re-drafted with a cheaper model (Sonnet instead of Opus) in every role - same seeds, same gates:
 
@@ -97,9 +99,9 @@ To test the model side of that cost, nine cells were re-drafted with a cheaper m
 | re-execution gate failures | 0 | 0 |
 | cost | ~$180 | $65.72 |
 
-The gates that are code held for both - every draft re-executed to the numbers it claimed, whichever model wrote it. What slipped was contract-keeping: the cheaper model shipped records with a missing evidence field and mis-kept the journal. And the two hardest cells in the set are exactly the two it could not close at all. A cheaper factory finishes the easy cells for a third of the money; the hard cells and the bookkeeping are what the expensive model is buying.
+The gates that are code held for both - every draft re-executed to the numbers it claimed, whichever model wrote it. What slipped was the bookkeeping around them: the cheaper model shipped records with a missing evidence field and mis-kept the journal. The two hardest cells in the set are the two it could not close. A cheaper factory finishes the easy cells for a third of the money; the expensive model is paying for the hard cells and the bookkeeping.
 
-The conclusion, in one line: it does make sense. Agentic benchmark authoring held up - the parts enforced by code held throughout, and the open costs and failure modes are documented rather than hidden.
+Back to the question the project ends up asking: the machine-authored bank worked as an instrument. Its questions caught real defects in the system, and the fixes they forced are measured above. The authoring side held too - the gates that are code never broke, and review changed most questions before they were accepted. What it costs and where it fails is on the record.
 
 ## Repository guide
 
