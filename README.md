@@ -71,11 +71,11 @@ The fixes behind the numbers:
 
 ## How the authoring pipeline worked
 
-The full operational record of the drafter-critic-judge loop, computed from the batch journals and transcripts (`docs/factory-telemetry.md`):
+The full operational record of the drafter-critic-judge loop, computed from the batch journals and transcripts:
 
 - The funnel, across every batch run including the cheaper-model probe described below: 17 runs, 52 slots, 75 candidate questions tried. 49 slots closed with an accepted question, 3 failed, and 17 candidates were abandoned along the way. 16 slots closed in a single adjudication round, 25 took two, and the worst took five rounds and three candidate questions before one survived.
 - The critic reported 364 findings that survived to a slot's final state: 47 HIGH, 148 MID, 169 LOW (LOW is recorded but never adjudicated). The most common defect classes: a gold set missing a project that qualifies (49), a question readable two ways (41), a reference claiming something the evidence does not support (33), and a gold answer that is simply wrong (32).
-- On the questions that entered the bank, the judge ruled on 93 HIGH and MID findings: 88 upheld, 5 dismissed. It agreed with the critic 95% of the time and threw out the rest; the accounting is in `docs/writeup-plan.md` §3.
+- On the questions that entered the bank, the judge ruled on 93 HIGH and MID findings: 88 upheld, 5 dismissed. It agreed with the critic 95% of the time and threw out the rest.
 - 32 of the 49 accepted questions were revised at least once, on findings the judge upheld, before they were accepted.
 - The deterministic gates caught real defects before any model judged anything: `precheck_record` ran 226 times and reported a failure in 30, `precheck_candidate` ran 125 times and reported 23. In total the agents made 4,152 read-only database and retrieval calls over 11 days.
 - Cost: evaluating the full benchmark is $0.09 per run. Authoring it cost approximately $1,507 in API-equivalent compute, roughly $20 per accepted question - with frontier models in every role. Most of that is not the drafting itself: the orchestrator sessions alone outspent the drafter, critic and judge combined, and the bulk of the tokens are warm agents re-reading held context across fix rounds.
@@ -105,6 +105,5 @@ Back to the question the project ends up asking: the machine-authored bank worke
 
 ## Repository guide
 
-- `docs/writeup-plan.md` - the full account, with all figures recomputed from disk.
-- `docs/factory-telemetry.md` - the authoring pipeline's measured record.
 - `src/` - the runtime system; `src/eval/` - the bank and the pipeline machinery.
+- `eval/bank.jsonl` - the question bank; `eval/archive/` - retired questions, preserved with provenance.
