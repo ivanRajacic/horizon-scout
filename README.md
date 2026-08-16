@@ -107,3 +107,7 @@ Back to the question the project ends up asking: the machine-authored bank worke
 
 - `src/` - the runtime system; `src/eval/` - the bank and the pipeline machinery.
 - `eval/bank.jsonl` - the question bank; `eval/archive/` - retired questions, preserved with provenance.
+
+## AI Disclaimer
+
+The project and the writeup were made with agentic AI (Claude).
